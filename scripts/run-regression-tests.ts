@@ -71,6 +71,10 @@ import {
   runSameeNashqadWorkflow,
   splitPairIntoBoundaryAndSampleBlock,
 } from '../src/utils/nashqadWorkflowEngine';
+import {
+  convertKmlTextToGeoJsonObject,
+  isLikelyKmlString,
+} from '../src/utils/kmlAndGeoJsonParser';
 
 let passedCount = 0;
 let failedCount = 0;
@@ -2115,6 +2119,265 @@ console.log('\n11. Midab Gaar ah Dhaxle Kasta & 3-da Hab ee Qaybinta Plots-ka (W
       standaloneClean.perHeirPlots['sons::0'] === 12 &&
       standaloneClean.perHeirPlots['sons::1'] === 12,
     'computeStandalonePlotModeAllocation handles mapless 25.5 plots accurately across whole_balanced (13+12) and clean_equal_no_half_no_fraction (12+12 equal, 0.5 half + 1 jajab withheld)'
+  );
+}
+
+/* ============================================================================
+ * SECTION 12: KML/KMZ PARSER & HALF-PLOTS INCLUDE/EXCLUDE TOGGLE (v1.3.0)
+ * ============================================================================ */
+console.log('\n12. Soo Gelinta Faylasha KML (APK) & Toggle-ka Half-Plots (Ku Dar / Ka Reeb)');
+{
+  const sampleKmlBoundary = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Xuduudka Beerta KML</name>
+    <Placemark>
+      <name>Xuduudka Weyn</name>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              44.0600,9.5600,0 44.0622,9.5600,0 44.0622,9.5618,0 44.0600,9.5618,0 44.0600,9.5600,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>`;
+
+  const sampleKmlPlotsAndWadi = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Folder>
+      <name>Plots KML</name>
+      <Placemark>
+        <name>Plot 1</name>
+        <ExtendedData>
+          <SimpleData name="block">R01</SimpleData>
+          <SimpleData name="plot_no">1</SimpleData>
+          <SimpleData name="nooca">dhammaystiran</SimpleData>
+        </ExtendedData>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>
+                44.0602,9.5602,0 44.0604,9.5602,0 44.0604,9.5605,0 44.0602,9.5605,0 44.0602,9.5602,0
+              </coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+      <Placemark>
+        <name>Plot 2 Half</name>
+        <ExtendedData>
+          <SimpleData name="block">R01</SimpleData>
+          <SimpleData name="plot_no">2</SimpleData>
+          <SimpleData name="nooca">half</SimpleData>
+        </ExtendedData>
+        <Polygon>
+          <outerBoundaryIs>
+            <LinearRing>
+              <coordinates>
+                44.0604,9.5602,0 44.0605,9.5602,0 44.0605,9.5605,0 44.0604,9.5605,0 44.0604,9.5602,0
+              </coordinates>
+            </LinearRing>
+          </outerBoundaryIs>
+        </Polygon>
+      </Placemark>
+    </Folder>
+  </Document>
+</kml>`;
+
+  const sampleKmlDoox = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Placemark>
+    <name>Dooxa Biyaha</name>
+    <LineString>
+      <coordinates>44.0601,9.5601,0 44.0620,9.5616,0</coordinates>
+    </LineString>
+  </Placemark>
+</kml>`;
+
+  assert(
+    isLikelyKmlString(sampleKmlBoundary) === true &&
+      isLikelyKmlString('{"type":"FeatureCollection","features":[]}') === false,
+    'isLikelyKmlString accurately distinguishes XML KML documents from GeoJSON'
+  );
+
+  const kmlConv = convertKmlTextToGeoJsonObject(sampleKmlPlotsAndWadi, 'plots.kml');
+  assert(
+    kmlConv.ok === true &&
+      kmlConv.featureCount === 2 &&
+      kmlConv.geoJson.features[0]?.properties?.block === 'R01' &&
+      kmlConv.geoJson.features[1]?.properties?.nooca === 'half',
+    'convertKmlTextToGeoJsonObject converts KML Placemarks + ExtendedData/SimpleData into GeoJSON FeatureCollection'
+  );
+
+  const kmlNashqadInspect = inspectAndClassifyNashqadBeerFiles([
+    { fileName: '01_xuduudka.kml', fileText: sampleKmlBoundary },
+    { fileName: '03_plots.kml', fileText: sampleKmlPlotsAndWadi },
+    { fileName: '05_dooxyada.kml', fileText: sampleKmlDoox },
+  ]);
+  assert(
+    kmlNashqadInspect.ok === true &&
+      kmlNashqadInspect.files.length === 3 &&
+      buildNashqadBeerState(kmlNashqadInspect.files).ok === true,
+    'Nashqad workflow seamlessly classifies and builds farm state directly from raw .kml files'
+  );
+
+  // Test Half-Plot Inclusion vs Exclusion in GIS Spatial Allocation
+  const hpSampleState = createInitialSampleSubdivisionState();
+  const hpSubRes = computeLandSubdivision(
+    hpSampleState.boundaryItems[hpSampleState.selectedBoundaryIndex],
+    hpSampleState.sampleCandidates[0],
+    hpSampleState.params
+  );
+  const hpHeirs: HeirsInput = {
+    ...EMPTY_HEIRS_INPUT,
+    sonsCount: 2,
+    daughtersCount: 2,
+  };
+  const hpAssets: EstateAssetItem[] = [
+    {
+      id: 'hp_test_farm',
+      category: 'farm_land',
+      title: 'Beerta Tijaabada Half-Plots',
+      quantity: 118,
+      unit: 'Plot',
+      estimatedValueUSD: 600000,
+    },
+  ];
+  const hpCalc = calculateInheritance(hpHeirs, hpAssets, []);
+  const hpPrices = {
+    tier_1_prime: 2000,
+    tier_2_standard: 1500,
+    tier_3_basic: 1000,
+  };
+
+  if (hpSubRes) {
+    const validHalfCountOnMap = hpSubRes.halfPlotSummary?.validHalfPlotsCount || 0;
+    assert(validHalfCountOnMap > 0, `Sample farm contains ${validHalfCountOnMap} valid 216 m² half-plots for toggle test`);
+
+    const allocExcluded = allocatePlotsFairlyToHeirs(
+      hpSubRes,
+      {},
+      {},
+      {},
+      hpPrices,
+      'exact_shared',
+      hpCalc,
+      hpHeirs,
+      { includeValidHalfPlots: false }
+    );
+    const allocIncludedExact = allocatePlotsFairlyToHeirs(
+      hpSubRes,
+      {},
+      {},
+      {},
+      hpPrices,
+      'exact_shared',
+      hpCalc,
+      hpHeirs,
+      { includeValidHalfPlots: true }
+    );
+    const allocIncludedWhole = allocatePlotsFairlyToHeirs(
+      hpSubRes,
+      {},
+      {},
+      {},
+      hpPrices,
+      'whole_balanced',
+      hpCalc,
+      hpHeirs,
+      { includeValidHalfPlots: true }
+    );
+
+    assert(
+      Boolean(
+        allocExcluded &&
+          allocExcluded.includeValidHalfPlots === false &&
+          allocExcluded.validHalfPlotsIncludedCount === 0 &&
+          (allocExcluded.withheldHalfPlotsCount ?? 0) >= validHalfCountOnMap &&
+          Math.abs((allocExcluded.effectivePoolPlotUnits ?? 0) - allocExcluded.totalFullPlots) < 1e-6
+      ),
+      'When includeValidHalfPlots=false, all half-plots are withheld and effectivePoolPlotUnits equals full plots only'
+    );
+
+    if (allocIncludedExact && allocExcluded) {
+      const sumExactReceived = allocIncludedExact.heirAllocations.reduce(
+        (s, h) => s + h.effectiveTotalPlotsReceived,
+        0
+      );
+      const inclPool = allocIncludedExact.effectivePoolPlotUnits ?? 0;
+      assert(
+        allocIncludedExact.includeValidHalfPlots === true &&
+          allocIncludedExact.validHalfPlotsIncludedCount === validHalfCountOnMap &&
+          allocIncludedExact.withheldHalfPlotsCount === 0 &&
+          Math.abs(inclPool - (allocExcluded.totalFullPlots + validHalfCountOnMap * 0.5)) < 1e-6 &&
+          Math.abs(sumExactReceived - inclPool) < 1e-4,
+        `When includeValidHalfPlots=true (exact_shared), ${validHalfCountOnMap} half-plots (+${
+          validHalfCountOnMap * 0.5
+        } plot units) enter inheritance pool (${inclPool} total units)`
+      );
+    }
+
+    if (allocIncludedWhole) {
+      const sumWholeReceived = allocIncludedWhole.heirAllocations.reduce(
+        (s, h) => s + h.effectiveTotalPlotsReceived,
+        0
+      );
+      const wholePool = allocIncludedWhole.effectivePoolPlotUnits ?? 0;
+      assert(
+        allocIncludedWhole.sharedPlots.length === 0 &&
+          Math.abs(sumWholeReceived - wholePool) <= 0.5 + 1e-6,
+        `When includeValidHalfPlots=true (whole_balanced), 0 plots are shared and quantum 0.5-plot allocation balances cleanly (allocated ${sumWholeReceived}/${wholePool})`
+      );
+    }
+
+    // Verify syncSubdivisionToEstateAssets respects includeValidHalfPlots
+    const syncedExcl = syncSubdivisionToEstateAssets(
+      [],
+      hpSubRes,
+      {},
+      {},
+      hpPrices,
+      {},
+      {},
+      false
+    );
+    const syncedIncl = syncSubdivisionToEstateAssets(
+      [],
+      hpSubRes,
+      {},
+      {},
+      hpPrices,
+      {},
+      {},
+      true
+    );
+    const qtyExcl = syncedExcl.reduce((s, a) => s + (a.quantity || 0), 0);
+    const qtyIncl = syncedIncl.reduce((s, a) => s + (a.quantity || 0), 0);
+    assert(
+      Math.abs(qtyIncl - (qtyExcl + validHalfCountOnMap * 0.5)) < 1e-6,
+      `syncSubdivisionToEstateAssets adds +${validHalfCountOnMap * 0.5} plot units when includeValidHalfPlots=true (${qtyExcl} -> ${qtyIncl})`
+    );
+  }
+
+  // Standalone mapless Half-Plot Include vs Exclude (10.5 plots across 2 Sons)
+  const twoSons = [
+    { heirGroupId: 'sons', personIndex: 0, individualPercentage: 50 },
+    { heirGroupId: 'sons', personIndex: 1, individualPercentage: 50 },
+  ];
+  const standExcl = computeStandalonePlotModeAllocation(10.5, twoSons, 'whole_balanced', false);
+  const standIncl = computeStandalonePlotModeAllocation(10.5, twoSons, 'whole_balanced', true);
+  assert(
+    standExcl.withheldHalfPlotsUnits === 0.5 &&
+      standExcl.allocatedWholePlots === 10 &&
+      standIncl.withheldHalfPlotsUnits === 0 &&
+      standIncl.allocatedWholePlots === 10.5 &&
+      standIncl.perHeirPlots['sons::0'] + standIncl.perHeirPlots['sons::1'] === 10.5,
+    'computeStandalonePlotModeAllocation toggles 0.5 Half-Plot between Ka Reeb (10 allocated, 0.5 withheld) and Ku Dar (10.5 allocated)'
   );
 }
 

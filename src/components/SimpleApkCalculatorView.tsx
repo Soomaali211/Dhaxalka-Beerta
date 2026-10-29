@@ -41,6 +41,8 @@ interface SimpleApkCalculatorViewProps {
   onSelectTargetScope?: (scope: string) => void;
   allocationMode?: LandAllocationMode;
   onChangeAllocationMode?: (mode: LandAllocationMode) => void;
+  includeValidHalfPlots?: boolean;
+  onToggleIncludeHalfPlots?: (include: boolean) => void;
   onSyncFullFarmGis?: () => void;
   onChangeCurrency: (c: Currency) => void;
   onUpdateHeirs: (updated: HeirsInput) => void;
@@ -78,6 +80,8 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
   onSelectTargetScope,
   allocationMode = 'exact_shared',
   onChangeAllocationMode,
+  includeValidHalfPlots = false,
+  onToggleIncludeHalfPlots,
   onSyncFullFarmGis,
   onChangeCurrency,
   onUpdateHeirs,
@@ -647,6 +651,43 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
                   );
                 })}
               </div>
+
+              {onToggleIncludeHalfPlots && (
+                <div className="pt-2 border-t border-[#243449]/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-extrabold text-[#F8FAFC] block">
+                      Half-Plots (0.5 Plot):
+                    </span>
+                    <span className="text-[11px] text-[#94A3B8]">
+                      Ku dar ama ka reeb half-plots-ka xuduudka beerta ee dhaxalka
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#0B1220] border border-[#243449] shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onToggleIncludeHalfPlots(true)}
+                      className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        includeValidHalfPlots
+                          ? 'bg-[#22C55E] text-[#05130B]'
+                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                      }`}
+                    >
+                      Ku Dar (0.5)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleIncludeHalfPlots(false)}
+                      className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        !includeValidHalfPlots
+                          ? 'bg-[#16263D] text-[#F8FAFC] border border-[#243449]'
+                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                      }`}
+                    >
+                      Ka Reeb
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
       </section>

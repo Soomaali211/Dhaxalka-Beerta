@@ -2034,6 +2034,55 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
               })}
             </div>
 
+            <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-3 flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-[#F8FAFC]">Half-Plots (0.5 Plot)</div>
+                <div className="text-[11px] text-[#94A3B8]">
+                  {subdivisionState.includeValidHalfPlotsInAllocation
+                    ? 'Waa lagu daray qaybinta dhaxalka'
+                    : 'Waa laga reebay qaybinta dhaxalka'}
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-[#0B1220] border border-[#243449] shrink-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateSubdivisionState((prev) => ({
+                      ...prev,
+                      includeValidHalfPlotsInAllocation: true,
+                      approvalStatus:
+                        prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+                    }))
+                  }
+                  className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                    subdivisionState.includeValidHalfPlotsInAllocation
+                      ? 'bg-[#10B981] text-[#030712]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  }`}
+                >
+                  Ku Dar
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdateSubdivisionState((prev) => ({
+                      ...prev,
+                      includeValidHalfPlotsInAllocation: false,
+                      approvalStatus:
+                        prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+                    }))
+                  }
+                  className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                    !subdivisionState.includeValidHalfPlotsInAllocation
+                      ? 'bg-[#1E293B] text-[#F8FAFC]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  }`}
+                >
+                  Ka Reeb
+                </button>
+              </div>
+            </div>
+
             {fairAllocation && (
               <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-3 text-[11px] space-y-1 tabular-nums">
                 <div className="flex items-center justify-between gap-2">
@@ -2043,6 +2092,15 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                     {fairAllocation.totalFullPlots} Plot
                   </strong>
                 </div>
+                {(fairAllocation.validHalfPlotsIncludedCount ?? 0) > 0 && (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[#94A3B8]">Half-Plots Lagu Daray (0.5):</span>
+                    <strong className="text-[#10B981] font-bold">
+                      {fairAllocation.validHalfPlotsIncludedCount} Half-Plot (
+                      {((fairAllocation.validHalfPlotsIncludedCount || 0) * 0.5).toFixed(1)} Plot)
+                    </strong>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[#94A3B8]">Plots Wadaag ah:</span>
                   <strong className="text-[#F8FAFC] font-bold">

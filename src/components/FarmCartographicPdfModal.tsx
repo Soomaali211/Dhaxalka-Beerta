@@ -338,119 +338,124 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
       : 'bg-[#D9F0D3] text-slate-900 font-semibold';
 
   return (
-    <div className="cartographic-pdf-modal-root fixed inset-0 z-50 flex flex-col bg-slate-900/80 backdrop-blur-xs print:static print:bg-white print:backdrop-blur-none">
-      {/* Top Toolbar (Hidden when printing) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900 px-4 py-3 text-white print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600/20 text-emerald-400 border border-emerald-500/30">
-            <MapIcon className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold tracking-tight text-white">
-              Khariidadda &amp; Warbixinta Rasmiga ah ee Beerta (100% PDF Match)
-            </h2>
-            <p className="text-xs text-slate-400 tabular-nums">
-              {report.totalPlots} Plots ({report.totalBuuxaCount} Buuxa · {report.totalQaybCount} Qayb xuduud) ·{' '}
-              {report.totalBlocks} Blocks · {report.boundaryAreaDisplayHa.toFixed(2)} ha
-            </p>
-          </div>
-        </div>
-
-        {/* Document Switcher */}
-        <div className="flex flex-wrap items-center gap-1 rounded-lg bg-slate-800 p-1 border border-slate-700">
+    <div className="cartographic-pdf-modal-root fixed inset-0 z-50 flex flex-col bg-slate-950/90 backdrop-blur-xs print:static print:bg-white print:backdrop-blur-none">
+      {/* Compact Single-Row Top Toolbar (Hidden when printing) */}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-950 px-2.5 sm:px-4 py-1.5 text-white overflow-x-auto print:hidden">
+        {/* Left: Compact Document Switcher */}
+        <div className="flex items-center gap-1 rounded-lg bg-slate-900 p-0.5 border border-slate-800 shrink-0">
           <button
             type="button"
             onClick={() => setDocMode('inheritance_map')}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+            className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition cursor-pointer whitespace-nowrap ${
               docMode === 'inheritance_map'
                 ? 'bg-emerald-500 text-slate-950 shadow-xs'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            <Users className="h-3.5 w-3.5" />
-            Khariidadda Dhaxalka (PDF)
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            <span>Khariidadda Dhaxalka</span>
           </button>
           <button
             type="button"
             onClick={() => setDocMode('layout11')}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+            className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
               docMode === 'layout11'
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            <Layers className="h-3.5 w-3.5" />
-            Automatic_Layout11
+            <Layers className="h-3.5 w-3.5 shrink-0" />
+            <span>Layout 11</span>
           </button>
           <button
             type="button"
             onClick={() => setDocMode('heerarka_report')}
-            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+            className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
               docMode === 'heerarka_report'
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            <FileText className="h-3.5 w-3.5" />
-            Warbixinta Heerarka (4 Bog)
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <span>Warbixin (4 Bog)</span>
           </button>
         </div>
 
-        {/* Zoom & Actions */}
-        <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center rounded-lg border border-slate-700 bg-slate-800 px-1 py-0.5">
+        {/* Center Info (Desktop only, quiet inline text) */}
+        <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400 tabular-nums truncate">
+          <span>{report.totalPlots} Plot</span>
+          <span aria-hidden="true">·</span>
+          <span>{report.totalBlocks} Block</span>
+          <span aria-hidden="true">·</span>
+          <span>{report.boundaryAreaDisplayHa.toFixed(2)} ha</span>
+        </div>
+
+        {/* Right: Zoom (Mobile + Desktop) & Export Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center rounded-lg border border-slate-800 bg-slate-900 px-1 py-0.5">
             <button
               type="button"
-              onClick={() => setPreviewZoom((z) => Math.max(0.6, +(z - 0.15).toFixed(2)))}
-              className="p-1.5 text-slate-300 hover:text-white cursor-pointer"
-              title="Yaree"
+              onClick={() => setPreviewZoom((z) => Math.max(0.6, +(z - 0.2).toFixed(2)))}
+              className="min-h-[32px] min-w-[30px] flex items-center justify-center text-slate-300 hover:text-white cursor-pointer"
+              title="Yaree Preview-ga"
+              aria-label="Yaree Preview-ga"
             >
               <ZoomOut className="h-3.5 w-3.5" />
-            </button>
-            <span className="px-2 text-xs font-semibold text-slate-200 tabular-nums">
-              {Math.round(previewZoom * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => setPreviewZoom((z) => Math.min(2.2, +(z + 0.15).toFixed(2)))}
-              className="p-1.5 text-slate-300 hover:text-white cursor-pointer"
-              title="Weynee"
-            >
-              <ZoomIn className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setPreviewZoom(1)}
-              className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
-              title="100%"
+              className="min-h-[32px] px-1.5 text-[11px] font-bold text-slate-200 hover:text-emerald-400 tabular-nums cursor-pointer"
+              title="Ku-habbee Shaashadda (100%)"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
+              {Math.round(previewZoom * 100)}%
             </button>
+            <button
+              type="button"
+              onClick={() => setPreviewZoom((z) => Math.min(2.6, +(z + 0.2).toFixed(2)))}
+              className="min-h-[32px] min-w-[30px] flex items-center justify-center text-slate-300 hover:text-white cursor-pointer"
+              title="Weynee Preview-ga"
+              aria-label="Weynee Preview-ga"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+            {previewZoom !== 1 && (
+              <button
+                type="button"
+                onClick={() => setPreviewZoom(1)}
+                className="min-h-[32px] min-w-[28px] flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"
+                title="Ku celi 100%"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </button>
+            )}
           </div>
 
           <button
             type="button"
             onClick={handleDownloadSvg}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition cursor-pointer"
+            className="min-h-[36px] inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition cursor-pointer whitespace-nowrap"
+            title="Soo dejiso Vector SVG"
           >
-            <Download className="h-3.5 w-3.5" />
-            SVG Vector
+            <Download className="h-3.5 w-3.5 shrink-0" />
+            <span className="hidden sm:inline">SVG</span>
           </button>
 
           <button
             type="button"
             onClick={handlePrintPdf}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition shadow-xs cursor-pointer"
+            className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <Printer className="h-3.5 w-3.5" />
-            Daabac / Kaydi PDF
+            <Printer className="h-3.5 w-3.5 shrink-0" />
+            <span>Daabac / PDF</span>
           </button>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-slate-700 bg-slate-800 p-2 text-slate-300 hover:bg-slate-700 hover:text-white transition cursor-pointer"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white transition cursor-pointer"
             title="Xidh"
+            aria-label="Xidh"
           >
             <X className="h-4 w-4" />
           </button>

@@ -30,6 +30,10 @@ import {
   runSameeNashqadWorkflow,
   splitPairIntoBoundaryAndSampleBlock,
 } from '../utils/nashqadWorkflowEngine';
+import {
+  ANDROID_SAFE_GIS_ACCEPT,
+  readAndNormalizeGisFile,
+} from '../utils/kmlAndGeoJsonParser';
 
 interface NashqadFabAndModalsProps {
   subdivisionState: LandSubdivisionState;
@@ -40,20 +44,12 @@ interface NashqadFabAndModalsProps {
   onNotify: (title: string, message: string) => void;
 }
 
-function readFileAsTextPromise(file: File): Promise<{ fileName: string; fileText: string }> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      resolve({
-        fileName: file.name,
-        fileText: typeof reader.result === 'string' ? reader.result : '',
-      });
-    };
-    reader.onerror = () => {
-      reject(new Error(`Faylka "${file.name}" waa la akhrin kari waayey.`));
-    };
-    reader.readAsText(file);
-  });
+async function readFileAsTextPromise(file: File): Promise<{ fileName: string; fileText: string }> {
+  const norm = await readAndNormalizeGisFile(file);
+  if (norm.ok === false) {
+    throw new Error(norm.errorSomali);
+  }
+  return { fileName: norm.fileName, fileText: norm.fileText };
 }
 
 function roleLabelSomali(role: NashqadFileRecognitionItem['role']): string {
@@ -790,12 +786,12 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
               onSubmit={handleSubmitSameeNashqad}
               className="p-5 space-y-4 overflow-y-auto text-xs"
             >
-              {/* Hidden inputs with value reset on click & change */}
+              {/* Hidden inputs with value reset on click & change (Android APK GeoJSON + KML + KMZ safe) */}
               <input
                 ref={pairGeoJsonInputRef}
                 type="file"
                 multiple
-                accept=".geojson,.json"
+                accept={ANDROID_SAFE_GIS_ACCEPT}
                 className="hidden"
                 onClick={(e) => {
                   e.currentTarget.value = '';
@@ -805,7 +801,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
               <input
                 ref={boundarySingleInputRef}
                 type="file"
-                accept=".geojson,.json"
+                accept={ANDROID_SAFE_GIS_ACCEPT}
                 className="hidden"
                 onClick={(e) => {
                   e.currentTarget.value = '';
@@ -815,7 +811,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
               <input
                 ref={sampleBlockInputRef}
                 type="file"
-                accept=".geojson,.json"
+                accept={ANDROID_SAFE_GIS_ACCEPT}
                 className="hidden"
                 onClick={(e) => {
                   e.currentTarget.value = '';
@@ -866,7 +862,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                           Wada dooro Xuduudka Beerta + Block Tusaale
                         </div>
                         <div className="text-[11px] text-[#94A3B8] truncate">
-                          Dooro 2-da fayl GeoJSON mar keliya — si toos ah ayuu u xisaabinayaa
+                          Dooro 2-da fayl (.geojson, .kml, .kmz) mar keliya — si toos ah ayuu u xisaabinayaa
                         </div>
                       </div>
                     </div>
@@ -887,7 +883,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                         <div className="min-w-0">
                           <div className="text-[10px] text-[#94A3B8]">1. Xuduudka Beerta</div>
                           <div className="truncate font-bold text-[#F8FAFC]">
-                            {boundaryFileData ? boundaryFileData.fileName : 'Dooro GeoJSON'}
+                            {boundaryFileData ? boundaryFileData.fileName : 'GeoJSON / KML'}
                           </div>
                         </div>
                       </div>
@@ -906,7 +902,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                         <div className="min-w-0">
                           <div className="text-[10px] text-[#94A3B8]">2. Block Tusaale</div>
                           <div className="truncate font-bold text-[#F8FAFC]">
-                            {sampleBlockFileData ? sampleBlockFileData.fileName : 'Dooro GeoJSON'}
+                            {sampleBlockFileData ? sampleBlockFileData.fileName : 'GeoJSON / KML'}
                           </div>
                         </div>
                       </div>
@@ -939,7 +935,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                   {/* 1) Fayl GeoJSON ah oo xuduudka beerta ah (Polygon) */}
                   <div className="space-y-1.5">
                     <label className="block font-bold text-[#F8FAFC]">
-                      1. Xuduudka beerta (Polygon GeoJSON) <span className="text-rose-400">*</span>
+                      1. Xuduudka beerta (Polygon GeoJSON / KML) <span className="text-rose-400">*</span>
                     </label>
                     <button
                       type="button"
@@ -951,7 +947,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                         <span className="truncate font-semibold text-[#F8FAFC]">
                           {boundaryFileData
                             ? boundaryFileData.fileName
-                            : 'Dooro faylka GeoJSON ee xuduudka beerta'}
+                            : 'Dooro faylka GeoJSON ama KML ee xuduudka beerta'}
                         </span>
                       </div>
                       <span className="text-[11px] font-bold text-[#22C55E] shrink-0">
@@ -1226,7 +1222,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                 <div>
                   <h2 className="text-sm font-extrabold text-[#F8FAFC]">Soo geli nashqad beer</h2>
                   <p className="text-[11px] text-[#94A3B8]">
-                    Hal mar wada dooro 2, 3 ama 20+ fayl oo GeoJSON ah (xuduud, blocks, plots, dooxyada iwm.)
+                    Hal mar wada dooro faylal GeoJSON ama KML/KMZ ah (xuduud, blocks, plots, dooxyada iwm.)
                   </p>
                 </div>
               </div>
@@ -1245,7 +1241,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                 ref={multiBeerInputRef}
                 type="file"
                 multiple
-                accept=".geojson,.json"
+                accept={ANDROID_SAFE_GIS_ACCEPT}
                 className="hidden"
                 onClick={(e) => {
                   e.currentTarget.value = '';
@@ -1265,10 +1261,10 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                     <div className="font-extrabold text-[#F8FAFC] truncate">
                       {isReadingFiles
                         ? 'Waa la akhrinayaa dhammaan faylasha...'
-                        : 'Dooro faylasha GeoJSON (ilaa 20+ fayl hal mar)'}
+                        : 'Dooro faylasha GeoJSON / KML (.geojson, .kml, .kmz)'}
                     </div>
                     <div className="text-[11px] text-[#94A3B8] truncate">
-                      xuduudaha · blocks · plots · dooxyada · waddooyinka · aagagga gaarka ah
+                      xuduudaha · blocks · plots · dooxyada · waddooyinka · Google Earth KML
                     </div>
                   </div>
                 </div>

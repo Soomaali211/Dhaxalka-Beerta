@@ -726,6 +726,7 @@ export interface FairLandAllocationResult {
   excludedBlocks?: ExcludedBlockSummary[];
   /** Detailed list of excluded plots */
   excludedPlots?: ExcludedPlotSummary[];
+  includeValidHalfPlots?: boolean;
   validHalfPlotsIncludedCount?: number;
   effectivePoolPlotUnits?: number;
   /** Count of full plots actually distributed to heirs */

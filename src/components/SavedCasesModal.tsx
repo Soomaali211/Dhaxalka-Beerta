@@ -13,6 +13,7 @@ import {
   MapPin,
   AlertTriangle,
   Plus,
+  Cloud,
 } from 'lucide-react';
 
 interface SavedCasesModalProps {
@@ -23,6 +24,7 @@ interface SavedCasesModalProps {
   onSelectCase: (savedCase: SavedInheritanceCase) => void;
   onDeleteCase: (id: string) => void;
   onOpenCaseManager?: () => void;
+  onOpenCloudBackup?: () => void;
   currency: Currency;
 }
 
@@ -47,6 +49,7 @@ export function SavedCasesModal({
   onSelectCase,
   onDeleteCase,
   onOpenCaseManager,
+  onOpenCloudBackup,
   currency,
 }: SavedCasesModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,6 +89,19 @@ export function SavedCasesModal({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {onOpenCloudBackup && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenCloudBackup();
+                }}
+                className="min-h-[40px] inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#F8FAFC] bg-[#0B1220] hover:bg-[#16263D] border border-[#243449] hover:border-[#22C55E]/70 rounded-xl transition-colors cursor-pointer"
+              >
+                <Cloud className="w-4 h-4 text-[#22C55E]" />
+                <span>Google Drive</span>
+              </button>
+            )}
             {onOpenCaseManager && (
               <button
                 type="button"

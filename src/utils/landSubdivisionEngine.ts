@@ -3499,6 +3499,7 @@ export function allocatePlotsFairlyToHeirs(
     plotMetadata?: Record<string, PlotDetailedMetadata>;
     blockMetadata?: Record<string, BlockDetailedMetadata>;
     enforceNonAdjacentBlocks?: boolean;
+    includeValidHalfPlots?: boolean;
     approvalStatus?: AllocationApprovalStatus;
     approvedBy?: string;
     approvedAt?: string;
@@ -3513,7 +3514,12 @@ export function allocatePlotsFairlyToHeirs(
   const plotMetadata = options?.plotMetadata || {};
   const blockMetadata = options?.blockMetadata || {};
   const enforceNonAdjacent = options?.enforceNonAdjacentBlocks ?? true;
+  const includeHalfPlots = Boolean(options?.includeValidHalfPlots);
   const approvalStatus: AllocationApprovalStatus = options?.approvalStatus || 'draft_proposal';
+
+  const getPlotUnitWeight = (p: GeneratedPlot): number => (p.full ? 1.0 : 0.5);
+  const sumPlotUnits = (arr: GeneratedPlot[]): number =>
+    +arr.reduce((s, p) => s + getPlotUnitWeight(p), 0).toFixed(4);
 
   const defaultPlotAreaSqM = +(subdivision.params.pw * subdivision.params.pd).toFixed(2);
   const blockById: Record<string, GeneratedBlock> = {};
@@ -3580,7 +3586,63 @@ export function allocatePlotsFairlyToHeirs(
     }
   });
 
-  // Gather Zone & Tier statistics strictly over DIVISIBLE plots
+  // Collect eligible Half-Plots (0.5 Plot) on the map
+  const fullPlotIdsSet = new Set(subdivision.plots.map((p) => p.id));
+  const rawHalfPlotsOnMap: GeneratedPlot[] = [];
+  const seenHalfIds = new Set<string>();
+
+  if (subdivision.allEvaluatedPlots && subdivision.allEvaluatedPlots.length > 0) {
+    for (const ep of subdivision.allEvaluatedPlots) {
+      if (ep.full || fullPlotIdsSet.has(ep.id) || seenHalfIds.has(ep.id)) continue;
+      const hpVal = ep.halfPlotValidation || subdivision.plotValidations?.[ep.id];
+      const isEligibleHalf = subdivision.isPrebuiltGeometry
+        ? hpVal?.boundaryRelation !== 'full_outside'
+        : hpVal?.validationStatus === 'half_plot_valid' || (ep.nHalfCounted || 0) > 0;
+      if (isEligibleHalf) {
+        seenHalfIds.add(ep.id);
+        rawHalfPlotsOnMap.push(ep);
+      }
+    }
+  } else if (subdivision.validHalfPlots && subdivision.validHalfPlots.length > 0) {
+    for (const hp of subdivision.validHalfPlots) {
+      if (hp.full || fullPlotIdsSet.has(hp.id) || seenHalfIds.has(hp.id)) continue;
+      seenHalfIds.add(hp.id);
+      rawHalfPlotsOnMap.push(hp);
+    }
+  }
+
+  const divisibleHalfPlotsCandidate: GeneratedPlot[] = [];
+  rawHalfPlotsOnMap.forEach((hp) => {
+    const pExcl = getEffectivePlotExclusion(hp, plotMetadata, blockMetadata);
+    if (pExcl.isExcluded) {
+      const z = getEffectivePlotZone(hp, blockZones, plotMetadata, blockMetadata);
+      const calcArea =
+        hp.calculatedAreaSqM ??
+        hp.halfPlotValidation?.expectedRule.targetAreaSqM ??
+        +(defaultPlotAreaSqM * 0.5).toFixed(2);
+      excludedPlotMetaById[hp.id] = {
+        scope: pExcl.scope,
+        specialName: pExcl.specialName,
+      };
+      excludedPlots.push({
+        plotId: hp.id,
+        blockId: hp.block,
+        zoneId: z,
+        specialName: pExcl.specialName,
+        excludedScope: pExcl.scope,
+        areaSqM: +calcArea.toFixed(1),
+        notes: plotMetadata[hp.id]?.notes || blockMetadata[hp.block]?.notes,
+      });
+    } else {
+      divisibleHalfPlotsCandidate.push(hp);
+    }
+  });
+
+  const divisibleHalfPlots: GeneratedPlot[] = includeHalfPlots ? divisibleHalfPlotsCandidate : [];
+  const divisiblePoolPlots: GeneratedPlot[] = [...divisiblePlots, ...divisibleHalfPlots];
+  const effectivePoolPlotUnits = sumPlotUnits(divisiblePoolPlots);
+
+  // Gather Zone & Tier statistics strictly over DIVISIBLE pool plots (full + included half-plots)
   const plotsByTier: Record<AssetQualityTier, GeneratedPlot[]> = {
     tier_1_prime: [],
     tier_2_standard: [],
@@ -3594,7 +3656,7 @@ export function allocatePlotsFairlyToHeirs(
   let unverifiedWadiCount = 0;
   let unverifiedQualityCount = 0;
 
-  divisiblePlots.forEach((p) => {
+  divisiblePoolPlots.forEach((p) => {
     const t = getEffectivePlotTier(p, blockTiers, plotTierOverrides);
     const z = getEffectivePlotZone(p, blockZones, plotMetadata, blockMetadata);
     const meta = getEffectivePlotMetadata(p, plotMetadata);
@@ -3620,31 +3682,31 @@ export function allocatePlotsFairlyToHeirs(
       zoneId: zid,
       zoneLabelSomali: zm.labelSomali,
       colorHex: zm.colorHex,
-      totalPlots: plotsByZone[zid].length,
+      totalPlots: sumPlotUnits(plotsByZone[zid]),
       blockIds: Array.from(blocksInZoneSet[zid] || []).sort(),
     };
   });
 
   const tierCounts = {
-    tier_1_prime: plotsByTier.tier_1_prime.length,
-    tier_2_standard: plotsByTier.tier_2_standard.length,
-    tier_3_basic: plotsByTier.tier_3_basic.length,
+    tier_1_prime: sumPlotUnits(plotsByTier.tier_1_prime),
+    tier_2_standard: sumPlotUnits(plotsByTier.tier_2_standard),
+    tier_3_basic: sumPlotUnits(plotsByTier.tier_3_basic),
   };
 
   const dataCompletenessWarnings: string[] = [];
   if (divisiblePlots.length > 0 && unverifiedWadiCount > 0) {
     dataCompletenessWarnings.push(
-      `Xaaladda dooxa: ${unverifiedWadiCount} ka mid ah ${divisiblePlots.length} plot oo la qaybinayo weli lama xaqiijin.`
+      `Xaaladda dooxa: ${unverifiedWadiCount} ka mid ah ${divisiblePoolPlots.length} plot oo la qaybinayo weli lama xaqiijin.`
     );
   }
   if (divisiblePlots.length > 0 && unverifiedQualityCount > 0) {
     dataCompletenessWarnings.push(
-      `Tayada dhulka: ${unverifiedQualityCount} ka mid ah ${divisiblePlots.length} plot oo la qaybinayo weli lama xaqiijin.`
+      `Tayada dhulka: ${unverifiedQualityCount} ka mid ah ${divisiblePoolPlots.length} plot oo la qaybinayo weli lama xaqiijin.`
     );
   }
-  if (verifiedPricedPlotsCount > 0 && verifiedPricedPlotsCount < divisiblePlots.length) {
+  if (verifiedPricedPlotsCount > 0 && verifiedPricedPlotsCount < divisiblePoolPlots.length) {
     dataCompletenessWarnings.push(
-      `Qiimaha la xaqiijiyey: ${verifiedPricedPlotsCount}/${divisiblePlots.length} plot oo keliya ayaa qiime sugan leh (${divisiblePlots.length - verifiedPricedPlotsCount} plot qiime lagama hayo).`
+      `Qiimaha la xaqiijiyey: ${verifiedPricedPlotsCount}/${divisiblePoolPlots.length} plot oo keliya ayaa qiime sugan leh (${divisiblePoolPlots.length - verifiedPricedPlotsCount} plot qiime lagama hayo).`
     );
   }
 
@@ -3656,7 +3718,12 @@ export function allocatePlotsFairlyToHeirs(
     const z = getEffectivePlotZone(p, blockZones, plotMetadata, blockMetadata);
     const zm = getZoneDisplayMeta(z);
     const meta = getEffectivePlotMetadata(p, plotMetadata);
-    const calcArea = p.calculatedAreaSqM ?? defaultPlotAreaSqM;
+    const unitWeight = getPlotUnitWeight(p);
+    const calcArea =
+      p.calculatedAreaSqM ??
+      (!p.full
+        ? p.halfPlotValidation?.expectedRule.targetAreaSqM ?? +(defaultPlotAreaSqM * 0.5).toFixed(2)
+        : defaultPlotAreaSqM);
 
     return {
       plotId: p.id,
@@ -3670,9 +3737,11 @@ export function allocatePlotsFairlyToHeirs(
       siteQuality: meta.siteQuality,
       siteQualityLabelSomali: SITE_QUALITY_METADATA[meta.siteQuality].labelSomali,
       areaSqM: calcArea,
+      isHalfPlot: !p.full,
+      plotUnitWeight: unitWeight,
       verifiedAreaSqM: meta.verifiedAreaSqM ?? null,
       verifiedPrice: meta.verifiedPrice ?? null,
-      estimatedTierPrice: tierUnitPrices[t] || 0,
+      estimatedTierPrice: +((tierUnitPrices[t] || 0) * unitWeight).toFixed(2),
       widthM: subdivision.params.pw,
       depthM: subdivision.params.pd,
       lon: p.centerLonLat[0],
@@ -3680,8 +3749,8 @@ export function allocatePlotsFairlyToHeirs(
     };
   };
 
-  // Record all EXCLUDED plots into plotAssignments so map & tables display their special names clearly
-  subdivision.plots.forEach((p) => {
+  // Record all EXCLUDED plots (full + half) into plotAssignments so map & tables display their special names clearly
+  [...subdivision.plots, ...rawHalfPlotsOnMap].forEach((p) => {
     const exMeta = excludedPlotMetaById[p.id];
     if (exMeta) {
       plotAssignments[p.id] = {
@@ -3695,29 +3764,35 @@ export function allocatePlotsFairlyToHeirs(
     }
   });
 
-  // Count half-plots / boundary-clipped partial plots excluded from full-plot division
-  const withheldHalfPlotsCount = (() => {
-    if (subdivision.htmlHalvesCounted && subdivision.htmlHalvesCounted.length > 0) {
-      return subdivision.htmlHalvesCounted.length;
-    }
-    if (subdivision.allEvaluatedPlots && subdivision.allEvaluatedPlots.length > 0) {
-      let c = 0;
-      for (const ep of subdivision.allEvaluatedPlots) {
-        if (!ep.full) {
-          const rel = (ep.halfPlotValidation || subdivision.plotValidations?.[ep.id])
-            ?.boundaryRelation;
-          if (subdivision.isPrebuiltGeometry || rel !== 'full_outside') {
-            c++;
-          }
-        }
-      }
-      return c;
-    }
-    return subdivision.halfPlotSummary?.validHalfPlotsCount || 0;
-  })();
+  // When Half-Plots are excluded from inheritance division, record them explicitly as withheld_half_plot
+  if (!includeHalfPlots) {
+    divisibleHalfPlotsCandidate.forEach((hp) => {
+      plotAssignments[hp.id] = {
+        ...buildPlotRecordBase(hp),
+        assignmentType: 'unassigned',
+        allocationLifecycleStatus: 'available',
+        unassignedReason: 'withheld_half_plot',
+      };
+    });
+  }
 
-  if (individuals.length === 0 || divisiblePlots.length === 0) {
-    divisiblePlots.forEach((p) => {
+  const validHalfPlotsIncludedCount = includeHalfPlots ? divisibleHalfPlots.length : 0;
+
+  // Count half-plots / boundary-clipped partial plots excluded from division
+  const withheldHalfPlotsCount = includeHalfPlots
+    ? 0
+    : (() => {
+        if (divisibleHalfPlotsCandidate.length > 0) {
+          return divisibleHalfPlotsCandidate.length;
+        }
+        if (subdivision.htmlHalvesCounted && subdivision.htmlHalvesCounted.length > 0) {
+          return subdivision.htmlHalvesCounted.length;
+        }
+        return subdivision.halfPlotSummary?.validHalfPlotsCount || 0;
+      })();
+
+  if (individuals.length === 0 || divisiblePoolPlots.length === 0) {
+    divisiblePoolPlots.forEach((p) => {
       plotAssignments[p.id] = {
         ...buildPlotRecordBase(p),
         assignmentType: 'unassigned',
@@ -3811,6 +3886,9 @@ export function allocatePlotsFairlyToHeirs(
       excludedBlocksCount: excludedBlocks.length,
       excludedBlocks,
       excludedPlots,
+      includeValidHalfPlots: includeHalfPlots,
+      validHalfPlotsIncludedCount,
+      effectivePoolPlotUnits,
       allocatedFullPlotsCount: 0,
       withheldJajabPlotsCount: 0,
       withheldJajabPlotIds: [],
@@ -3854,7 +3932,7 @@ export function allocatePlotsFairlyToHeirs(
   const makeEmptyTierBreakdown = (tier: AssetQualityTier): HeirTierPlotBreakdown => ({
     tier,
     tierLabelSomali: TIER_METADATA[tier].shortSomali,
-    totalTierPlots: plotsByTier[tier].length,
+    totalTierPlots: sumPlotUnits(plotsByTier[tier]),
     exactQuotaPlots: 0,
     assignedWholePlotIds: [],
     sharedPlotSlices: [],
@@ -3865,7 +3943,7 @@ export function allocatePlotsFairlyToHeirs(
   const makeEmptyZoneBreakdown = (zid: string): HeirZonePlotBreakdown => ({
     zoneId: zid,
     zoneLabelSomali: getZoneDisplayMeta(zid).labelSomali,
-    totalZonePlots: plotsByZone[zid]?.length || 0,
+    totalZonePlots: sumPlotUnits(plotsByZone[zid] || []),
     exactZoneQuotaPlots: 0,
     assignedWholePlotIds: [],
     assignedBlockIdsInZone: [],
@@ -3889,22 +3967,22 @@ export function allocatePlotsFairlyToHeirs(
     heirTierMap[k] = {
       tier_1_prime: {
         ...makeEmptyTierBreakdown('tier_1_prime'),
-        exactQuotaPlots: +(w * plotsByTier.tier_1_prime.length).toFixed(4),
+        exactQuotaPlots: +(w * sumPlotUnits(plotsByTier.tier_1_prime)).toFixed(4),
       },
       tier_2_standard: {
         ...makeEmptyTierBreakdown('tier_2_standard'),
-        exactQuotaPlots: +(w * plotsByTier.tier_2_standard.length).toFixed(4),
+        exactQuotaPlots: +(w * sumPlotUnits(plotsByTier.tier_2_standard)).toFixed(4),
       },
       tier_3_basic: {
         ...makeEmptyTierBreakdown('tier_3_basic'),
-        exactQuotaPlots: +(w * plotsByTier.tier_3_basic.length).toFixed(4),
+        exactQuotaPlots: +(w * sumPlotUnits(plotsByTier.tier_3_basic)).toFixed(4),
       },
     };
     heirZoneMap[k] = {};
     orderedZoneIds.forEach((zid) => {
       heirZoneMap[k][zid] = {
         ...makeEmptyZoneBreakdown(zid),
-        exactZoneQuotaPlots: +(w * (plotsByZone[zid]?.length || 0)).toFixed(4),
+        exactZoneQuotaPlots: +(w * sumPlotUnits(plotsByZone[zid] || [])).toFixed(4),
       };
     });
     heirWholeBlocksSet[k] = new Set();
@@ -3915,9 +3993,9 @@ export function allocatePlotsFairlyToHeirs(
   const lifecycleTag: 'approved' | 'pending_proposal' =
     approvalStatus === 'approved' ? 'approved' : 'pending_proposal';
 
-  // Pre-seed manual overrides strictly on DIVISIBLE plots so excluded plots are never assigned to any heir
+  // Pre-seed manual overrides strictly on DIVISIBLE pool plots so excluded plots are never assigned to any heir
   const manuallyAssignedPlotIds = new Set<string>();
-  divisiblePlots.forEach((p) => {
+  divisiblePoolPlots.forEach((p) => {
     const overrideHeirKey = manualPlotHeirOverrides[p.id];
     if (overrideHeirKey && heirTierMap[overrideHeirKey]) {
       manuallyAssignedPlotIds.add(p.id);
@@ -3999,50 +4077,52 @@ export function allocatePlotsFairlyToHeirs(
   });
 
   const withheldJajabPlotIds: string[] = [];
+  const hasIncludedHalfPlotsInPool = includeHalfPlots && divisibleHalfPlots.length > 0;
 
-  // Pre-compute farm-wide exact integer targets & stratum apportionment for 'clean_equal_no_half_no_fraction'
-  // Guarantees:
-  // 1) All heirs in the same Sharia group receive 100% identical whole integer plot counts (tiro siman)
-  // 2) Zero fractional/shared plots (jajabka waa laga reebay) and zero half-plots
-  // 3) Assigned plots are still spread fairly across Zones (A–D) and Tiers (H1–H3)
+  // Pre-compute farm-wide exact targets & stratum apportionment for 'clean_equal_no_half_no_fraction'
+  // - When Half-Plots are excluded: works in whole plots (1.0)
+  // - When Half-Plots are included: works in half-plot quanta (1 quantum = 0.5 plot)
   const cleanStratumWholeMatrix: Record<string, Record<string, number>> = {};
   if (allocationMode === 'clean_equal_no_half_no_fraction') {
+    const quantumScale = hasIncludedHalfPlotsInPool ? 2 : 1;
     const manualTotalByHeir: Record<string, number> = {};
     heirKeys.forEach((k) => {
       manualTotalByHeir[k] = 0;
     });
-    divisiblePlots.forEach((p) => {
+    divisiblePoolPlots.forEach((p) => {
       if (manuallyAssignedPlotIds.has(p.id)) {
         const ok = manualPlotHeirOverrides[p.id];
         if (ok && manualTotalByHeir[ok] !== undefined) {
-          manualTotalByHeir[ok] += 1;
+          manualTotalByHeir[ok] += Math.round(getPlotUnitWeight(p) * quantumScale);
         }
       }
     });
 
     const freeCapacityByStratum: Record<string, number> = {};
-    let totalFreeFarmPlots = 0;
+    let totalFreeFarmUnits = 0;
     strataList.forEach((st) => {
       let fc = 0;
       st.allPlots.forEach((p) => {
-        if (!manuallyAssignedPlotIds.has(p.id)) fc++;
+        if (!manuallyAssignedPlotIds.has(p.id)) {
+          fc += Math.round(getPlotUnitWeight(p) * quantumScale);
+        }
       });
       freeCapacityByStratum[st.key] = fc;
-      totalFreeFarmPlots += fc;
+      totalFreeFarmUnits += fc;
     });
 
+    const totalPoolUnitsScaled = Math.round(effectivePoolPlotUnits * quantumScale);
     const autoTargetByHeir: Record<string, number> = {};
     let totalAutoTarget = 0;
     heirKeys.forEach((k, idx) => {
       const w = individuals[idx].individualPercentage / totalPctSum;
-      const cleanWholeTotal = Math.floor(w * divisiblePlots.length + 1e-9);
+      const cleanWholeTotal = Math.floor(w * totalPoolUnitsScaled + 1e-9);
       const remAuto = Math.max(0, cleanWholeTotal - manualTotalByHeir[k]);
       autoTargetByHeir[k] = remAuto;
       totalAutoTarget += remAuto;
     });
 
-    // Safety cap if manual overrides exceeded remaining free plots
-    while (totalAutoTarget > totalFreeFarmPlots && totalAutoTarget > 0) {
+    while (totalAutoTarget > totalFreeFarmUnits && totalAutoTarget > 0) {
       let maxK = heirKeys[0];
       heirKeys.forEach((k) => {
         if (autoTargetByHeir[k] > autoTargetByHeir[maxK]) maxK = k;
@@ -4052,17 +4132,16 @@ export function allocatePlotsFairlyToHeirs(
       totalAutoTarget -= 1;
     }
 
-    // Step A: Apportion totalAutoTarget across strata capacities proportionally (Hamilton)
     const stratumTotalToAllocate: Record<string, number> = {};
     let sumStratumBase = 0;
     const stratumRems: { key: string; rem: number; cap: number }[] = [];
     strataList.forEach((st) => {
       const cap = freeCapacityByStratum[st.key] || 0;
-      if (cap === 0 || totalFreeFarmPlots === 0 || totalAutoTarget === 0) {
+      if (cap === 0 || totalFreeFarmUnits === 0 || totalAutoTarget === 0) {
         stratumTotalToAllocate[st.key] = 0;
         return;
       }
-      const exactSt = (cap * totalAutoTarget) / totalFreeFarmPlots;
+      const exactSt = (cap * totalAutoTarget) / totalFreeFarmUnits;
       const baseSt = Math.min(cap, Math.floor(exactSt + 1e-9));
       stratumTotalToAllocate[st.key] = baseSt;
       sumStratumBase += baseSt;
@@ -4079,7 +4158,6 @@ export function allocatePlotsFairlyToHeirs(
       }
     }
 
-    // Step B: Controlled Rounding matrix so row sums == stratumTotalToAllocate[st] AND col sums == autoTargetByHeir[k]
     const remRow: Record<string, number> = {};
     const remCol: Record<string, number> = { ...autoTargetByHeir };
     const cellFracs: { sKey: string; hKey: string; frac: number }[] = [];
@@ -4117,16 +4195,45 @@ export function allocatePlotsFairlyToHeirs(
     }
   }
 
+  // Helper to assign a plot exclusively to a chosen heir
+  const assignExclusivePlotToHeir = (
+    p: GeneratedPlot,
+    chosenHeir: string,
+    stratum: AllocationStratum,
+    stratumBlocksPickedByHeir: Record<string, Set<string>>
+  ) => {
+    const hIdx = heirKeys.indexOf(chosenHeir);
+    const ind = individuals[hIdx];
+    const base = buildPlotRecordBase(p);
+    heirTierMap[chosenHeir][stratum.tier].assignedWholePlotIds.push(p.id);
+    heirZoneMap[chosenHeir][stratum.zoneId].assignedWholePlotIds.push(p.id);
+    heirWholeBlocksSet[chosenHeir].add(p.block);
+    stratumBlocksPickedByHeir[chosenHeir].add(p.block);
+    if (base.verifiedPrice != null) {
+      cumulativeVerifiedValueAssigned[chosenHeir] += base.verifiedPrice;
+    }
+
+    plotAssignments[p.id] = {
+      ...base,
+      assignmentType: 'sole_heir',
+      allocationLifecycleStatus: lifecycleTag,
+      ownerHeirKey: chosenHeir,
+      ownerPersonName: ind.personName,
+      ownerRoleSomali: ind.roleTitleSomali,
+      ownerColorHex: heirColors[chosenHeir],
+    };
+  };
+
   // Allocate each (Zone, Tier, Wadi) stratum proportionally with Anti-Adjacent-Block Spatial Solver
   strataList.forEach((stratum) => {
-    const N = stratum.allPlots.length;
-    if (N === 0) return;
+    const N_units = sumPlotUnits(stratum.allPlots);
+    if (N_units <= 0) return;
 
     const exactStratumQuota: Record<string, number> = {};
     const manualInStratum: Record<string, number> = {};
     heirKeys.forEach((k, idx) => {
       const w = individuals[idx].individualPercentage / totalPctSum;
-      exactStratumQuota[k] = w * N;
+      exactStratumQuota[k] = w * N_units;
       manualInStratum[k] = 0;
     });
 
@@ -4135,7 +4242,7 @@ export function allocatePlotsFairlyToHeirs(
       if (manuallyAssignedPlotIds.has(p.id)) {
         const ok = manualPlotHeirOverrides[p.id];
         if (ok && manualInStratum[ok] !== undefined) {
-          manualInStratum[ok] += 1;
+          manualInStratum[ok] += getPlotUnitWeight(p);
         }
       } else {
         freePlots.push(p);
@@ -4143,6 +4250,10 @@ export function allocatePlotsFairlyToHeirs(
     });
 
     if (freePlots.length === 0) return;
+
+    const freeFullPlots = freePlots.filter((p) => p.full);
+    const freeHalfPlots = freePlots.filter((p) => !p.full);
+    const freeUnitsTotal = sumPlotUnits(freePlots);
 
     const remainingNeed: Record<string, number> = {};
     let positiveNeedSum = 0;
@@ -4156,39 +4267,52 @@ export function allocatePlotsFairlyToHeirs(
     heirKeys.forEach((k) => {
       normalizedNeed[k] =
         positiveNeedSum > 1e-9
-          ? (remainingNeed[k] / positiveNeedSum) * freePlots.length
-          : freePlots.length / heirKeys.length;
+          ? (remainingNeed[k] / positiveNeedSum) * freeUnitsTotal
+          : freeUnitsTotal / heirKeys.length;
     });
 
-    const wholeToAssign: Record<string, number> = {};
-    const fracRemainders: { heirKey: string; rem: number }[] = [];
-    let sumWhole = 0;
+    const stratumBlocksPickedByHeir: Record<string, Set<string>> = {};
+    heirKeys.forEach((k) => {
+      stratumBlocksPickedByHeir[k] = new Set();
+    });
+
+    // Quantum scale: 1 when no half-plots are in this stratum/pool, 2 when half-plots are active (1 quantum = 0.5 plot)
+    const useHalfPlotQuanta = hasIncludedHalfPlotsInPool && freeHalfPlots.length > 0;
+    const qScale = useHalfPlotQuanta ? 2 : 1;
+    const totalFreeQuanta = freeFullPlots.length * qScale + (useHalfPlotQuanta ? freeHalfPlots.length : 0);
+
+    const quantaToAssign: Record<string, number> = {};
+    const qRemainders: { heirKey: string; rem: number }[] = [];
+    let sumQuanta = 0;
 
     if (allocationMode === 'clean_equal_no_half_no_fraction') {
       const rowMap = cleanStratumWholeMatrix[stratum.key] || {};
       heirKeys.forEach((k) => {
-        const wCount = rowMap[k] || 0;
-        wholeToAssign[k] = wCount;
-        sumWhole += wCount;
-        fracRemainders.push({ heirKey: k, rem: 0 });
+        const rawVal = rowMap[k] || 0;
+        // If cleanStratumWholeMatrix was computed in quanta (2x) but this specific stratum has 0 half-plots, convert cleanly
+        const qVal =
+          hasIncludedHalfPlotsInPool && !useHalfPlotQuanta ? Math.floor(rawVal / 2) : rawVal;
+        quantaToAssign[k] = qVal;
+        sumQuanta += qVal;
+        qRemainders.push({ heirKey: k, rem: 0 });
       });
     } else {
       heirKeys.forEach((k) => {
-        const wCount = Math.floor(normalizedNeed[k] + 1e-9);
-        wholeToAssign[k] = wCount;
-        sumWhole += wCount;
-        fracRemainders.push({
+        const exactQ = normalizedNeed[k] * qScale;
+        const baseQ = Math.floor(exactQ + 1e-9);
+        quantaToAssign[k] = baseQ;
+        sumQuanta += baseQ;
+        qRemainders.push({
           heirKey: k,
-          rem: Math.max(0, normalizedNeed[k] - wCount),
+          rem: Math.max(0, exactQ - baseQ),
         });
       });
     }
 
-    const leftoverPlotCount = Math.max(0, freePlots.length - sumWhole);
+    const leftoverQuanta = Math.max(0, totalFreeQuanta - sumQuanta);
 
-    // If 'whole_balanced', award leftover whole plots via Cross-Stratum Deficit-Balanced Largest Remainder
-    if (allocationMode === 'whole_balanced' && leftoverPlotCount > 0) {
-      const ranked = fracRemainders
+    if (allocationMode === 'whole_balanced' && leftoverQuanta > 0) {
+      const ranked = qRemainders
         .slice()
         .sort((a, b) => {
           const scoreA = a.rem + cumulativeRoundingDeficit[a.heirKey] * 0.45;
@@ -4198,36 +4322,108 @@ export function allocatePlotsFairlyToHeirs(
         });
 
       const winners = new Set<string>();
-      for (let m = 0; m < leftoverPlotCount; m++) {
+      for (let m = 0; m < leftoverQuanta; m++) {
         const wHeir = ranked[m % ranked.length].heirKey;
-        wholeToAssign[wHeir] += 1;
+        quantaToAssign[wHeir] += 1;
         winners.add(wHeir);
       }
 
-      fracRemainders.forEach(({ heirKey, rem }) => {
+      qRemainders.forEach(({ heirKey, rem }) => {
+        const unitFactor = 1 / qScale;
         if (winners.has(heirKey)) {
-          cumulativeRoundingDeficit[heirKey] += rem - 1;
+          cumulativeRoundingDeficit[heirKey] += (rem - 1) * unitFactor;
         } else {
-          cumulativeRoundingDeficit[heirKey] += rem;
+          cumulativeRoundingDeficit[heirKey] += rem * unitFactor;
         }
       });
     }
 
-    // Group freePlots by Block ID for Constrained-First Non-Adjacent Block Assignment
+    // Parity feasibility when half-plot quanta (qScale === 2) are active:
+    // Each heir with an odd quantum count needs 1 physical half-plot (0.5).
+    if (useHalfPlotQuanta) {
+      let oddHeirs = heirKeys.filter((k) => quantaToAssign[k] % 2 === 1);
+      if (allocationMode === 'whole_balanced') {
+        while (oddHeirs.length > freeHalfPlots.length && oddHeirs.length >= 2) {
+          oddHeirs.sort((a, b) => {
+            const remA = qRemainders.find((x) => x.heirKey === a)?.rem ?? 0;
+            const remB = qRemainders.find((x) => x.heirKey === b)?.rem ?? 0;
+            const scA = remA + cumulativeRoundingDeficit[a] * 0.45;
+            const scB = remB + cumulativeRoundingDeficit[b] * 0.45;
+            return scB - scA;
+          });
+          const promoteKey = oddHeirs[0];
+          const demoteKey = oddHeirs[oddHeirs.length - 1];
+          quantaToAssign[promoteKey] += 1;
+          quantaToAssign[demoteKey] = Math.max(0, quantaToAssign[demoteKey] - 1);
+          cumulativeRoundingDeficit[promoteKey] -= 0.5;
+          cumulativeRoundingDeficit[demoteKey] += 0.5;
+          oddHeirs = heirKeys.filter((k) => quantaToAssign[k] % 2 === 1);
+        }
+      } else {
+        while (oddHeirs.length > freeHalfPlots.length && oddHeirs.length > 0) {
+          oddHeirs.sort((a, b) => {
+            const remA = qRemainders.find((x) => x.heirKey === a)?.rem ?? 0;
+            const remB = qRemainders.find((x) => x.heirKey === b)?.rem ?? 0;
+            return remA - remB;
+          });
+          const dropKey = oddHeirs[0];
+          quantaToAssign[dropKey] = Math.max(0, quantaToAssign[dropKey] - 1);
+          oddHeirs = heirKeys.filter((k) => quantaToAssign[k] % 2 === 1);
+        }
+      }
+    }
+
+    const remQuantaByHeir: Record<string, number> = { ...quantaToAssign };
+    const halfPoolAvailable = freeHalfPlots.slice().sort((a, b) => a.no - b.no);
+
+    // Step 1: If useHalfPlotQuanta, assign 1 physical Half-Plot to each heir with an odd quantum target
+    if (useHalfPlotQuanta) {
+      const oddRecipients = heirKeys.filter((k) => remQuantaByHeir[k] % 2 === 1);
+      oddRecipients.forEach((hKey) => {
+        if (halfPoolAvailable.length === 0) return;
+        const ownedBlocks = heirWholeBlocksSet[hKey];
+        let bestIdx = 0;
+        let bestScore = -1e18;
+        for (let i = 0; i < halfPoolAvailable.length; i++) {
+          const candPlot = halfPoolAvailable[i];
+          const candBlk = blockById[candPlot.block];
+          let score = 0;
+          if (enforceNonAdjacent && candBlk && ownedBlocks.size > 0) {
+            for (const prevId of ownedBlocks) {
+              if (prevId === candPlot.block) continue;
+              const prevBlk = blockById[prevId];
+              if (!prevBlk) continue;
+              if (areBlocksOrthogonallyAdjacent(candBlk, prevBlk)) score -= 100000;
+              else if (areBlocksDiagonallyTouching(candBlk, prevBlk)) score -= 18000;
+            }
+          }
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = i;
+          }
+        }
+        const [pickedHalf] = halfPoolAvailable.splice(bestIdx, 1);
+        assignExclusivePlotToHeir(pickedHalf, hKey, stratum, stratumBlocksPickedByHeir);
+        remQuantaByHeir[hKey] -= 1;
+      });
+    }
+
+    // Step 2: Convert remaining quanta into whole-plot equivalents (each full plot = qScale quanta)
+    const remWholeByHeir: Record<string, number> = {};
+    heirKeys.forEach((k) => {
+      remWholeByHeir[k] = useHalfPlotQuanta
+        ? Math.floor(remQuantaByHeir[k] / 2)
+        : remQuantaByHeir[k];
+    });
+
+    // Group freeFullPlots by Block ID for Constrained-First Non-Adjacent Block Assignment
     const blockBucketsMap = new Map<string, GeneratedPlot[]>();
-    freePlots.forEach((p) => {
+    freeFullPlots.forEach((p) => {
       const arr = blockBucketsMap.get(p.block) || [];
       arr.push(p);
       blockBucketsMap.set(p.block, arr);
     });
-    // Sort plots within each block cleanly by plot number
     blockBucketsMap.forEach((arr) => arr.sort((a, b) => a.no - b.no));
-
-    const remWholeByHeir: Record<string, number> = { ...wholeToAssign };
-    const stratumBlocksPickedByHeir: Record<string, Set<string>> = {};
-    heirKeys.forEach((k) => {
-      stratumBlocksPickedByHeir[k] = new Set();
-    });
 
     const hasAvailableWholePlots = () => {
       for (const arr of blockBucketsMap.values()) {
@@ -4260,15 +4456,13 @@ export function allocatePlotsFairlyToHeirs(
       return safe;
     };
 
-    // Assign whole plots iteratively: most spatially constrained heir picks their safest non-adjacent block
     let safetyIter = 0;
-    const maxIter = freePlots.length * 2 + heirKeys.length * 6 + 20;
+    const maxIter = freeFullPlots.length * 2 + heirKeys.length * 6 + 20;
 
     while (safetyIter++ < maxIter && hasAvailableWholePlots()) {
       const activeHeirs = heirKeys.filter((k) => remWholeByHeir[k] > 0);
       if (activeHeirs.length === 0) break;
 
-      // Sort active heirs: fewest safe non-adjacent blocks first, then largest remaining need
       activeHeirs.sort((a, b) => {
         if (enforceNonAdjacent) {
           const safeA = countSafeBlocksForHeir(a);
@@ -4279,12 +4473,9 @@ export function allocatePlotsFairlyToHeirs(
       });
 
       const chosenHeir = activeHeirs[0];
-      const hIdx = heirKeys.indexOf(chosenHeir);
-      const ind = individuals[hIdx];
       const needed = remWholeByHeir[chosenHeir];
       const ownedBlocks = heirWholeBlocksSet[chosenHeir];
 
-      // Score every block with available plots
       let bestBlockId: string | null = null;
       let bestBlockScore = -1e18;
 
@@ -4324,7 +4515,6 @@ export function allocatePlotsFairlyToHeirs(
         }
         if (alreadyUsedInThisStratum) score += 7000;
         if (fitsAllNeeded) score += 2500;
-        // Prefer blocks where full quota fits snugly without stranding tiny fragments
         score -= Math.abs(arr.length - needed) * 8;
 
         if (score > bestBlockScore) {
@@ -4335,13 +4525,10 @@ export function allocatePlotsFairlyToHeirs(
 
       if (!bestBlockId) break;
       const bucket = blockBucketsMap.get(bestBlockId)!;
-
-      // Cap how many plots a single heir takes from one block ONLY if they would exceed needed
       const takeCount = Math.min(needed, bucket.length);
 
-      // If plots in bucket have differing verified prices, sort bucket to match heir's target average price
       if (verifiedPricedPlotsCount > 0) {
-        const targetPerPlotVal = totalVerifiedValuePool / Math.max(1, divisiblePlots.length);
+        const targetPerPlotVal = totalVerifiedValuePool / Math.max(1, effectivePoolPlotUnits);
         bucket.sort((pA, pB) => {
           const vA = plotMetadata[pA.id]?.verifiedPrice ?? targetPerPlotVal;
           const vB = plotMetadata[pB.id]?.verifiedPrice ?? targetPerPlotVal;
@@ -4351,66 +4538,48 @@ export function allocatePlotsFairlyToHeirs(
 
       const takenPlots = bucket.splice(0, takeCount);
       takenPlots.forEach((p) => {
-        const base = buildPlotRecordBase(p);
-        heirTierMap[chosenHeir][stratum.tier].assignedWholePlotIds.push(p.id);
-        heirZoneMap[chosenHeir][stratum.zoneId].assignedWholePlotIds.push(p.id);
-        heirWholeBlocksSet[chosenHeir].add(p.block);
-        stratumBlocksPickedByHeir[chosenHeir].add(p.block);
-        if (base.verifiedPrice != null) {
-          cumulativeVerifiedValueAssigned[chosenHeir] += base.verifiedPrice;
-        }
-
-        plotAssignments[p.id] = {
-          ...base,
-          assignmentType: 'sole_heir',
-          allocationLifecycleStatus: lifecycleTag,
-          ownerHeirKey: chosenHeir,
-          ownerPersonName: ind.personName,
-          ownerRoleSomali: ind.roleTitleSomali,
-          ownerColorHex: heirColors[chosenHeir],
-        };
+        assignExclusivePlotToHeir(p, chosenHeir, stratum, stratumBlocksPickedByHeir);
       });
 
       remWholeByHeir[chosenHeir] -= takenPlots.length;
     }
 
-    // Remaining plots in blockBucketsMap
+    // Step 3: If heirs still have whole-plot equivalents needed and pairs of Half-Plots remain (0.5 + 0.5 = 1.0), assign pairs
+    if (useHalfPlotQuanta && halfPoolAvailable.length >= 2) {
+      for (const hKey of heirKeys) {
+        while (remWholeByHeir[hKey] > 0 && halfPoolAvailable.length >= 2) {
+          const hp1 = halfPoolAvailable.shift()!;
+          const hp2 = halfPoolAvailable.shift()!;
+          assignExclusivePlotToHeir(hp1, hKey, stratum, stratumBlocksPickedByHeir);
+          assignExclusivePlotToHeir(hp2, hKey, stratum, stratumBlocksPickedByHeir);
+          remWholeByHeir[hKey] -= 1;
+        }
+      }
+    }
+
+    // Remaining plots in blockBucketsMap + any remaining halfPoolAvailable
     const remainingSharedPool: GeneratedPlot[] = [];
     for (const arr of blockBucketsMap.values()) {
       remainingSharedPool.push(...arr);
     }
+    remainingSharedPool.push(...halfPoolAvailable);
 
     if (allocationMode === 'whole_balanced' && remainingSharedPool.length > 0) {
-      // Safety guarantee: in 'whole_balanced' mode, 0 plots may ever be shared or left unassigned
       remainingSharedPool.forEach((p, rIdx) => {
         const candidateHeir =
           heirKeys.find((k) => remWholeByHeir[k] > 0) || heirKeys[rIdx % heirKeys.length];
-        const hIdx = heirKeys.indexOf(candidateHeir);
-        const ind = individuals[hIdx];
-        const base = buildPlotRecordBase(p);
-        heirTierMap[candidateHeir][stratum.tier].assignedWholePlotIds.push(p.id);
-        heirZoneMap[candidateHeir][stratum.zoneId].assignedWholePlotIds.push(p.id);
-        heirWholeBlocksSet[candidateHeir].add(p.block);
-        if (remWholeByHeir[candidateHeir] > 0) remWholeByHeir[candidateHeir] -= 1;
-
-        plotAssignments[p.id] = {
-          ...base,
-          assignmentType: 'sole_heir',
-          allocationLifecycleStatus: lifecycleTag,
-          ownerHeirKey: candidateHeir,
-          ownerPersonName: ind.personName,
-          ownerRoleSomali: ind.roleTitleSomali,
-          ownerColorHex: heirColors[candidateHeir],
-        };
+        assignExclusivePlotToHeir(p, candidateHeir, stratum, stratumBlocksPickedByHeir);
+        if (remWholeByHeir[candidateHeir] > 0) remWholeByHeir[candidateHeir] -= getPlotUnitWeight(p);
       });
     } else if (
       allocationMode === 'clean_equal_no_half_no_fraction' &&
       remainingSharedPool.length > 0
     ) {
-      // Explicitly withhold fractional remainder (Jajabka) plots from division
       remainingSharedPool.forEach((p) => {
         const base = buildPlotRecordBase(p);
-        withheldJajabPlotIds.push(p.id);
+        if (p.full) {
+          withheldJajabPlotIds.push(p.id);
+        }
         plotAssignments[p.id] = {
           ...base,
           assignmentType: 'unassigned',
@@ -4419,14 +4588,32 @@ export function allocatePlotsFairlyToHeirs(
         };
       });
     } else if (allocationMode === 'exact_shared' && remainingSharedPool.length > 0) {
-      const queue = fracRemainders
-        .filter((f) => f.rem > 1e-5)
-        .map((f) => ({ ...f }));
+      // Compute exact remaining plot-unit need after exclusive full + half assignments in this stratum
+      const assignedAutoUnitsInStratum: Record<string, number> = {};
+      heirKeys.forEach((k) => {
+        assignedAutoUnitsInStratum[k] = 0;
+      });
+      stratum.allPlots.forEach((p) => {
+        if (manuallyAssignedPlotIds.has(p.id)) return;
+        const rec = plotAssignments[p.id];
+        if (rec && rec.assignmentType === 'sole_heir' && rec.ownerHeirKey) {
+          assignedAutoUnitsInStratum[rec.ownerHeirKey] =
+            (assignedAutoUnitsInStratum[rec.ownerHeirKey] || 0) + getPlotUnitWeight(p);
+        }
+      });
+
+      const queue = heirKeys
+        .map((k) => ({
+          heirKey: k,
+          rem: Math.max(0, normalizedNeed[k] - (assignedAutoUnitsInStratum[k] || 0)),
+        }))
+        .filter((f) => f.rem > 1e-5);
       let qIdx = 0;
 
       remainingSharedPool.forEach((p) => {
         const base = buildPlotRecordBase(p);
-        let capacity = 1.0;
+        const plotUnitCap = getPlotUnitWeight(p);
+        let capacity = plotUnitCap;
         const coOwners: SharedPlotCoOwner[] = [];
 
         while (capacity > 1e-5 && qIdx < queue.length) {
@@ -4435,7 +4622,9 @@ export function allocatePlotsFairlyToHeirs(
             qIdx++;
             continue;
           }
-          const slice = Math.min(capacity, item.rem);
+          const sliceUnits = Math.min(capacity, item.rem);
+          const pctOfThisPlot = +((sliceUnits / plotUnitCap) * 100).toFixed(2);
+          const sliceAreaSqM = +((sliceUnits / plotUnitCap) * base.areaSqM).toFixed(1);
           const hIdx = heirKeys.indexOf(item.heirKey);
           const ind = individuals[hIdx];
 
@@ -4443,40 +4632,41 @@ export function allocatePlotsFairlyToHeirs(
             heirKey: item.heirKey,
             personName: ind.personName,
             roleTitleSomali: ind.roleTitleSomali,
-            shareFractionOfPlot: +slice.toFixed(4),
-            sharePercentageOfPlot: +(slice * 100).toFixed(2),
-            areaSqM: +(slice * base.areaSqM).toFixed(1),
+            shareFractionOfPlot: +sliceUnits.toFixed(4),
+            sharePercentageOfPlot: pctOfThisPlot,
+            areaSqM: sliceAreaSqM,
           });
 
           heirTierMap[item.heirKey][stratum.tier].sharedPlotSlices.push({
             plotId: p.id,
             blockId: p.block,
             zoneId: stratum.zoneId,
-            fractionOfPlot: +slice.toFixed(4),
-            percentageOfPlot: +(slice * 100).toFixed(2),
-            areaSqM: +(slice * base.areaSqM).toFixed(1),
+            fractionOfPlot: +sliceUnits.toFixed(4),
+            percentageOfPlot: pctOfThisPlot,
+            areaSqM: sliceAreaSqM,
           });
 
           heirZoneMap[item.heirKey][stratum.zoneId].sharedPlotSlices.push({
             plotId: p.id,
             blockId: p.block,
-            fractionOfPlot: +slice.toFixed(4),
-            percentageOfPlot: +(slice * 100).toFixed(2),
-            areaSqM: +(slice * base.areaSqM).toFixed(1),
+            fractionOfPlot: +sliceUnits.toFixed(4),
+            percentageOfPlot: pctOfThisPlot,
+            areaSqM: sliceAreaSqM,
           });
 
           if (base.verifiedPrice != null) {
-            cumulativeVerifiedValueAssigned[item.heirKey] += slice * base.verifiedPrice;
+            cumulativeVerifiedValueAssigned[item.heirKey] +=
+              (sliceUnits / plotUnitCap) * base.verifiedPrice;
           }
 
-          item.rem -= slice;
-          capacity -= slice;
+          item.rem -= sliceUnits;
+          capacity -= sliceUnits;
           if (item.rem <= 1e-5) {
             qIdx++;
           }
         }
 
-        if (coOwners.length === 1 && coOwners[0].shareFractionOfPlot >= 0.999) {
+        if (coOwners.length === 1 && coOwners[0].sharePercentageOfPlot >= 99.9) {
           const sole = coOwners[0];
           heirTierMap[sole.heirKey][stratum.tier].sharedPlotSlices.pop();
           heirTierMap[sole.heirKey][stratum.tier].assignedWholePlotIds.push(p.id);
@@ -4508,9 +4698,19 @@ export function allocatePlotsFairlyToHeirs(
   });
 
   const allocatedFullPlotsCount = Math.max(0, divisiblePlots.length - withheldJajabPlotIds.length);
+  const allocatedEffectiveUnits = Object.values(plotAssignments).reduce((s, rec) => {
+    if (
+      rec.assignmentType === 'sole_heir' ||
+      rec.assignmentType === 'manual_override' ||
+      rec.assignmentType === 'shared_fractional'
+    ) {
+      return s + (rec.plotUnitWeight ?? 1);
+    }
+    return s;
+  }, 0);
   const cleanScaleRatio =
-    allocationMode === 'clean_equal_no_half_no_fraction' && divisiblePlots.length > 0
-      ? allocatedFullPlotsCount / divisiblePlots.length
+    allocationMode === 'clean_equal_no_half_no_fraction' && effectivePoolPlotUnits > 0
+      ? allocatedEffectiveUnits / effectivePoolPlotUnits
       : 1;
   const fairnessTol = allocationMode === 'clean_equal_no_half_no_fraction' ? 1.05 : 0.99;
 
@@ -4530,7 +4730,11 @@ export function allocatePlotsFairlyToHeirs(
     TIER_ORDER.forEach((t) => {
       const tb = tMap[t];
       const sharedSum = tb.sharedPlotSlices.reduce((s, x) => s + x.fractionOfPlot, 0);
-      tb.effectiveTotalPlots = +(tb.assignedWholePlotIds.length + sharedSum).toFixed(4);
+      const assignedUnits = tb.assignedWholePlotIds.reduce(
+        (s, pid) => s + (plotAssignments[pid]?.plotUnitWeight ?? 1),
+        0
+      );
+      tb.effectiveTotalPlots = +(assignedUnits + sharedSum).toFixed(4);
       tb.deviationFromQuota = +(tb.effectiveTotalPlots - tb.exactQuotaPlots).toFixed(4);
 
       const expectedInMode = tb.exactQuotaPlots * cleanScaleRatio;
@@ -4548,7 +4752,11 @@ export function allocatePlotsFairlyToHeirs(
     orderedZoneIds.forEach((zid) => {
       const zb = zMap[zid];
       const sharedSum = zb.sharedPlotSlices.reduce((s, x) => s + x.fractionOfPlot, 0);
-      zb.effectivePlotsInZone = +(zb.assignedWholePlotIds.length + sharedSum).toFixed(4);
+      const assignedZoneUnits = zb.assignedWholePlotIds.reduce(
+        (s, pid) => s + (plotAssignments[pid]?.plotUnitWeight ?? 1),
+        0
+      );
+      zb.effectivePlotsInZone = +(assignedZoneUnits + sharedSum).toFixed(4);
       zb.deviationFromZoneQuota = +(zb.effectivePlotsInZone - zb.exactZoneQuotaPlots).toFixed(4);
       zb.zonePercentageReceived =
         zb.totalZonePlots > 0
@@ -4649,8 +4857,9 @@ export function allocatePlotsFairlyToHeirs(
         verValSum += rec.verifiedPrice;
         verValCount++;
       }
-      wadiBreakdown[rec.wadiStatus] = +(wadiBreakdown[rec.wadiStatus] + 1).toFixed(3);
-      siteQualityBreakdown[rec.siteQuality] = +(siteQualityBreakdown[rec.siteQuality] + 1).toFixed(3);
+      const wUnit = rec.plotUnitWeight ?? 1;
+      wadiBreakdown[rec.wadiStatus] = +(wadiBreakdown[rec.wadiStatus] + wUnit).toFixed(3);
+      siteQualityBreakdown[rec.siteQuality] = +(siteQualityBreakdown[rec.siteQuality] + wUnit).toFixed(3);
       if (rec.wadiStatus === 'unverified' || rec.siteQuality === 'unverified') {
         unverifiedMetaPlots++;
       }
@@ -4756,14 +4965,21 @@ export function allocatePlotsFairlyToHeirs(
         } ayaa si gaar ah looga reebay qaybinta dhaxalka)`
       : '';
 
+  const halfPlotsNote =
+    validHalfPlotsIncludedCount > 0
+      ? ` (waxaa ku jira ${validHalfPlotsIncludedCount} half-plot oo u dhigma ${(
+          validHalfPlotsIncludedCount * 0.5
+        ).toFixed(1)} plot)`
+      : withheldHalfPlotsCount > 0
+      ? ` (${withheldHalfPlotsCount} half-plot waa laga reebay dhaxalka)`
+      : '';
+
   const modeNote =
     allocationMode === 'whole_balanced'
-      ? ` — Habka 2aad (0 Plot Wadaag ah: plot kasta hal dhaxle oo keliya ayaa leh)`
+      ? ` — Habka 2aad (0 Plot Wadaag ah: plot kasta hal dhaxle oo keliya ayaa leh)${halfPlotsNote}`
       : allocationMode === 'clean_equal_no_half_no_fraction'
-      ? ` — Habka 3aad (Tiro Siman: ${allocatedFullPlotsCount} plot oo buuxa ayaa la qaybiyey; waxaa laga reebay ${withheldJajabPlotIds.length} plot oo jajab ah${
-          withheldHalfPlotsCount > 0 ? ` iyo ${withheldHalfPlotsCount} half-plot` : ''
-        })`
-      : '';
+      ? ` — Habka 3aad (Tiro Siman: ${allocatedFullPlotsCount} plot oo buuxa ayaa la qaybiyey; waxaa laga reebay ${withheldJajabPlotIds.length} plot oo jajab ah)${halfPlotsNote}`
+      : halfPlotsNote;
 
   const fairnessSummarySomali =
     isFairAcrossAllTiers && isFairAcrossAllZones && hasZeroAdjacentBlockViolations
@@ -4779,6 +4995,9 @@ export function allocatePlotsFairlyToHeirs(
     excludedBlocksCount: excludedBlocks.length,
     excludedBlocks,
     excludedPlots,
+    includeValidHalfPlots: includeHalfPlots,
+    validHalfPlotsIncludedCount,
+    effectivePoolPlotUnits,
     allocatedFullPlotsCount,
     withheldJajabPlotsCount: withheldJajabPlotIds.length,
     withheldJajabPlotIds,
@@ -4813,7 +5032,8 @@ export function allocatePlotsFairlyToHeirs(
 export function computeStandalonePlotModeAllocation(
   totalRawLandPlots: number,
   individuals: { heirGroupId: string; personIndex: number; individualPercentage: number }[],
-  allocationMode: LandAllocationMode
+  allocationMode: LandAllocationMode,
+  includeHalfPlots = false
 ): {
   perHeirPlots: Record<string, number>;
   allocatedWholePlots: number;
@@ -4831,55 +5051,68 @@ export function computeStandalonePlotModeAllocation(
   }
 
   const totalPct = individuals.reduce((s, x) => s + x.individualPercentage, 0) || 100;
+  const effectiveRawPool = includeHalfPlots
+    ? Math.floor(totalRawLandPlots * 2 + 1e-9) * 0.5
+    : Math.max(0, Math.floor(totalRawLandPlots + 1e-9));
+  const withheldHalfPlotsUnits = Math.max(0, +(totalRawLandPlots - effectiveRawPool).toFixed(2));
 
   if (allocationMode === 'exact_shared') {
+    const poolForExact = includeHalfPlots ? totalRawLandPlots : effectiveRawPool;
     individuals.forEach((ind) => {
       const k = `${ind.heirGroupId}::${ind.personIndex}`;
-      perHeirPlots[k] = +((ind.individualPercentage / totalPct) * totalRawLandPlots).toFixed(4);
+      perHeirPlots[k] = +((ind.individualPercentage / totalPct) * poolForExact).toFixed(4);
     });
     return {
       perHeirPlots,
-      allocatedWholePlots: Math.floor(totalRawLandPlots),
-      withheldHalfPlotsUnits: 0,
+      allocatedWholePlots: +poolForExact.toFixed(2),
+      withheldHalfPlotsUnits: includeHalfPlots ? 0 : withheldHalfPlotsUnits,
       withheldJajabPlotsCount: 0,
     };
   }
 
-  const fullPlotsPool = Math.max(0, Math.floor(totalRawLandPlots + 1e-9));
-  const withheldHalfPlotsUnits = Math.max(0, +(totalRawLandPlots - fullPlotsPool).toFixed(2));
+  const qScale = includeHalfPlots ? 2 : 1;
+  const poolQuanta = Math.round(effectiveRawPool * qScale);
 
-  let sumBase = 0;
+  let sumBaseQuanta = 0;
   const rems: { key: string; rem: number }[] = [];
+  const quantaByHeir: Record<string, number> = {};
+
   individuals.forEach((ind) => {
     const k = `${ind.heirGroupId}::${ind.personIndex}`;
-    const exact = (ind.individualPercentage / totalPct) * fullPlotsPool;
-    const base = Math.floor(exact + 1e-9);
-    perHeirPlots[k] = base;
-    sumBase += base;
-    rems.push({ key: k, rem: Math.max(0, exact - base) });
+    const exactQ = (ind.individualPercentage / totalPct) * poolQuanta;
+    const baseQ = Math.floor(exactQ + 1e-9);
+    quantaByHeir[k] = baseQ;
+    sumBaseQuanta += baseQ;
+    rems.push({ key: k, rem: Math.max(0, exactQ - baseQ) });
   });
 
   if (allocationMode === 'whole_balanced') {
-    const leftover = Math.max(0, fullPlotsPool - sumBase);
+    const leftoverQ = Math.max(0, poolQuanta - sumBaseQuanta);
     rems.sort((a, b) => b.rem - a.rem);
-    for (let i = 0; i < leftover; i++) {
+    for (let i = 0; i < leftoverQ; i++) {
       const wKey = rems[i % rems.length].key;
-      perHeirPlots[wKey] += 1;
+      quantaByHeir[wKey] += 1;
     }
+    Object.keys(quantaByHeir).forEach((k) => {
+      perHeirPlots[k] = +(quantaByHeir[k] / qScale).toFixed(2);
+    });
     return {
       perHeirPlots,
-      allocatedWholePlots: fullPlotsPool,
+      allocatedWholePlots: +(poolQuanta / qScale).toFixed(2),
       withheldHalfPlotsUnits,
       withheldJajabPlotsCount: 0,
     };
   }
 
   // 'clean_equal_no_half_no_fraction'
+  Object.keys(quantaByHeir).forEach((k) => {
+    perHeirPlots[k] = +(quantaByHeir[k] / qScale).toFixed(2);
+  });
   return {
     perHeirPlots,
-    allocatedWholePlots: sumBase,
+    allocatedWholePlots: +(sumBaseQuanta / qScale).toFixed(2),
     withheldHalfPlotsUnits,
-    withheldJajabPlotsCount: Math.max(0, fullPlotsPool - sumBase),
+    withheldJajabPlotsCount: Math.max(0, +((poolQuanta - sumBaseQuanta) / qScale).toFixed(2)),
   };
 }
 
@@ -4908,7 +5141,8 @@ export function syncSubdivisionToEstateAssets(
   plotTierOverrides: Record<string, AssetQualityTier>,
   tierUnitPrices: TierPricingConfig,
   plotMetadata?: Record<string, PlotDetailedMetadata>,
-  blockMetadata?: Record<string, BlockDetailedMetadata>
+  blockMetadata?: Record<string, BlockDetailedMetadata>,
+  includeValidHalfPlots = false
 ): EstateAssetItem[] {
   const preservedAssets = currentAssets.filter((a) => {
     if (a.id.startsWith(GIS_ASSET_ID_PREFIX)) return false;
@@ -4931,7 +5165,33 @@ export function syncSubdivisionToEstateAssets(
     tier_3_basic: [],
   };
 
-  subdivision.plots.forEach((p) => {
+  const fullIds = new Set(subdivision.plots.map((p) => p.id));
+  const poolToSync: GeneratedPlot[] = [...subdivision.plots];
+
+  if (includeValidHalfPlots) {
+    const seenHalf = new Set<string>();
+    if (subdivision.allEvaluatedPlots && subdivision.allEvaluatedPlots.length > 0) {
+      for (const ep of subdivision.allEvaluatedPlots) {
+        if (ep.full || fullIds.has(ep.id) || seenHalf.has(ep.id)) continue;
+        const hpVal = ep.halfPlotValidation || subdivision.plotValidations?.[ep.id];
+        const okHalf = subdivision.isPrebuiltGeometry
+          ? hpVal?.boundaryRelation !== 'full_outside'
+          : hpVal?.validationStatus === 'half_plot_valid' || (ep.nHalfCounted || 0) > 0;
+        if (okHalf) {
+          seenHalf.add(ep.id);
+          poolToSync.push(ep);
+        }
+      }
+    } else if (subdivision.validHalfPlots) {
+      for (const hp of subdivision.validHalfPlots) {
+        if (hp.full || fullIds.has(hp.id) || seenHalf.has(hp.id)) continue;
+        seenHalf.add(hp.id);
+        poolToSync.push(hp);
+      }
+    }
+  }
+
+  poolToSync.forEach((p) => {
     if (getEffectivePlotExclusion(p, pMeta, bMeta).isExcluded) {
       return;
     }
@@ -4949,7 +5209,7 @@ export function syncSubdivisionToEstateAssets(
     if (list.length === 0) return;
 
     const unitPrice = Math.max(0, tierUnitPrices[tier] || 0);
-    // Use verified plot prices when ALL plots in this tier have verified prices, otherwise tierUnitPrice
+    const totalUnits = +list.reduce((s, p) => s + (p.full ? 1.0 : 0.5), 0).toFixed(2);
     let verifiedSum = 0;
     let verifiedCount = 0;
     if (plotMetadata) {
@@ -4965,15 +5225,15 @@ export function syncSubdivisionToEstateAssets(
     const totalVal =
       verifiedCount === list.length && verifiedSum > 0
         ? +verifiedSum.toFixed(2)
-        : +(list.length * unitPrice).toFixed(2);
+        : +(totalUnits * unitPrice).toFixed(2);
     const blocksInTier = Array.from(new Set(list.map((p) => p.block)));
 
     gisAssets.push({
       id: `${GIS_ASSET_ID_PREFIX}${tier}`,
       category: 'real_estate',
-      title: `Naqshadda Beerta — ${TIER_METADATA[tier].shortSomali} (${list.length} Plot)`,
+      title: `Naqshadda Beerta — ${TIER_METADATA[tier].shortSomali} (${formatPlotQtyCompact(totalUnits)} Plot)`,
       description: `Blocks: ${blocksInTier.join(', ')}`,
-      quantity: list.length,
+      quantity: totalUnits,
       unit: 'Plot',
       estimatedValueUSD: totalVal,
       isUnvaluedLand: totalVal === 0,

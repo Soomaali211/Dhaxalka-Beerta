@@ -274,7 +274,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             className="w-full min-h-[44px] flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#F8FAFC] hover:bg-[#0F1B2D] transition-colors cursor-pointer"
           >
             <DatabaseBackup className="w-4 h-4 text-[#22C55E] shrink-0" />
-            <span className="truncate">Kaydka &amp; Soo-celinta Guud</span>
+            <span className="truncate">Google Drive &amp; Kaydka Guud</span>
           </button>
 
           <button

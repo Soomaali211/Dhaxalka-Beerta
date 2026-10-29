@@ -43,6 +43,8 @@ interface ApkResultsAndNamesViewProps {
   linkedLandAllocation?: FairLandAllocationResult | null;
   allocationMode?: LandAllocationMode;
   onChangeAllocationMode?: (mode: LandAllocationMode) => void;
+  includeValidHalfPlots?: boolean;
+  onToggleIncludeHalfPlots?: (include: boolean) => void;
   onUpdateHeirsInput: (updated: HeirsInput) => void;
   onBackToCalculator: () => void;
   onOpenAssetsModal: () => void;
@@ -61,6 +63,8 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
   linkedLandAllocation,
   allocationMode: propAllocationMode,
   onChangeAllocationMode,
+  includeValidHalfPlots = false,
+  onToggleIncludeHalfPlots,
   onUpdateHeirsInput,
   onBackToCalculator,
   onOpenAssetsModal,
@@ -81,7 +85,8 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
   const standalonePlotMode = computeStandalonePlotModeAllocation(
     distribution.totalLandPlots,
     distribution.allIndividualHeirs,
-    activeAllocationMode
+    activeAllocationMode,
+    includeValidHalfPlots
   );
 
   // Guaranteed unique hex color for every individual heir (0 collisions)
@@ -765,6 +770,43 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
               )}
             </div>
 
+            {onToggleIncludeHalfPlots && (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-[#243449]/60">
+                <span className="text-[11px] font-bold text-[#CBD5E1]">
+                  Half-Plots (0.5 Plot):{' '}
+                  <span className="font-normal text-[#94A3B8]">
+                    {includeValidHalfPlots
+                      ? 'Waa lagu daray dhaxalka (0.5 plot = 1 half-plot)'
+                      : 'Waa laga reebay qaybinta dhaxalka'}
+                  </span>
+                </span>
+                <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-[#0F1B2D] border border-[#243449]">
+                  <button
+                    type="button"
+                    onClick={() => onToggleIncludeHalfPlots(true)}
+                    className={`min-h-[32px] px-3 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      includeValidHalfPlots
+                        ? 'bg-[#10B981] text-[#030712]'
+                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                    }`}
+                  >
+                    Ku Dar Dhaxalka
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggleIncludeHalfPlots(false)}
+                    className={`min-h-[32px] px-3 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                      !includeValidHalfPlots
+                        ? 'bg-[#1E293B] text-[#F8FAFC]'
+                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                    }`}
+                  >
+                    Ka Reeb Dhaxalka
+                  </button>
+                </div>
+              </div>
+            )}
+
             <p className="text-[11px] text-[#94A3B8] leading-relaxed">
               {LAND_ALLOCATION_MODE_METADATA[activeAllocationMode].descriptionSomali}
             </p>
@@ -809,6 +851,7 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
             linkedLandAllocation.allocatedFullPlotsCount ?? linkedLandAllocation.totalFullPlots;
           const jajabWithheld = linkedLandAllocation.withheldJajabPlotsCount ?? 0;
           const halfWithheld = linkedLandAllocation.withheldHalfPlotsCount ?? 0;
+          const halfIncluded = linkedLandAllocation.validHalfPlotsIncludedCount ?? 0;
           return (
             <div className="px-5 py-3.5 bg-[#0B1220]/70 border-b border-[#243449] space-y-2 text-xs">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -820,8 +863,16 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
                   </strong>
                   <span aria-hidden="true"> · </span>
                   <span className="font-mono-numbers tabular-nums font-semibold text-[#F8FAFC]">
-                    {allocCount} / {linkedLandAllocation.totalFullPlots} Plot La Qaybiyey
+                    {allocCount} / {linkedLandAllocation.totalFullPlots} Plot Buuxa
                   </span>
+                  {halfIncluded > 0 && (
+                    <>
+                      <span aria-hidden="true"> · </span>
+                      <span className="font-mono-numbers tabular-nums font-bold text-[#10B981]">
+                        +{halfIncluded} Half-Plot Lagu Daray ({(halfIncluded * 0.5).toFixed(1)} Plot)
+                      </span>
+                    </>
+                  )}
                   <span aria-hidden="true"> · </span>
                   <span className="font-mono-numbers tabular-nums font-semibold text-[#F8FAFC]">
                     {linkedLandAllocation.sharedPlots.length} Plot Wadaag ah

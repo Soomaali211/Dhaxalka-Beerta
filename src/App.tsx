@@ -29,7 +29,8 @@ import { OfflineIndicator } from './components/PWAInstallButton';
 
 import { MobileTopAppBar, PrimaryDestination } from './components/MobileTopAppBar';
 import { NavigationDrawer } from './components/NavigationDrawer';
-import { BackupRestoreModal } from './components/BackupRestoreModal';
+import { BackupRestoreModal, BackupRestoreMode } from './components/BackupRestoreModal';
+import { readAndNormalizeGisFile } from './utils/kmlAndGeoJsonParser';
 
 import { HeirConfigModal } from './components/HeirConfigModal';
 import { AssetsConfigModal } from './components/AssetsConfigModal';
@@ -488,6 +489,7 @@ export default function App() {
         plotMetadata: subdivisionState.plotMetadata,
         blockMetadata: subdivisionState.blockMetadata,
         enforceNonAdjacentBlocks: subdivisionState.enforceNonAdjacentBlocks,
+        includeValidHalfPlots: Boolean(subdivisionState.includeValidHalfPlotsInAllocation),
         approvalStatus: subdivisionState.approvalStatus,
         approvedBy: subdivisionState.approvedBy,
         approvedAt: subdivisionState.approvedAt,
@@ -504,6 +506,7 @@ export default function App() {
     subdivisionState.plotMetadata,
     subdivisionState.blockMetadata,
     subdivisionState.enforceNonAdjacentBlocks,
+    subdivisionState.includeValidHalfPlotsInAllocation,
     subdivisionState.approvalStatus,
     subdivisionState.approvedBy,
     subdivisionState.approvedAt,
@@ -522,7 +525,8 @@ export default function App() {
         subdivisionState.plotTierOverrides,
         subdivisionState.tierUnitPrices,
         subdivisionState.plotMetadata,
-        subdivisionState.blockMetadata
+        subdivisionState.blockMetadata,
+        Boolean(subdivisionState.includeValidHalfPlotsInAllocation)
       )
     );
   }, [
@@ -533,6 +537,7 @@ export default function App() {
     subdivisionState.tierUnitPrices,
     subdivisionState.plotMetadata,
     subdivisionState.blockMetadata,
+    subdivisionState.includeValidHalfPlotsInAllocation,
   ]);
 
   const currentHasMap = useMemo(
@@ -717,7 +722,8 @@ export default function App() {
         subdivisionState.plotTierOverrides,
         subdivisionState.tierUnitPrices,
         subdivisionState.plotMetadata,
-        subdivisionState.blockMetadata
+        subdivisionState.blockMetadata,
+        Boolean(subdivisionState.includeValidHalfPlotsInAllocation)
       )
     );
     const divCount = fairLandAllocation?.totalFullPlots ?? subdivisionResult.plots.length;
@@ -761,7 +767,61 @@ export default function App() {
             subdivisionState.plotTierOverrides,
             subdivisionState.tierUnitPrices,
             subdivisionState.plotMetadata,
-            subdivisionState.blockMetadata
+            subdivisionState.blockMetadata,
+            Boolean(subdivisionState.includeValidHalfPlotsInAllocation)
+          )
+        );
+      }
+    },
+    [
+      currentHasMap,
+      selectedTargetScope,
+      subdivisionResult,
+      subdivisionState.blockMetadata,
+      subdivisionState.blockTiers,
+      subdivisionState.includeValidHalfPlotsInAllocation,
+      subdivisionState.isLinkedToEstate,
+      subdivisionState.plotMetadata,
+      subdivisionState.plotTierOverrides,
+      subdivisionState.tierUnitPrices,
+    ]
+  );
+
+  const handleToggleIncludeHalfPlots = useCallback(
+    (include: boolean) => {
+      const shouldAutoLinkGis =
+        currentHasMap &&
+        Boolean(subdivisionResult && subdivisionResult.plots.length > 0) &&
+        selectedTargetScope === 'all_farm' &&
+        !subdivisionState.isLinkedToEstate;
+
+      setSubdivisionState((prev) => ({
+        ...prev,
+        includeValidHalfPlotsInAllocation: include,
+        isLinkedToEstate: shouldAutoLinkGis ? true : prev.isLinkedToEstate,
+        approvalStatus: prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+        auditHistory: [
+          ...prev.auditHistory,
+          createAuditEntry(
+            'auto_proposal',
+            include
+              ? 'Half-Plots (0.5 Plot) waa lagu daray qaybinta dhaxalka.'
+              : 'Half-Plots (0.5 Plot) waa laga reebay qaybinta dhaxalka.'
+          ),
+        ],
+      }));
+
+      if (shouldAutoLinkGis && subdivisionResult) {
+        setAssets((prevAssets) =>
+          syncSubdivisionToEstateAssets(
+            prevAssets,
+            subdivisionResult,
+            subdivisionState.blockTiers,
+            subdivisionState.plotTierOverrides,
+            subdivisionState.tierUnitPrices,
+            subdivisionState.plotMetadata,
+            subdivisionState.blockMetadata,
+            include
           )
         );
       }
@@ -950,16 +1010,43 @@ export default function App() {
     setListDataMode('cases');
   };
 
-  // Validated Full App Backup Restore handler
+  // Validated Full App Backup Restore handler (supports Merge & Replace modes)
   const handleConfirmBackupRestore = (payload: {
     hydratedCases: SavedInheritanceCase[];
     activeCaseId: string;
     currency: Currency;
     preview: ValidatedBackupPreview;
+    mode?: BackupRestoreMode;
   }) => {
+    const restoreMode: BackupRestoreMode = payload.mode || 'replace';
+    const nextSavedCases =
+      restoreMode === 'merge'
+        ? (() => {
+            const byIdOrRef = new globalThis.Map<string, SavedInheritanceCase>();
+            savedCases.forEach((existing) => {
+              byIdOrRef.set(existing.id, existing);
+            });
+            payload.hydratedCases.forEach((incoming) => {
+              const existingMatch = Array.from(byIdOrRef.values()).find(
+                (ex) =>
+                  ex.id === incoming.id ||
+                  (ex.referenceNumber &&
+                    incoming.referenceNumber &&
+                    ex.referenceNumber.toLowerCase() === incoming.referenceNumber.toLowerCase())
+              );
+              if (existingMatch && existingMatch.id !== incoming.id) {
+                byIdOrRef.delete(existingMatch.id);
+              }
+              byIdOrRef.set(incoming.id, incoming);
+            });
+            return Array.from(byIdOrRef.values());
+          })()
+        : payload.hydratedCases;
+
     const targetCase =
-      payload.hydratedCases.find((c) => c.id === payload.activeCaseId) ||
-      payload.hydratedCases[0];
+      nextSavedCases.find((c) => c.id === payload.activeCaseId) ||
+      payload.hydratedCases[0] ||
+      nextSavedCases[0];
     if (!targetCase) return;
 
     const restoredSub = hydrateCaseSubdivisionSnapshot(
@@ -974,7 +1061,8 @@ export default function App() {
     const nextCurrency: Currency = targetCase.currency || payload.currency;
 
     skipUndoPushRef.current = true;
-    setUndoHistoriesByCaseId({
+    setUndoHistoriesByCaseId((prev) => ({
+      ...(restoreMode === 'merge' ? prev : {}),
       [targetCase.id]: createUndoRedoHistory(
         {
           caseId: targetCase.id,
@@ -986,9 +1074,9 @@ export default function App() {
         },
         'Soo-celinta Backup-ka'
       ),
-    });
+    }));
 
-    setSavedCases(payload.hydratedCases);
+    setSavedCases(nextSavedCases);
     setActiveCaseId(targetCase.id);
     setHeirsInput(nextHeirs);
     setAssets(nextAssets);
@@ -999,8 +1087,12 @@ export default function App() {
     setDashboardMode('interactive_map');
 
     showToast(
-      'Backup-kii Waa La Soo Celiyey',
-      `Waxaa si ammaan ah loo soo celiyey ${payload.preview.casesCount} kiis (Kiiska firfircoon: ${targetCase.referenceNumber}).`
+      restoreMode === 'merge'
+        ? 'Kiisaskii Waa Lagu Biiriyey'
+        : 'Backup-kii Waa La Soo Celiyey',
+      restoreMode === 'merge'
+        ? `${payload.preview.casesCount} kiis ayaa lagu daray diiwaankaaga (Wadarta hadda: ${nextSavedCases.length} kiis).`
+        : `Waxaa si ammaan ah loo soo celiyey ${payload.preview.casesCount} kiis (Kiiska firfircoon: ${targetCase.referenceNumber}).`
     );
   };
 
@@ -1304,20 +1396,25 @@ export default function App() {
     );
   };
 
-  // Direct HTML-style 3-slot GeoJSON import (`Slot 'B'` = Xuduudka, `Slot 'S'` = Block tusaale, `Slot 'A'` = Aag gaar ah)
+  // Direct HTML-style 3-slot GeoJSON / KML import (`Slot 'B'` = Xuduudka, `Slot 'S'` = Block tusaale, `Slot 'A'` = Aag gaar ah)
   const handleHtmlGeoJsonSlotUpload = async (file: File, slot: HtmlGeoJsonSlot) => {
     if (!file) return;
     try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      const preview = applyHtmlGeoJsonSlotImport(subdivisionState, parsed, file.name, slot);
+      const normalized = await readAndNormalizeGisFile(file);
+      if (normalized.ok === false) {
+        showToast('Khalad Faylka GeoJSON / KML', normalized.errorSomali);
+        return;
+      }
+      const parsed = normalized.rawJson;
+      const fileName = normalized.fileName;
+      const preview = applyHtmlGeoJsonSlotImport(subdivisionState, parsed, fileName, slot);
       if (preview.ok === false) {
-        showToast('Khalad Faylka GeoJSON', preview.errorSomali);
+        showToast('Khalad Faylka GeoJSON / KML', preview.errorSomali);
         return;
       }
 
       setSubdivisionState((prev) => {
-        const applied = applyHtmlGeoJsonSlotImport(prev, parsed, file.name, slot);
+        const applied = applyHtmlGeoJsonSlotImport(prev, parsed, fileName, slot);
         return applied.ok ? applied.nextState : prev;
       });
 
@@ -1333,10 +1430,10 @@ export default function App() {
           : 'Aag Gaar Ah Waa La Soo Geliyey';
       showToast(slotTitle, preview.summarySomali);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Khalad JSON';
+      const msg = err instanceof Error ? err.message : 'Khalad Faylka GIS';
       showToast(
-        'Khalad Faylka GeoJSON',
-        `File-ka lama akhrin karo: ${msg}. Isticmaal GeoJSON sax ah.`
+        'Khalad Faylka GeoJSON / KML',
+        `File-ka lama akhrin karo: ${msg}. Isticmaal GeoJSON (.geojson) ama KML (.kml/.kmz) sax ah.`
       );
     }
   };
@@ -1354,20 +1451,19 @@ export default function App() {
     }));
   };
 
-  // Multi-file or single-file GeoJSON upload from Dashboard / Dropzone:
-  // - Single GeoJSON without explicit prebuilt QGIS Plot attributes (`goostay`/`Plot_ID` on >=10 features)
-  //   routes directly to `applyHtmlGeoJsonSlotImport(..., 'B')` (100% HTML import workflow!)
-  // - Multi-file QGIS layers (`01_xuduudka_beerta`, `02_blocks`, `03_plots`, `05_dooxyada`) or explicit 523-plot layer
-  //   merges prebuilt QGIS layers cleanly.
+  // Multi-file or single-file GeoJSON / KML / KMZ upload from Dashboard / Dropzone:
   const handleGeoJsonFilesUploadFromDashboard = async (files: File[]) => {
     if (!files || files.length === 0) return;
 
     try {
       const sources: { fileName: string; rawJson: unknown }[] = [];
       for (const f of files) {
-        const text = await f.text();
-        const parsed = JSON.parse(text);
-        sources.push({ fileName: f.name, rawJson: parsed });
+        const normalized = await readAndNormalizeGisFile(f);
+        if (normalized.ok === false) {
+          showToast('Khalad Faylka GeoJSON / KML', normalized.errorSomali);
+          return;
+        }
+        sources.push({ fileName: normalized.fileName, rawJson: normalized.rawJson });
       }
 
       const isCoLocatedQgisOverlay =
@@ -1381,7 +1477,7 @@ export default function App() {
             const applied = importSimultaneousFarmGeoJsonFiles(prev, sources);
             return applied && !applied.isPrebuiltPackage ? applied.nextState : prev;
           });
-          showToast('Faylasha GeoJSON Waa La Soo Geliyey', batchRes.summarySomali);
+          showToast('Faylasha GIS (GeoJSON/KML) Waa La Soo Geliyey', batchRes.summarySomali);
           return;
         }
       }
@@ -1857,6 +1953,8 @@ export default function App() {
               linkedLandAllocation={linkedLandAllocation}
               allocationMode={subdivisionState.allocationMode}
               onChangeAllocationMode={handleChangeLandAllocationMode}
+              includeValidHalfPlots={Boolean(subdivisionState.includeValidHalfPlotsInAllocation)}
+              onToggleIncludeHalfPlots={handleToggleIncludeHalfPlots}
               subdivisionResult={currentHasMap ? subdivisionResult : null}
               currentHasMap={currentHasMap}
               selectedTargetScope={selectedTargetScope}
@@ -1889,6 +1987,8 @@ export default function App() {
               linkedLandAllocation={linkedLandAllocation}
               allocationMode={subdivisionState.allocationMode}
               onChangeAllocationMode={handleChangeLandAllocationMode}
+              includeValidHalfPlots={Boolean(subdivisionState.includeValidHalfPlotsInAllocation)}
+              onToggleIncludeHalfPlots={handleToggleIncludeHalfPlots}
               onUpdateHeirsInput={setHeirsInput}
               onBackToCalculator={() => navigateLegacyTab('calculator')}
               onOpenAssetsModal={() => setIsAssetsConfigOpen(true)}
@@ -2075,6 +2175,7 @@ export default function App() {
           setIsSavedCasesOpen(false);
           navigateLegacyTab('cases');
         }}
+        onOpenCloudBackup={() => setIsBackupRestoreOpen(true)}
         currency={currency}
       />
     </div>

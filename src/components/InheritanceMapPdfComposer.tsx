@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Compass,
   Eye,
@@ -8,8 +8,10 @@ import {
   LayoutTemplate,
   Plus,
   Ruler,
+  SlidersHorizontal,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import {
   CaseExportMetadata,
@@ -141,10 +143,39 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
 }) => {
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  // Composer Sidebar Section Tabs
+  // Collapsible Print Layout Customization Drawer (closed by default so Map Preview is huge!)
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState<boolean>(false);
+
+  // Composer Drawer Section Tabs
   const [activeConfigTab, setActiveConfigTab] = useState<
     'layout' | 'legend' | 'compass_scale' | 'source'
   >('layout');
+
+  // Measure live preview viewport so the map sheet automatically fills the screen cleanly
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
+  const [viewportDims, setViewportDims] = useState<{ w: number; h: number }>({
+    w: 1120,
+    h: 760,
+  });
+
+  useEffect(() => {
+    const el = previewContainerRef.current;
+    if (!el) return;
+    const updateDims = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 80 && rect.height > 80) {
+        setViewportDims({ w: rect.width, h: rect.height });
+      }
+    };
+    updateDims();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => updateDims());
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', updateDims);
+    return () => window.removeEventListener('resize', updateDims);
+  }, []);
 
   // 1. Page Layout State
   const [paperSize, setPaperSize] = useState<PdfPaperSize>('A4');
@@ -1569,8 +1600,35 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
     );
   };
 
+  // Compute large, responsive preview sheet width (fills ~94% of available viewport at 100% zoom)
+  const computedPreviewWidthPx = useMemo(() => {
+    const padW = viewportDims.w < 640 ? 14 : 28;
+    const padH = viewportDims.h < 640 ? 14 : 28;
+    const availW = Math.max(280, viewportDims.w - padW);
+    const availH = Math.max(260, viewportDims.h - padH);
+
+    // On phones (<640px), fill full horizontal screen width at 100% zoom so map isn't postage-stamp tiny;
+    // on tablets/desktops (>=640px), fit cleanly inside the huge viewport while keeping crisp aspect ratio!
+    const baseFitW =
+      viewportDims.w < 640
+        ? availW
+        : Math.max(
+            Math.min(availW, 680),
+            Math.min(availW, (availH * pageMetrics.svgW) / pageMetrics.svgH)
+          );
+
+    return Math.round(baseFitW * previewZoom);
+  }, [viewportDims.w, viewportDims.h, pageMetrics.svgW, pageMetrics.svgH, previewZoom]);
+
+  const combinedPaperValue = `${paperSize}_${orientation}`;
+  const handleQuickPaperChange = (val: string) => {
+    const [ps, or] = val.split('_');
+    if (ps === 'A4' || ps === 'A3') setPaperSize(ps);
+    if (or === 'landscape' || or === 'portrait') setOrientation(or);
+  };
+
   return (
-    <div className="flex flex-1 min-h-0 flex-col lg:flex-row overflow-hidden print:block print:overflow-visible">
+    <div className="relative flex flex-1 min-h-0 flex-col overflow-hidden print:block print:overflow-visible">
       {/* Dynamic @page CSS rule matching selected Paper Size & Orientation */}
       <style>{`
         @media print {
@@ -1581,65 +1639,158 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
         }
       `}</style>
 
-      {/* LEFT SIDEBAR: INTERACTIVE PRINT COMPOSER CONTROLS (Hidden on Print) */}
-      <aside className="w-full lg:w-[370px] xl:w-[395px] shrink-0 border-b lg:border-b-0 lg:border-r border-slate-800 bg-slate-900 text-slate-100 flex flex-col max-h-[42vh] lg:max-h-none overflow-hidden print:hidden no-print">
-        {/* Composer Section Switcher */}
-        <div className="grid grid-cols-4 gap-1 p-2.5 bg-slate-950/70 border-b border-slate-800">
-          <button
-            type="button"
-            onClick={() => setActiveConfigTab('layout')}
-            className={`flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold transition cursor-pointer ${
-              activeConfigTab === 'layout'
-                ? 'bg-emerald-600 text-white'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-            }`}
+      {/* COMPACT 1-ROW QUICK PRINT LAYOUT BAR (Replaces bulky sidebar so map preview is huge!) */}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-2.5 sm:px-4 py-1.5 text-xs text-slate-100 overflow-x-auto shrink-0 print:hidden no-print">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* 1. Paper & Orientation */}
+          <select
+            value={combinedPaperValue}
+            onChange={(e) => handleQuickPaperChange(e.target.value)}
+            aria-label="Warqadda & Jihada"
+            className="min-h-[34px] rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-2 py-1 text-xs font-semibold text-white focus:outline-none cursor-pointer"
           >
-            <LayoutTemplate className="h-3.5 w-3.5" />
-            <span>Bogga &amp; Cinwaan</span>
-          </button>
+            <option value="A4_landscape">A4 Landscape (Ballac)</option>
+            <option value="A4_portrait">A4 Portrait (Dherer)</option>
+            <option value="A3_landscape">A3 Landscape (Weyn)</option>
+            <option value="A3_portrait">A3 Portrait (Dherer)</option>
+          </select>
 
-          <button
-            type="button"
-            onClick={() => setActiveConfigTab('legend')}
-            className={`flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold transition cursor-pointer ${
-              activeConfigTab === 'legend'
-                ? 'bg-emerald-600 text-white'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-            }`}
+          {/* 2. Sheet Layout Style */}
+          <select
+            value={layoutStyle}
+            onChange={(e) => setLayoutStyle(e.target.value as PdfSheetLayoutStyle)}
+            aria-label="Qaabka Khariidadda"
+            className="min-h-[34px] rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-2 py-1 text-xs font-semibold text-white focus:outline-none cursor-pointer"
           >
-            <Users className="h-3.5 w-3.5" />
-            <span>Dhaxlaha</span>
-          </button>
+            <option value="sidebar_titleblock">Qaabka: Tiirka Dhinaca</option>
+            <option value="fullmap_bottom_legend">Qaabka: Khariidad Ballaadhan</option>
+          </select>
 
-          <button
-            type="button"
-            onClick={() => setActiveConfigTab('compass_scale')}
-            className={`flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold transition cursor-pointer ${
-              activeConfigTab === 'compass_scale'
-                ? 'bg-emerald-600 text-white'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-            }`}
+          {/* 3. Plot Labels */}
+          <select
+            value={plotLabelMode}
+            onChange={(e) => setPlotLabelMode(e.target.value as PdfPlotLabelMode)}
+            aria-label="Qoraalka Gudaha Plots-ka"
+            className="min-h-[34px] rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-2 py-1 text-xs font-semibold text-white focus:outline-none cursor-pointer"
           >
-            <Compass className="h-3.5 w-3.5" />
-            <span>Waqooyi &amp; Scale</span>
-          </button>
+            <option value="plot_only">Plot: Lambarka (P01)</option>
+            <option value="plot_and_heir">Plot: P01 + Dhaxale</option>
+            <option value="heir_only">Plot: Magaca Dhaxlaha</option>
+            <option value="none">Plot: Qoraal La&apos;aan</option>
+          </select>
 
+          {/* 4. Quick Toggles */}
           <button
             type="button"
-            onClick={() => setActiveConfigTab('source')}
-            className={`flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-semibold transition cursor-pointer ${
-              activeConfigTab === 'source'
-                ? 'bg-emerald-600 text-white'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+            onClick={() => setIncludeSchedulePage2((v) => !v)}
+            className={`min-h-[34px] rounded-lg border px-2.5 py-1 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+              includeSchedulePage2
+                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
+                : 'border-slate-700 bg-slate-800 text-slate-300 hover:text-white'
             }`}
+            title="Ku dar ama ka saar Bogga 2aad (Jadwalka Dhaxlayaasha & Saxiixa)"
           >
-            <Info className="h-3.5 w-3.5" />
-            <span>Xigashada</span>
+            + Jadwalka Bogga 2
           </button>
         </div>
 
-        {/* Scrollable Config Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+        {/* Right: Collapsible Fine-Tuning Drawer Trigger */}
+        <button
+          type="button"
+          onClick={() => setIsSettingsDrawerOpen((v) => !v)}
+          className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
+            isSettingsDrawerOpen
+              ? 'border-emerald-500 bg-emerald-600 text-white'
+              : 'border-slate-700 bg-slate-800 text-slate-100 hover:border-emerald-500/60'
+          }`}
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+          <span>{isSettingsDrawerOpen ? 'Qari Qalabka' : 'Habee Cinwaan & Sumado'}</span>
+        </button>
+      </div>
+
+      {/* MAIN WORKSPACE: FULL-SCREEN MAP PREVIEW + OPTIONAL FLOATING DRAWER */}
+      <div className="relative flex-1 min-h-0 flex overflow-hidden print:block print:overflow-visible">
+        {isSettingsDrawerOpen && (
+          <>
+            {/* Subtle click-away backdrop on mobile */}
+            <div
+              onClick={() => setIsSettingsDrawerOpen(false)}
+              className="fixed inset-0 z-20 bg-black/40 sm:hidden print:hidden no-print"
+              aria-hidden="true"
+            />
+            <aside className="absolute right-0 top-0 bottom-0 z-30 w-[315px] sm:w-[350px] max-w-[92vw] border-l border-slate-700 bg-slate-900/98 backdrop-blur-md text-slate-100 flex flex-col shadow-2xl overflow-hidden print:hidden no-print">
+              <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-950 border-b border-slate-800">
+                <span className="text-xs font-extrabold text-white">
+                  Habaynta Print Layout-ka
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsDrawerOpen(false)}
+                  className="min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                  aria-label="Xir Qalabka"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Compact 4-Tab Switcher */}
+              <div className="grid grid-cols-4 gap-1 p-1.5 bg-slate-950/70 border-b border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setActiveConfigTab('layout')}
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
+                    activeConfigTab === 'layout'
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                  }`}
+                >
+                  <LayoutTemplate className="h-3.5 w-3.5" />
+                  <span>Cinwaan</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveConfigTab('legend')}
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
+                    activeConfigTab === 'legend'
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                  }`}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span>Dhaxlaha</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveConfigTab('compass_scale')}
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
+                    activeConfigTab === 'compass_scale'
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                  }`}
+                >
+                  <Compass className="h-3.5 w-3.5" />
+                  <span>Scale</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveConfigTab('source')}
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
+                    activeConfigTab === 'source'
+                      ? 'bg-emerald-600 text-white'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                  }`}
+                >
+                  <Info className="h-3.5 w-3.5" />
+                  <span>Xigasho</span>
+                </button>
+              </div>
+
+              {/* Scrollable Config Body */}
+              <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 text-xs">
           {/* TAB 1: TITLE & PAGE LAYOUT */}
           {activeConfigTab === 'layout' && (
             <>
@@ -2256,41 +2407,42 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
           )}
         </div>
 
-        {/* Helpful Print Footer Hint */}
-        <div className="border-t border-slate-800 bg-slate-950/60 px-4 py-2.5 text-[11px] text-slate-400 flex items-center gap-2">
-          <FileCheck2 className="h-4 w-4 text-emerald-400 shrink-0" />
-          <span>
-            Bogga: <strong className="text-slate-200">{paperSize}</strong> ·{' '}
-            <strong className="text-slate-200">
-              {orientation === 'landscape' ? 'Landscape' : 'Portrait'}
-            </strong>{' '}
-            — Riix <strong>Daabac / Kaydi PDF</strong> sare.
-          </span>
-        </div>
-      </aside>
+              {/* Helpful Print Footer Hint */}
+              <div className="border-t border-slate-800 bg-slate-950/80 px-3.5 py-2 text-[11px] text-slate-400 flex items-center gap-2">
+                <FileCheck2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                <span>
+                  Bogga: <strong className="text-slate-200">{paperSize}</strong> ·{' '}
+                  <strong className="text-slate-200">
+                    {orientation === 'landscape' ? 'Landscape' : 'Portrait'}
+                  </strong>
+                </span>
+              </div>
+            </aside>
+          </>
+        )}
 
-      {/* RIGHT MAIN PREVIEW & PRINTABLE CARTOGRAPHIC SHEET(S) */}
-      <div className="flex-1 overflow-auto bg-slate-200 p-4 sm:p-6 print:overflow-visible print:bg-white print:p-0">
-        <div className="mx-auto flex flex-col items-center gap-6 print:block">
-          {/* PAGE 1: VECTOR CARTOGRAPHIC INHERITANCE MAP SHEET */}
-          <section
-            className={`bg-white shadow-2xl ring-1 ring-slate-300 print:shadow-none print:ring-0 ${
-              includeSchedulePage2 ? 'pdf-report-page' : ''
-            }`}
-            style={{
-              width:
-                previewZoom !== 1
-                  ? `${Math.round(pageMetrics.svgW * previewZoom)}px`
-                  : undefined,
-            }}
-          >
-            <svg
-              ref={svgRef}
-              viewBox={`0 0 ${pageMetrics.svgW} ${pageMetrics.svgH}`}
-              className="block w-full h-auto max-w-full print:w-full print:h-auto"
-              role="img"
-              aria-label={mapTitle}
+        {/* LARGE FULL-VIEWPORT PREVIEW & PRINTABLE CARTOGRAPHIC SHEET(S) */}
+        <div
+          ref={previewContainerRef}
+          className="flex-1 overflow-auto bg-slate-200 p-2 sm:p-3.5 print:overflow-visible print:bg-white print:p-0"
+        >
+          <div className="mx-auto flex flex-col items-center justify-center min-h-full gap-5 print:block">
+            {/* PAGE 1: VECTOR CARTOGRAPHIC INHERITANCE MAP SHEET */}
+            <section
+              className={`bg-white shadow-2xl ring-1 ring-slate-300 print:w-full! print:shadow-none print:ring-0 ${
+                includeSchedulePage2 ? 'pdf-report-page' : ''
+              }`}
+              style={{
+                width: `${computedPreviewWidthPx}px`,
+              }}
             >
+              <svg
+                ref={svgRef}
+                viewBox={`0 0 ${pageMetrics.svgW} ${pageMetrics.svgH}`}
+                className="block w-full h-auto print:w-full print:h-auto"
+                role="img"
+                aria-label={mapTitle}
+              >
               <defs>
                 {/* Diagonal multi-color hatch for Shared Plots */}
                 <pattern
@@ -2772,6 +2924,7 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
               </div>
             </section>
           )}
+          </div>
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import {
   Undo2,
   Redo2,
   Share,
-  DatabaseBackup,
+  Cloud,
   ArrowLeft,
 } from 'lucide-react';
 import { Currency } from '../types/inheritance';
@@ -161,12 +161,12 @@ export const MobileTopAppBar: React.FC<MobileTopAppBarProps> = ({
           <button
             type="button"
             onClick={onOpenBackupRestore}
-            title="Kaydka & Soo-celinta Xogta"
-            aria-label="Kaydka & Soo-celinta Xogta"
-            className="hidden lg:inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#22C55E]/60 px-3 py-1.5 text-xs font-semibold text-[#F8FAFC] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            title="Google Drive & Kaydka Xogta"
+            aria-label="Google Drive & Kaydka Xogta"
+            className="min-h-[44px] min-w-[44px] sm:px-3 inline-flex items-center justify-center gap-1.5 rounded-2xl bg-[#0F1B2D] hover:bg-[#16263D] border border-[#243449] hover:border-[#22C55E]/70 text-xs font-bold text-[#F8FAFC] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <DatabaseBackup className="w-3.5 h-3.5 text-[#22C55E]" />
-            <span>Kayd</span>
+            <Cloud className="w-4 h-4 text-[#22C55E]" />
+            <span className="hidden md:inline">Drive</span>
           </button>
 
           {/* Rounded Square Export Trigger Button */}

@@ -727,22 +727,22 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           typeof p.preservedProps?.booska_block === 'number' ? p.preservedProps.booska_block : null;
 
         const statusText =
-          cartoStyle === 'nashqad' || explicitNooca
-            ? isPartialQayb
-              ? `Nooca: half${preservedBooska ? ` (#${preservedBooska})` : ''}${preservedCabbirka ? ` · ${preservedCabbirka}` : ''}`
-              : `Nooca: dhammaystiran${preservedCabbirka ? ` · ${preservedCabbirka}` : ''}`
+          isAssigned && cartoStyle === 'inheritance'
+            ? `La Siiyey (${ownerDisplay})${isValidHalf || isPartialQayb ? ' · Half-Plot (0.5)' : ''}`
             : cartoStyle === 'inheritance' && assign?.unassignedReason === 'withheld_jajab'
             ? 'Jajabka Laga Reebay (Tiro Siman)'
             : cartoStyle === 'inheritance' && (isValidHalf || isPartialQayb)
             ? 'Half-Plot Laga Reebay'
+            : cartoStyle === 'nashqad' || explicitNooca
+            ? isPartialQayb
+              ? `Nooca: half${preservedBooska ? ` (#${preservedBooska})` : ''}${preservedCabbirka ? ` · ${preservedCabbirka}` : ''}`
+              : `Nooca: dhammaystiran${preservedCabbirka ? ` · ${preservedCabbirka}` : ''}`
             : namedCategory
             ? `${namedCategory}${isPartialQayb ? " · Qayb go'an" : ' · Buuxa'}`
             : isDoox && !useDynamicQualityTiers
             ? 'Plot Doox (doox=1)'
             : isPartialQayb && !useDynamicQualityTiers
             ? `Qayb xuduudku jarayo (${pctGudaha.toFixed(0)}%)`
-            : isAssigned && cartoStyle === 'inheritance'
-            ? `La Siiyey (${ownerDisplay})`
             : `Heer ${displayHeerNumber}${isDoox ? ' · Doox/Jeexjeex' : ''}`;
 
         const blockDisplayName = bMeta?.blockName || bMeta?.excludedSpecialName || p.block;
@@ -4664,6 +4664,56 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                             </button>
                           );
                         })}
+                      </div>
+
+                      <div className="pt-1.5 flex items-center justify-between gap-2">
+                        <span className="text-[10.5px] font-extrabold opacity-85">
+                          Half-Plots (0.5):
+                        </span>
+                        <div className="inline-flex rounded-lg border border-current/20 p-0.5 text-[10.5px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateSubdivisionState((prev) => ({
+                                ...prev,
+                                includeValidHalfPlotsInAllocation: true,
+                                approvalStatus:
+                                  prev.approvalStatus === 'approved'
+                                    ? 'under_review'
+                                    : prev.approvalStatus,
+                              }))
+                            }
+                            className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                              subdivisionState.includeValidHalfPlotsInAllocation
+                                ? 'bg-[#22C55E] text-[#05130B]'
+                                : 'opacity-75 hover:opacity-100'
+                            }`}
+                          >
+                            Ku Dar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateSubdivisionState((prev) => ({
+                                ...prev,
+                                includeValidHalfPlotsInAllocation: false,
+                                approvalStatus:
+                                  prev.approvalStatus === 'approved'
+                                    ? 'under_review'
+                                    : prev.approvalStatus,
+                              }))
+                            }
+                            className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                              !subdivisionState.includeValidHalfPlotsInAllocation
+                                ? isPaperMode
+                                  ? 'bg-slate-800 text-white'
+                                  : 'bg-[#1E293B] text-white'
+                                : 'opacity-75 hover:opacity-100'
+                            }`}
+                          >
+                            Ka Reeb
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

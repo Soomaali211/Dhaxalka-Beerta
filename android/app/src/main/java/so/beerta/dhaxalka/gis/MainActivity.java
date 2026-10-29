@@ -9,6 +9,7 @@ import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.BridgeActivity;
@@ -22,6 +23,15 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         if (getBridge() != null && getBridge().getWebView() != null) {
             WebView webView = getBridge().getWebView();
+            WebSettings settings = webView.getSettings();
+            settings.setDomStorageEnabled(true);
+            settings.setJavaScriptCanOpenWindowsAutomatically(true);
+            settings.setAllowFileAccess(true);
+            settings.setAllowContentAccess(true);
+            String ua = settings.getUserAgentString();
+            if (ua != null && ua.contains("; wv")) {
+                settings.setUserAgentString(ua.replace("; wv", ""));
+            }
             webView.addJavascriptInterface(new BeertaAndroidBridge(this, webView), "BeertaAndroidBridge");
         }
     }

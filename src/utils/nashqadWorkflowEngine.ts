@@ -26,6 +26,10 @@ import {
   shoelaceArea,
 } from './landSubdivisionEngine';
 import { normalizeGeoJsonCrsToWgs84 } from './pdfCartographyEngine';
+import {
+  convertKmlTextToGeoJsonObject,
+  isLikelyKmlString,
+} from './kmlAndGeoJsonParser';
 
 const EXTRA_LAYER_PALETTE = [
   '#A855F7',
@@ -225,13 +229,21 @@ export function parseGeoJsonPolygonsStrict(
   }
 
   let parsed: unknown;
-  try {
-    parsed = JSON.parse(fileText);
-  } catch {
-    return {
-      ok: false,
-      errorSomali: `Faylka "${fileName}" ma aha JSON sax ah. Fadlan hubi qaabka GeoJSON.`,
-    };
+  if (isLikelyKmlString(fileText)) {
+    const kmlRes = convertKmlTextToGeoJsonObject(fileText, fileName);
+    if (kmlRes.ok === false) {
+      return kmlRes;
+    }
+    parsed = kmlRes.geoJson;
+  } else {
+    try {
+      parsed = JSON.parse(fileText);
+    } catch {
+      return {
+        ok: false,
+        errorSomali: `Faylka "${fileName}" ma aha GeoJSON ama KML sax ah. Fadlan hubi qaabka faylka.`,
+      };
+    }
   }
 
   if (!parsed || typeof parsed !== 'object') {
@@ -360,13 +372,21 @@ export function parseGeoJsonMultiGeometry(
   }
 
   let parsed: unknown;
-  try {
-    parsed = JSON.parse(fileText);
-  } catch {
-    return {
-      ok: false,
-      errorSomali: `Faylka "${fileName}" ma aha JSON sax ah. Fadlan hubi qaabka GeoJSON.`,
-    };
+  if (isLikelyKmlString(fileText)) {
+    const kmlRes = convertKmlTextToGeoJsonObject(fileText, fileName);
+    if (kmlRes.ok === false) {
+      return kmlRes;
+    }
+    parsed = kmlRes.geoJson;
+  } else {
+    try {
+      parsed = JSON.parse(fileText);
+    } catch {
+      return {
+        ok: false,
+        errorSomali: `Faylka "${fileName}" ma aha GeoJSON ama KML sax ah. Fadlan hubi qaabka faylka.`,
+      };
+    }
   }
 
   if (!parsed || typeof parsed !== 'object') {
@@ -1752,7 +1772,7 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
 }
 
 function inferNamedCategoryFromFileName(fileName: string): string | null {
-  const clean = fileName.replace(/\.(geo)?json$/i, '').toLowerCase();
+  const clean = fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '').toLowerCase();
   if (clean.includes('danguud')) return 'Danguud';
   if (clean.includes('tacab')) return 'Tacab';
   if (clean.includes('milgo')) return 'Milgo';
@@ -2206,7 +2226,7 @@ export function buildNashqadBeerState(
       const wadiItems: ParsedGeoItem[] = [];
       const wadiLinesLonLat: NonNullable<PrebuiltGeoJsonSubdivision['wadiLinesLonLat']> = [];
       wadisFiles.forEach((wf) => {
-        const baseName = wf.fileName.replace(/\.(geo)?json$/i, '') || 'Dooxa';
+        const baseName = wf.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Dooxa';
         wf.lines.forEach((ln, idx) => {
           const label = String(ln.properties?.name ?? ln.properties?.Name ?? `${baseName} ${idx + 1}`);
           wadiItems.push({ name: label, type: 'Line', coords: ln.coordsRaw, rawProperties: ln.properties });
@@ -2225,7 +2245,7 @@ export function buildNashqadBeerState(
 
       const roadItems: ParsedGeoItem[] = [];
       roadsFiles.forEach((rf) => {
-        const baseName = rf.fileName.replace(/\.(geo)?json$/i, '') || 'Waddo';
+        const baseName = rf.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Waddo';
         rf.lines.forEach((ln, idx) => {
           roadItems.push({
             name: String(ln.properties?.name ?? ln.properties?.Name ?? `${baseName} ${idx + 1}`),
@@ -2246,7 +2266,7 @@ export function buildNashqadBeerState(
 
       const specialAreaItems: ParsedGeoItem[] = [];
       specialAreaFiles.forEach((sf) => {
-        const baseName = sf.fileName.replace(/\.(geo)?json$/i, '') || 'Aag Gaar Ah';
+        const baseName = sf.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Aag Gaar Ah';
         sf.polygons.forEach((poly, idx) => {
           specialAreaItems.push({
             name: String(
@@ -2263,7 +2283,7 @@ export function buildNashqadBeerState(
       });
 
       const extraOverlayLayers: ExtraGeoJsonOverlayLayer[] = extraLayerFiles.map((ef, idx) => {
-        const cleanTitle = ef.fileName.replace(/\.(geo)?json$/i, '') || `Lakab ${idx + 1}`;
+        const cleanTitle = ef.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || `Lakab ${idx + 1}`;
         const getFeatLabel = (props: Record<string, unknown>) => {
           const v = props.name ?? props.Name ?? props.magaca ?? props.label ?? props.id ?? props.ID;
           return v !== undefined && v !== null && String(v).trim() !== ''
@@ -2625,7 +2645,7 @@ export function buildNashqadBeerState(
   const wadiItems: ParsedGeoItem[] = [];
   const wadiLinesLonLat: NonNullable<PrebuiltGeoJsonSubdivision['wadiLinesLonLat']> = [];
   wadisFiles.forEach((wf) => {
-    const baseName = wf.fileName.replace(/\.(geo)?json$/i, '') || 'Dooxa';
+    const baseName = wf.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Dooxa';
     wf.lines.forEach((ln, idx) => {
       const label = String(ln.properties?.name ?? ln.properties?.Name ?? `${baseName} ${idx + 1}`);
       wadiItems.push({
@@ -2661,7 +2681,7 @@ export function buildNashqadBeerState(
   // 5. Roads / Waddooyinka Layer
   const roadItems: ParsedGeoItem[] = [];
   roadsFiles.forEach((rf) => {
-    const baseName = rf.fileName.replace(/\.(geo)?json$/i, '') || 'Waddo';
+    const baseName = rf.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Waddo';
     rf.lines.forEach((ln, idx) => {
       roadItems.push({
         name: String(ln.properties?.name ?? ln.properties?.Name ?? `${baseName} ${idx + 1}`),
@@ -2683,7 +2703,7 @@ export function buildNashqadBeerState(
   // 6. Special Areas (`Aag gaar ah`) Layer
   const specialAreaItems: ParsedGeoItem[] = [];
   specialAreaFiles.forEach((sf) => {
-    const baseName = sf.fileName.replace(/\.(geo)?json$/i, '') || 'Aag Gaar Ah';
+    const baseName = sf.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Aag Gaar Ah';
     sf.polygons.forEach((poly, idx) => {
       specialAreaItems.push({
         name: String(
@@ -2701,7 +2721,7 @@ export function buildNashqadBeerState(
 
   // 7. Extra GIS Overlay Layers (Points, Contours, Infrastructure, Additional Polygons in 20+ file batches)
   const extraOverlayLayers: ExtraGeoJsonOverlayLayer[] = extraLayerFiles.map((ef, idx) => {
-    const cleanTitle = ef.fileName.replace(/\.(geo)?json$/i, '') || `Lakab ${idx + 1}`;
+    const cleanTitle = ef.fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || `Lakab ${idx + 1}`;
     const getFeatLabel = (props: Record<string, unknown>) => {
       const v = props.name ?? props.Name ?? props.magaca ?? props.label ?? props.id ?? props.ID;
       return v !== undefined && v !== null && String(v).trim() !== ''
@@ -2755,7 +2775,7 @@ export function buildNashqadBeerState(
     boundaryFiles.length > 0 && boundaryRingLonLat
       ? [
           {
-            name: boundaryFiles[0].fileName.replace(/\.(geo)?json$/i, '') || 'Xuduudka Beerta',
+            name: boundaryFiles[0].fileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Xuduudka Beerta',
             type: 'Polygon',
             coords: boundaryRingLonLat,
           },
