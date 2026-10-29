@@ -6,7 +6,12 @@ on:
     paths-ignore:
       - 'Beerta-iyo-Dhaxalka.apk'
       - 'README.md'
+      - 'public/assets/aistudio/**'
   workflow_dispatch:
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -24,7 +29,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Diyaari Java JDK 21 (Android Gradle)
         uses: actions/setup-java@v4
@@ -32,9 +36,21 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Aqbal Shatiyada Android SDK (SDK Licenses)
+        run: |
+          set +o pipefail
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -n "$SDK_ROOT" ]; then
+            SDKMGR=$(find "$SDK_ROOT" -name sdkmanager -type f 2>/dev/null | head -n 1 || true)
+            if [ -n "$SDKMGR" ]; then
+              chmod +x "$SDKMGR" || true
+              yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+            fi
+          fi
+
       - name: Rakib Packages-ka & Dhis Web App-ka (dist)
         run: |
-          npm install
+          npm install --no-audit --no-fund --legacy-peer-deps
           npm run build
 
       - name: Isku xidh Mashruuca Android (Capacitor) & Ogolaanshaha GPS
@@ -52,19 +68,31 @@ jobs:
         run: |
           export APP_VERSION_CODE=$((200 + RUN_NUM))
           export APP_VERSION_NAME="1.2.${RUN_NUM}"
+          sed -i 's/\r$//' gradlew
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" --no-daemon
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ] || [ ! -s "$APK_PATH" ]; then
+            echo "Error: APK file was not generated"
+            exit 1
+          fi
+          cp "$APK_PATH" /tmp/Beerta-iyo-Dhaxalka.apk
           cp "$APK_PATH" ../Beerta-iyo-Dhaxalka.apk
 
       - name: Ku kaydi Faylka Cusub ee Beerta-iyo-Dhaxalka.apk Toos Bogga Hore ee GitHub Repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -- . || true
+          git clean -fd || true
+          if [ -n "${{ github.ref_name }}" ]; then
+            git pull --rebase origin "${{ github.ref_name }}" || true
+          fi
+          cp /tmp/Beerta-iyo-Dhaxalka.apk ./Beerta-iyo-Dhaxalka.apk
           git add -f Beerta-iyo-Dhaxalka.apk
           if ! git diff --staged --quiet; then
             git commit -m "chore(apk): cusboonaysii Beerta-iyo-Dhaxalka.apk v1.2.${{ github.run_number }} [skip ci]"
-            git push
+            git push origin "HEAD:${{ github.ref_name }}" || echo "::warning::Branch push skipped"
           fi
 
       - name: Soo dhig Faylka Tooska ah ee Beerta-iyo-Dhaxalka.apk qaybta GitHub Releases (Latest)
@@ -72,9 +100,17 @@ jobs:
         with:
           tag_name: v1.2.${{ github.run_number }}
           name: "Beerta & Dhaxalka — Nooca v1.2.${{ github.run_number }} (APK)"
+          overwrite_files: true
           body: |
             ### Beerta & Dhaxalka — Android APK (`v1.2.${{ github.run_number }}`)
-            - **Soo Dejinta Tooska ah:** Hoos ka taabo **`Beerta-iyo-Dhaxalka.apk`** (ama toos uga soo dejiso bogga hore ee Repo-ga) si aad u rakibto (**Install** ama **Update**).
+            - **Soo Dejinta Tooska ah:** Hoos ka taabo **`Beerta-iyo-Dhaxalka.apk`** (ama toos uga soo dejiso qaybta **`<> Code`** ee bogga hore ee Repo-ga) si aad u rakibto (**Install** ama **Update**).
             - **Xogtaadu way badbaadaysaa:** Haddii nooc hore telefoonka kuugu jiray, toos u taabo **Update** — kiisaskaaga iyo khariidadaha kaydsan ma tirmayaan.
           files: Beerta-iyo-Dhaxalka.apk
           make_latest: true
+
+      - name: Kaydi Nuqulka APK qaybta Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Beerta-iyo-Dhaxalka-v1.2.${{ github.run_number }}-APK
+          path: Beerta-iyo-Dhaxalka.apk
+          if-no-files-found: error

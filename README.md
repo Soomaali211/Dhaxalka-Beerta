@@ -4,13 +4,13 @@
 
 ---
 
-## 📲 Soo Dejinta Tooska ah ee Android APK (Looma Baahna GitHub Actions!)
+## 📲 Soo Dejinta Tooska ah ee Android APK (Tag Qaybta `<> Code` — Looma Baahna Actions!)
 
-Faylka Android-ka oo diyaarsan oo saxeexan (**Signed Release APK**) wuxuu **toos ugu dhex jiraa bogga hore ee GitHub-kan** (`Beerta-iyo-Dhaxalka.apk`). Uma baahnid inaad gasho *GitHub Actions*, ama aad wax kale dhisto:
+Faylka Android-ka oo diyaarsan oo saxeexan (**Signed Release APK**) wuxuu **toos ugu dhex jiraa qaybta `<> Code` (bogga hore) ee GitHub-kan** (`Beerta-iyo-Dhaxalka.apk`). Uma baahnid inaad gasho *Actions*:
 
 ### 👉 [**RIIX HALKAN SI AAD TOOS UGA SOO DEJISATO `Beerta-iyo-Dhaxalka.apk`**](./Beerta-iyo-Dhaxalka.apk?raw=true)
 
-*(Ama kor ka taabo faylka **`Beerta-iyo-Dhaxalka.apk`** ee ku jira liiska faylasha bogga hore, kadibna riix badhanka **Download raw file** / **⋮ → Download**).*
+*(Ama taabo tab-ka **`<> Code`** ee dhanka bidix-kore ee GitHub, kadibna taabo faylka **`Beerta-iyo-Dhaxalka.apk`** → riix **Download raw file** / **View raw**).*
 
 ### Sida Telefoonka Android loogu Rakibo (Install):
 1. Marka uu faylka **`Beerta-iyo-Dhaxalka.apk`** kuu soo dego telefoonkaaga, taabo **Open**.
