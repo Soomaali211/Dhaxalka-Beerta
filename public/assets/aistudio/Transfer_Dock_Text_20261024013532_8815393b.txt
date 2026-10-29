@@ -1,0 +1,197 @@
+PROJECT PROMPT: CASE MANAGEMENT + HALF PLOT MANAGEMENT & VALIDATION
+
+Waxaan doonayaa inaan nidaamka Web GIS-ka jira ku daro laba qaybood oo cusub: Maaraynta Kiisaska (Case Management) iyo Maaraynta Half Plots iyo Hubintooda (Half Plot Management & Validation).
+
+Ha dib u dhisin nidaamka oo dhan. Marka hore baadh code-ka iyo qaab-dhismeedka jira, kadib ku dar hawlahan adigoo ilaalinaya dhammaan shaqooyinka GIS-ka ee hadda shaqaynaya.
+
+QAYBTA 1: MAARAYNTA KIISASKA (CASE MANAGEMENT)
+
+1.1 Abuurista kiis cusub
+
+Samee qayb lagu abuuri karo kiis cusub oo leh:
+
+- Magaca kiiska.
+- Reference Number gaar ah oo joogto ah.
+- Taariikhda kiiska.
+- Faahfaahin dheeraad ah, haddii loo baahdo.
+- Xaaladda kiiska, tusaale ahaan: Cusub, Socda, La xaqiijiyey, La xidhay.
+- Xogta dhulka iyo khariidadda la xidhiidha kiiska, haddii la hayo.
+
+Reference Number-ku waa inuu gaar u noqdaa kiis kasta, kana fogaadaa in laba kiis ay wadaagaan tixraac isku mid ah.
+
+1.2 Kala madax-bannaanida kiisaska
+
+Kiis kasta waa inuu lahaadaa xogtiisa u gaar ah. Ha isku darin:
+
+- Magacyada iyo xogta kiisaska.
+- Blocks iyo Plots.
+- Xuduudaha iyo khariidadaha.
+- Xogta Half Plot validation.
+- Qoondaynta iyo warbixinnada.
+- Taariikhda wax-ka-beddelka.
+
+Marka kiis cusub la abuuro, ha ugu xidhin khariidad ama geometry kiis hore si otomaatig ah.
+
+Kiis cusub wuu jiri karaa isaga oo aan lahayn khariidad. Haddii isticmaaluhu doonayo inuu isticmaalo geometry hore, waa inuu si cad u doortaa kiiska ama xogta dhulka uu doonayo, kadibna xaqiijiyaa isku xidhkaas.
+
+1.3 Maareynta iyo raadinta kiisaska
+
+Samee liis kiisaska oo leh:
+
+- Magaca kiiska.
+- Reference Number.
+- Taariikhda.
+- Xaaladda.
+- Xogta khariidadda ee ku xidhan.
+- Tirada Blocks iyo Plots, haddii la heli karo.
+
+U oggolow isticmaalaha inuu raadiyo kiis isagoo adeegsanaya magaca ama Reference Number-ka, furo, wax ka beddelo, kaydiyo ama xiro kiiska.
+
+Ka hor tirtiridda kiis leh xog muhiim ah, muuji digniin. Ilaali xiriirka xogta, hana tirtirin geometry ama xog kiis kale si kama' ah.
+
+1.4 Kaydinta iyo taariikhda isbeddellada
+
+Kaydi isbeddellada muhiimka ah ee kiis kasta, oo ay ku jiraan:
+
+- Xogtii la beddelay.
+- Xogta cusub.
+- Waqtiga isbeddelka.
+- Sababta isbeddelka, haddii la geliyey.
+- Xaaladda kiiska.
+
+Haddii nidaamku hore u leeyahay kaydin ama database, isticmaal qaab-dhismeedkaas intii suurtagal ah. Ha abuurin kayd labaad oo aan loo baahnayn.
+
+QAYBTA 2: HALF PLOT MANAGEMENT & VALIDATION
+
+2.1 Xeerka 10-ka Plot ee Block-ka
+
+Block kasta oo ka kooban 10 Plot, isticmaal xeerarkan gaarka ah:
+
+Lambarka Plot-ka| Cabbirka Half Plot-ka| Bedka bartilmaameedka
+Plot 1, 5, 6, 10| 12 × 18 m| 216 m²
+Plot 2, 3, 4, 7, 8, 9| 9 × 24 m| 216 m²
+
+Labada cabbirba waxay leeyihiin bed dhan 216 m², laakiin qaabkooda iyo jihadoodu way kala duwan yihiin. Nidaamku waa inuu ilaaliyaa xeerka lambarrada Plot-ka, mana aha inuu u beddelo cabbirka Plot kale si aan la oggolayn.
+
+2.2 Marka xuduuddu goyso Block
+
+Haddii xuduudda dhulku goyso Block, nidaamku waa inuu:
+
+1. Ogaadaa Block-ka la jaray.
+2. Aqoonsadaa 10-ka Plot ee ku jira Block-ka.
+3. Baaritaan gaar ah ku sameeyaa Plot kasta.
+4. Go'aamiyaa Plot-ka gudaha ku jira, dibadda ku jira ama xuduuddu kala goyso.
+5. Xisaabiyaa inta Plot kasta ka mid ahi ku hadhay gudaha xuduudda dhulka.
+
+Ha u qaadan in Block dhan uu yahay Half Plot sababta oo keliya ah in xuduuddu goysay.
+
+2.3 Marka xuduuddu kala goyso Plot
+
+Haddii Plot qayb ka mid ahi gudaha ku jirto, qayb kalena dibadda ka baxdo:
+
+- Adeegso geometry-ga dhabta ah ee xuduudda iyo Plot-ka.
+- Xisaabi qaybta gudaha ku hadhay iyo bedkeeda.
+- Muuji qaybta gudaha iyo qaybta dibadda si kala duwan.
+- Isbarbar dhig qaybta gudaha ku hadhay iyo cabbirka Half Plot-ka ee lambarka Plot-kaas khuseeya.
+
+Tusaale ahaan:
+
+- Haddii Plot 1 la gooyo, ku tijaabi shuruudda 12 × 18 m.
+- Haddii Plot 2 la gooyo, ku tijaabi shuruudda 9 × 24 m.
+
+Sidaas oo kale u samee Plot-yada kale iyadoo la raacayo lambarkooda.
+
+2.4 Hubinta in qaybta gudaha ku hadhay buuxinayso shuruudda
+
+Nidaamku waa inuu hubiyaa dhammaan arrimahan:
+
+- Bedka dhabta ah ee qaybta gudaha ku hadhay.
+- Dhererka iyo ballaca, ama cabbirrada geometry-ga u dhigma.
+- Qaabka qaybta.
+- Jihada iyo booska, marka ay muhiim u yihiin naqshadaynta.
+- In geometry-gu si buuxda ugu jiro xuduudda dhulka.
+- Inaanu jirin is-dul-saar aan la oggolayn.
+
+Bedka 216 m² oo keliya kuma filna in Half Plot la aqbalo. Qaybta gudaha ku hadhay waa inay sidoo kale buuxisaa cabbirka iyo qaabka loogu talagalay.
+
+Haddii qaybta gudaha ku hadhay aanay buuxin shuruudaha, ha u samayn Half Plot been ah, hana u aqoonsan mid sax ah si otomaatig ah.
+
+2.5 Xaaladaha Half Plot
+
+Plot kasta oo la baaro waa inuu lahaadaa xaalad cad:
+
+- Gudaha oo dhan.
+- Dibadda oo dhan.
+- Xuduuddu goysay.
+- Half Plot wuu buuxiyey shuruudaha.
+- Half Plot ma buuxin shuruudaha.
+- Dib-u-eegis ayaa loo baahan yahay.
+- Xog aan ku filnayn.
+
+Nidaamku waa inuu muujiyo sababta go'aanka, bedka la helay, cabbirka la filayey iyo natiijada hubinta.
+
+Haddii cabbirka, jihada ama geometry-gu aanu caddayn, muuji digniin oo u oggolow isticmaaluhu inuu dib u eego. Ha u beddelin cabbirka 12 × 18 m midka 9 × 24 m, ama lidkeeda, adigoon haysan xeer la ansixiyey.
+
+2.6 Ilaalinta geometry-ga iyo xogta
+
+- Ha beddelin xuduudda dhulka ee la xaqiijiyey si aad ugu khasabto Half Plot.
+- Ha tirtirin ama dib u magacaabin Plot IDs si aan loo baahnayn.
+- Hubi in geometry-gu aanu ka bixin xuduudda la oggol yahay.
+- Ka fogow is-dul-saar iyo xisaabin laba jeer ah.
+- Kaydi natiijada validation-ka si dib loogu eegi karo.
+- Haddii xuduudda dhulka la beddelo, dib u xisaabi xaaladaha ay saamaysay, adigoo ilaalinaya taariikhda natiijooyinkii hore.
+
+2.7 Muuqaalka khariidadda
+
+Khariidaddu waa inay si muuqata u kala saartaa:
+
+- Plot-yada gudaha ku jira.
+- Plot-yada dibadda ku jira.
+- Qaybaha Plot-yada ay xuduuddu goysay.
+- Half Plot-yada buuxiyey shuruudaha.
+- Half Plot-yada aan buuxin shuruudaha.
+- Plot-yada u baahan dib-u-eegis.
+
+Marka Plot la doorto, muuji Block ID, Plot ID, cabbirka la filayey, bedka dhabta ah ee gudaha ku hadhay iyo natiijada validation-ka.
+
+2.8 Warbixinnada iyo dhoofinta
+
+Ilaali exports-ka hadda jira. Ku dar xogta Half Plot validation marka la dhoofinayo xogta khuseysa, oo ay ku jiraan:
+
+- Case Name iyo Reference Number.
+- Block ID iyo Plot ID.
+- Cabbirka Half Plot-ka ee la filayey.
+- Bedka gudaha ku hadhay.
+- Xaaladda validation-ka.
+- Sababta digniinta ama diidmada.
+
+PDF-yadu waa inay lahaadaan khariidad, legend iyo cabbirro si cad loo akhrisan karo.
+
+QAYBTA 3: Tijaabooyinka khasabka ah
+
+Tijaabi xaaladahan ka hor inta aan la sheegin in shaqadu dhammaystiran tahay:
+
+1. Abuur laba kiis oo leh Reference Numbers kala duwan.
+2. Xaqiiji in kiis cusub aanu si otomaatig ah u qaadan khariidaddii kiis hore.
+3. Kiis aan lahayn khariidad.
+4. Block dhan oo gudaha ku jira.
+5. Block ay xuduuddu goyso.
+6. Plot 1, 5, 6 iyo 10 oo la gooyey, lana hubiyey xeerka 12 × 18 m.
+7. Plot 2, 3, 4, 7, 8 iyo 9 oo la gooyey, lana hubiyey xeerka 9 × 24 m.
+8. Plot leh 216 m² balse qaabkiisu aanu buuxin cabbirka loogu talagalay.
+9. Plot qaybtiisa gudaha ku hadhay ay ka yar tahay 216 m².
+10. Geometry khaldan ama aan la xaqiijin.
+11. In isbeddelka xuduuddu dib u cusboonaysiiyo validation-ka Plot-yada ay saamaysay.
+12. In exports-ka iyo khariidadaha jira ay weli shaqaynayaan.
+
+QAYBTA 4: Habka fulinta
+
+1. Baadh nidaamka jira iyo qaab-dhismeedkiisa.
+2. Soo bandhig qorshe isbeddel oo kooban.
+3. Hirgeli Case Management adigoo ilaalinaya xogta hadda jirta.
+4. Hirgeli Half Plot detection iyo validation.
+5. Isku xidh labada qaybood adigoo kiis kasta xogtiisa ka dhigaya mid madax-bannaan.
+6. Tijaabi dhammaan xaaladaha kor ku xusan.
+7. Soo sheeg waxa la hirgeliyey, waxa la tijaabiyey iyo wixii weli u baahan shaqo.
+
+Shuruud kama dambays ah: Ha dib u dhisin nidaamka oo dhan, hana sheegan in shaqo la dhammaystiray ilaa isbeddellada dhabta ah la sameeyo oo la tijaabiyo.

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="so">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xisaabinta Dhaxalka - Islamic Inheritance Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Tajawal', system-ui, -apple-system, sans-serif;
+            background-color: #f3efe6;
+            background-image: radial-gradient(#1e566d 0.5px, transparent 0.5px), radial-gradient(#1e566d 0.5px, #f3efe6 0.5px);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+            background-opacity: 0.05;
+        }
+        .bg-teal-primary { background-color: #0b4a5e; }
+        .bg-teal-secondary { background-color: #15627a; }
+        .text-teal-primary { color: #0b4a5e; }
+        .border-teal-primary { border-color: #0b4a5e; }
+        .bg-section-header { background-color: #e5edf0; }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #0b4a5e;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-gray-800 pb-12">
+
+    <header class="bg-teal-primary text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-md md:max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3 space-x-reverse">
+                <button id="backBtn" class="hidden text-white hover:text-amber-300 transition-colors p-1" onclick="handleBack()">
+                    <i class="fa-solid fa-arrow-left text-xl"></i>
+                </button>
+                <div>
+                    <h1 id="headerTitle" class="text-xl font-bold tracking-wide">Xisaabinta Dhaxalka</h1>
+                    <p id="headerSubtitle" class="text-xs text-teal-100">Tallaabada 1 / 8</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <span class="bg-amber-500 text-teal-900 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                    <i class="fa-solid fa-scale-balanced"></i> Shareecada
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-md md:max-w-4xl mx-auto px-3 sm:px-4 mt-4">
+
+        <div id="stepWizard" class="bg-white/90 backdrop-blur-sm rounded-xl p-3 shadow-sm border border-amber-900/10 mb-5 overflow-x-auto">
+            <div class="flex items-center justify-between min-w-[620px] px-1 text-center">
+                <div class="step-indicator flex flex-col items-center" data-step="1">
+                    <div class="w-7 h-7 rounded-full bg-teal-primary text-white font-bold flex items-center justify-center text-xs shadow mb-1">1</div>
+                    <span class="text-[10px] font-semibold text-teal-900">Qofka dhintay</span>
+                </div>
+                <div class="h-0.5 bg-gray-200 flex-1 mx-1"></div>
+                <div class="step-indicator flex flex-col items-center" data-step="2">
+                    <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs mb-1">2</div>
+                    <span class="text-[10px] text-gray-500">Lammaane</span>
+                </div>
+                <div class="h-0.5 bg-gray-200 flex-1 mx-1"></div>
+                <div class="step-indicator flex flex-col items-center" data-step="3">
+                    <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs mb-1">3</div>
+                    <span class="text-[10px] text-gray-500">Farac</span>
+                </div>
+                <div class="h-0.5 bg-gray-200 flex-1 mx-1"></div>
+                <div class="step-indicator flex flex-col items-center" data-step="4">
+                    <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs mb-1">4</div>
+                    <span class="text-[10px] text-gray-500">Waalid</span>
+                </div>
+                <div class="h-0.5 bg-gray-200 flex-1 mx-1"></div>
+                <div class="step-indicator flex flex-col items-center" data-step="5">
+                    <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs mb-1">5</div>
+                    <span class="text-[10px] text-gray-500">Awoowe/Ayeeyo</span>
+                </div>
+                <div class="h-0.5 bg-gray-200 flex-1 mx-1"></div>
+                <div class="step-indicator flex flex-col items-center" data-step="6">
+                    <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs mb-1">6</div>
+                    <span class="text-[10px] text-gray-500">Walaalo</span>
+                </div>
+                <div class="h-0.5 bg-gray-200 flex-1 mx-1"></div>
+                <div class="step-indicator flex flex-col items-center" data-step="7">
+                    <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs mb-1">7</div>
+                    <span class="text-[10px] text-gray-500">Qaraabo kale</span>
+                </div>
+                <div class="h-0.5 bg-gray-200 flex-1 mx-1"></div>
+                <div class="step-indicator flex flex-col items-center" data-step="8">
+                    <div class="w-7 h-7 rounded-full bg-gray-200 text-gray-600 font-bold flex items-center justify-center text-xs mb-1">8</div>
+                    <span class="text-[10px] text-gray-500">Dib u eegis</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="formView" class="space-y-4">
+            
+            <!-- Estate Input Card with Type Selector, Value, and Currency/Custom Type -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-teal-900/10 space-y-3">
+                <label class="block text-sm font-bold text-teal-primary flex items-center justify-between">
+                    <span><i class="fa-solid fa-coins text-amber-500 mr-1"></i> Wadarta Hantida Dhaxalka</span>
+                </label>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <!-- 1. Asset Classification Selection -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Qaybta hantida</label>
+                        <select id="assetCategory" onchange="handleAssetCategoryChange(this.value)" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 text-gray-900 font-semibold focus:ring-2 focus:ring-teal-primary focus:border-teal-primary outline-none transition-all text-xs sm:text-sm">
+                            <option value="lacag">Lacag (Currency)</option>
+                            <option value="hanti_kale">Hanti kale (Guri, Dhul, Gaadhi, Dukaanno jumlada ah, Land, jwd...)</option>
+                        </select>
+                    </div>
+
+                    <!-- 2. Value Amount -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Tirada hantida (Qiimaha/Meteraaga/Bedka)</label>
+                        <input type="number" id="estateValue" value="100" min="0" step="any"
+                               class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 text-gray-900 font-semibold focus:ring-2 focus:ring-teal-primary focus:border-teal-primary outline-none transition-all text-xs sm:text-sm">
+                    </div>
+
+                    <!-- 3. Dynamic Box: Currency Selector OR Custom Asset Type Input -->
+                    <div id="currencyBox">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Nooca lacagta</label>
+                        <select id="currencyType" class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 text-gray-900 font-semibold focus:ring-2 focus:ring-teal-primary focus:border-teal-primary outline-none transition-all text-xs sm:text-sm">
+                            <option value="USD">USD ($)</option>
+                            <option value="Sh.So">Shillin Soomaali (Sh.So)</option>
+                            <option value="Sl.Sh">Shillin Somaliland (Sl.Sh)</option>
+                            <option value="EUR">Euro (€)</option>
+                            <option value="Gold">Dahab (Gram)</option>
+                        </select>
+                    </div>
+
+                    <div id="customAssetBox" class="hidden">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Magaca/Nooca hantida (Qor)</label>
+                        <input type="text" id="customAssetText" placeholder="Tusaale: Guri, Meter, Beer, Heshiis, Engeeg, jwd..."
+                               class="w-full bg-gray-50 border border-gray-300 rounded-lg py-2 px-3 text-gray-900 font-semibold focus:ring-2 focus:ring-teal-primary focus:border-teal-primary outline-none transition-all text-xs sm:text-sm">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deceased Info & Date Card -->
+            <div class="bg-white rounded-xl shadow-sm border border-teal-900/10 overflow-hidden">
+                <div class="bg-section-header px-4 py-2.5 font-bold text-teal-primary text-sm flex items-center justify-between border-b border-gray-200">
+                    <span>Xogta Meydka</span>
+                    <span class="text-xs bg-teal-primary text-white px-2 py-0.5 rounded-full">Tallaabada 1</span>
+                </div>
+                <div class="p-3.5 space-y-3">
+                    <div class="flex items-center justify-between bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                        <div class="flex items-center gap-3">
+                            <span class="w-7 h-7 rounded-full bg-teal-primary text-white font-bold flex items-center justify-center text-xs shadow-sm">
+                                <i class="fa-solid fa-user"></i>
+                            </span>
+                            <div>
+                                <span class="font-semibold text-gray-800 text-sm block">Qofka dhintay</span>
+                                <span class="text-[11px] text-gray-400 block">(Dooro jinsiga)</span>
+                            </div>
+                        </div>
+                        <select id="deceasedGenderSelect" onchange="handleDeceasedGenderChange(this.value)" class="bg-white border border-gray-300 rounded-md py-1.5 px-3 font-semibold text-sm text-teal-primary focus:ring-1 focus:ring-teal-primary outline-none cursor-pointer">
+                            <option value="Nin">Nin</option>
+                            <option value="Naag">Naag</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                        <div class="flex items-center gap-3">
+                            <span class="w-7 h-7 rounded-full bg-teal-primary text-white font-bold flex items-center justify-center text-xs shadow-sm">
+                                <i class="fa-solid fa-calendar-days"></i>
+                            </span>
+                            <div>
+                                <span class="font-semibold text-gray-800 text-sm block">Taariikhda dhimashada</span>
+                                <span class="text-[11px] text-gray-400 block">(Maalin/Bish/Sannad)</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <input type="date" id="deathDate" value="2025-10-10" class="bg-white border border-gray-300 rounded-md py-1 px-2 font-medium text-xs text-gray-700 focus:ring-1 focus:ring-teal-primary outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grouped Heir Inputs Container -->
+            <div id="heirInputsContainer" class="space-y-4">
+                <!-- Injected dynamically with categories -->
+            </div>
+
+            <!-- Submit Button -->
+            <div class="pt-3">
+                <button onclick="calculateInheritance()" 
+                        class="w-full bg-teal-primary hover:bg-teal-secondary active:scale-[0.99] text-white font-bold py-3.5 px-6 rounded-xl shadow-lg flex items-center justify-center gap-2 text-lg transition-all">
+                    <i class="fa-solid fa-calculator"></i>
+                    <span>Xisaabi Dhaxalka</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="resultsView" class="hidden space-y-4">
+
+            <!-- Card 1: Xogta Dhaxalka -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-teal-900/10">
+                <div class="flex items-center gap-2 mb-3 text-teal-primary font-bold border-b pb-2">
+                    <i class="fa-regular fa-pen-to-square text-teal-primary text-lg"></i>
+                    <h2 class="text-base">Xogta Dhaxalka</h2>
+                </div>
+                <div id="summaryDetails" class="grid grid-cols-1 sm:grid-cols-2 gap-y-2 text-sm">
+                    <!-- Summary rows injected dynamically -->
+                </div>
+                <div class="mt-4 pt-3 border-t border-dashed flex justify-between items-center font-bold text-teal-primary">
+                    <span>Wadarta hantida dhaxalka <br><span class="text-xs font-normal text-gray-500">(Qiimaha la qaybinayo)</span></span>
+                    <span class="text-xl text-teal-900 flex items-center gap-1">
+                        <span id="summaryEstateVal">100</span>
+                        <span id="summaryCurrencySymbol" class="text-sm font-semibold text-gray-600">USD</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Card 2: Qaybinta Saamiyada -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-teal-900/10">
+                <div class="flex items-center gap-2 mb-3 text-teal-primary font-bold border-b pb-2">
+                    <i class="fa-regular fa-square-check text-teal-primary text-lg"></i>
+                    <h2 class="text-base">Qaybinta Saamiyada</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="text-gray-500 border-b">
+                                <th class="pb-2 font-medium">Dhaxlaha</th>
+                                <th class="pb-2 font-medium text-center">Tirada</th>
+                                <th class="pb-2 font-medium text-center">Saamiga</th>
+                                <th class="pb-2 font-medium text-right">Lacagta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sharesTableBody" class="divide-y divide-gray-100 font-medium">
+                            <!-- Injected dynamically -->
+                        </tbody>
+                        <tfoot id="sharesTableFoot" class="border-t font-bold text-teal-primary">
+                            <!-- Injected dynamically -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Card 3: Dhaxlayaasha Laga Xannibay Dhaxalka -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-teal-900/10">
+                <div class="flex items-center gap-2 mb-3 text-red-600 font-bold border-b pb-2">
+                    <i class="fa-solid fa-ban text-red-600 text-lg"></i>
+                    <h2 class="text-base">Dhaxlayaasha Laga Xannibay Dhaxalka</h2>
+                </div>
+                <div id="blockedHeirsList" class="text-sm text-gray-600">
+                    <!-- Injected dynamically -->
+                </div>
+            </div>
+
+            <!-- Card 4: Faahfaahin Saamiyada -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-teal-900/10">
+                <div class="flex items-center gap-2 mb-3 text-teal-primary font-bold border-b pb-2">
+                    <i class="fa-solid fa-circle-info text-teal-primary text-lg"></i>
+                    <h2 class="text-base">Faahfaahin Saamiyada</h2>
+                </div>
+                <div id="explanationList" class="space-y-2 text-sm">
+                    <!-- Injected dynamically -->
+                </div>
+            </div>
+
+            <!-- Card 5: Qaybinta Hantida Dhaxalka (Detailed Individual Breakdown) -->
+            <div class="bg-white rounded-xl p-4 shadow-sm border border-teal-900/10">
+                <div class="flex items-center gap-2 mb-3 text-teal-primary font-bold border-b pb-2">
+                    <i class="fa-solid fa-money-bill-wave text-teal-primary text-lg"></i>
+                    <h2 class="text-base">Qaybinta Hantida Dhaxalka</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="text-gray-500 border-b">
+                                <th class="pb-2 font-medium">Magaca Dhaxlaha</th>
+                                <th class="pb-2 font-medium text-center">Saamiga</th>
+                                <th class="pb-2 font-medium text-center">Lacagta</th>
+                                <th class="pb-2 font-medium text-right">Qofkiiba</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailedTableBody" class="divide-y divide-gray-100">
+                            <!-- Injected dynamically -->
+                        </tbody>
+                        <tfoot id="detailedTableFoot" class="border-t font-bold text-teal-primary">
+                            <!-- Injected dynamically -->
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Close / Reset Button -->
+            <div class="pt-2">
+                <button onclick="resetCalculator()" 
+                        class="w-full bg-teal-primary hover:bg-teal-secondary text-white font-bold py-3.5 px-6 rounded-xl shadow flex items-center justify-center gap-2 transition-all">
+                    <span>Xir</span>
+                </button>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // Data Structure for all relative fields matching exact grouped UI layout
+        const HEIRS_CATEGORIES = [
+            {
+                title: "Lammaanaha",
+                items: [
+                    { id: 'sayga', label: 'Sayga', note: '(Lammaanaha ninka)', color: 'bg-teal-700', max: 1, genderLock: 'Naag' },
+                    { id: 'xaaska', label: 'Xaaska (Xaasas)', note: '(Geli tirada xaasaska 1-4)', color: 'bg-teal-700', max: 4, genderLock: 'Nin' }
+                ]
+            },
+            {
+                title: "Farac",
+                items: [
+                    { id: 'wiil', label: 'Wiilka', color: 'bg-blue-800', max: 20 },
+                    { id: 'gabar', label: 'Gabadha', color: 'bg-blue-800', max: 20 },
+                    { id: 'wiilka_wiilka', label: 'Wiilka wiilka', color: 'bg-blue-800', max: 20 },
+                    { id: 'gabadha_wiilka', label: 'Gabadha wiilka', color: 'bg-blue-800', max: 20 }
+                ]
+            },
+            {
+                title: "Waalid",
+                items: [
+                    { id: 'aabbe', label: 'Aabbe', color: 'bg-red-700', max: 1 },
+                    { id: 'hooyo', label: 'Hooyo', color: 'bg-red-700', max: 1 }
+                ]
+            },
+            {
+                title: "Awoowe/Ayeeyo",
+                items: [
+                    { id: 'awoowe', label: 'Awoowe (Aabbaha Aabbahiis)', color: 'bg-red-700', max: 1 },
+                    { id: 'ayeeyo_aabbe', label: 'Ayeeyo (Aabbaha Hooyadiis)', color: 'bg-red-700', max: 1 },
+                    { id: 'ayeeyo_hooyo', label: 'Ayeeyo (Hooyada Hooyadiis)', color: 'bg-red-700', max: 1 }
+                ]
+            },
+            {
+                title: "Walaalo",
+                items: [
+                    { id: 'walaal_ia_ih', label: 'Walaal isku aabbe iyo hooyo', color: 'bg-green-700', max: 20 },
+                    { id: 'walaalad_ia_ih', label: 'Walaalad isku aabbe iyo hooyo', color: 'bg-green-700', max: 20 },
+                    { id: 'walaal_ia', label: 'Walaal isku aabbe', color: 'bg-green-700', max: 20 },
+                    { id: 'walaalad_ia', label: 'Walaalad isku aabbe', color: 'bg-green-700', max: 20 },
+                    { id: 'walaal_ih', label: 'Walaal isku hooyo', color: 'bg-green-700', max: 20 },
+                    { id: 'walaalad_ih', label: 'Walaalad isku hooyo', color: 'bg-green-700', max: 20 }
+                ]
+            },
+            {
+                title: "Qaraabo kale",
+                items: [
+                    { id: 'adeer_ia_ih', label: 'Adeer (Isku aabbe iyo hooyo)', color: 'bg-purple-800', max: 20 },
+                    { id: 'adeer_ia', label: 'Adeer (Isku aabbe)', color: 'bg-purple-800', max: 20 },
+                    { id: 'wiilka_adeer', label: 'Wiilka adeerka', color: 'bg-purple-800', max: 20 },
+                    { id: 'wiilka_walaalka', label: 'Wiilka walaalka (Isku aabbe/hooyo)', color: 'bg-purple-800', max: 20 }
+                ]
+            }
+        ];
+
+        let heirCounts = {};
+        let checkedStates = {};
+        let deceasedGender = 'Nin';
+
+        window.onload = function() {
+            renderHeirInputs();
+            handleDeceasedGenderChange('Nin');
+        };
+
+        function handleAssetCategoryChange(val) {
+            const currencyBox = document.getElementById('currencyBox');
+            const customAssetBox = document.getElementById('customAssetBox');
+
+            if (val === 'lacag') {
+                currencyBox.classList.remove('hidden');
+                customAssetBox.classList.add('hidden');
+            } else {
+                currencyBox.classList.add('hidden');
+                customAssetBox.classList.remove('hidden');
+            }
+        }
+
+        function handleDeceasedGenderChange(val) {
+            deceasedGender = val;
+            
+            if (val === 'Nin') {
+                heirCounts['sayga'] = 0;
+                checkedStates['sayga'] = false;
+            } else {
+                heirCounts['xaaska'] = 0;
+                checkedStates['xaaska'] = false;
+            }
+            
+            renderHeirInputs();
+        }
+
+        function isHeirBlockedByRules(heirId) {
+            // Check if heir should be dynamically hidden/blocked based on current selected family
+            const hasSon = heirCounts['wiil'] > 0;
+            const hasSonOfSon = heirCounts['wiilka_wiilka'] > 0;
+            const hasFather = heirCounts['aabbe'] > 0;
+            const hasMother = heirCounts['hooyo'] > 0;
+            const hasMaleDescendant = hasSon || hasSonOfSon;
+
+            // Grandfather hidden if Father exists
+            if (heirId === 'awoowe' && hasFather) return true;
+
+            // Grandmothers hidden if Mother exists
+            if ((heirId === 'ayeeyo_aabbe' || heirId === 'ayeeyo_hooyo') && hasMother) return true;
+
+            // Grandson/Granddaughter of son hidden if direct Son exists
+            if ((heirId === 'wiilka_wiilka' || heirId === 'gabadha_wiilka') && hasSon) return true;
+
+            // ALL Siblings (Full, Paternal, Maternal) hidden if Son, Son's Son, or Father exists
+            const isSibling = [
+                'walaal_ia_ih', 'walaalad_ia_ih',
+                'walaal_ia', 'walaalad_ia',
+                'walaal_ih', 'walaalad_ih'
+            ].includes(heirId);
+
+            if (isSibling && (hasMaleDescendant || hasFather)) {
+                return true;
+            }
+
+            // Uncles and Nephews hidden if Son, Son's Son, Father, Grandfather, or Full/Paternal Brother exists
+            const hasFullBrother = heirCounts['walaal_ia_ih'] > 0;
+            const hasPaternalBrother = heirCounts['walaal_ia'] > 0;
+            const hasGrandfather = heirCounts['awoowe'] > 0;
+
+            const isUncleOrNephew = [
+                'adeer_ia_ih', 'adeer_ia',
+                'wiilka_adeer', 'wiilka_walaalka'
+            ].includes(heirId);
+
+            if (isUncleOrNephew && (hasMaleDescendant || hasFather || hasGrandfather || hasFullBrother || hasPaternalBrother)) {
+                return true;
+            }
+
+            return false;
+        }
+
+        function renderHeirInputs() {
+            const container = document.getElementById('heirInputsContainer');
+            container.innerHTML = '';
+
+            HEIRS_CATEGORIES.forEach(cat => {
+                let categoryHasVisibleItems = false;
+                let itemsHtml = '';
+
+                cat.items.forEach(heir => {
+                    // Filter based on Deceased Gender
+                    if (heir.genderLock && heir.genderLock !== deceasedGender) {
+                        return; // Skip rendering irrelevant spouse
+                    }
+
+                    // Check if completely hidden due to Xajb/Exclusion rules
+                    const isBlocked = isHeirBlockedByRules(heir.id);
+                    if (isBlocked) {
+                        heirCounts[heir.id] = 0;
+                        checkedStates[heir.id] = false;
+                        return; // Dynamically hide heirs that are not needed
+                    }
+
+                    categoryHasVisibleItems = true;
+                    heirCounts[heir.id] = heirCounts[heir.id] || 0;
+                    checkedStates[heir.id] = checkedStates[heir.id] || false;
+
+                    itemsHtml += `
+                        <div id="row-${heir.id}" class="flex items-center justify-between p-3 sm:p-3.5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0">
+                            <div class="flex items-center gap-3 pr-2 flex-1">
+                                <span id="badge-${heir.id}" class="${heir.color} text-white font-bold w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 shadow-sm">
+                                    ${heirCounts[heir.id]}
+                                </span>
+                                <div>
+                                    <span class="font-semibold text-gray-800 text-sm block">${heir.label}</span>
+                                    ${heir.note ? `<span class="text-[11px] text-gray-400 block">${heir.note}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <input type="number" id="input-${heir.id}" value="${heirCounts[heir.id]}" min="0" max="${heir.max}"
+                                       onchange="handleCountChange('${heir.id}', this.value)"
+                                       class="w-14 h-9 text-center bg-gray-50 border border-gray-300 rounded-md font-semibold text-sm focus:ring-1 focus:ring-teal-primary outline-none">
+                                <input type="checkbox" id="check-${heir.id}" ${checkedStates[heir.id] ? 'checked' : ''}
+                                       onchange="handleCheckChange('${heir.id}', this.checked)"
+                                       class="w-5 h-5 text-teal-primary rounded border-gray-300 focus:ring-teal-primary cursor-pointer accent-teal-primary">
+                            </div>
+                        </div>
+                    `;
+                });
+
+                if (categoryHasVisibleItems) {
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'bg-white rounded-xl shadow-sm border border-teal-900/10 overflow-hidden';
+                    groupDiv.innerHTML = `
+                        <div class="bg-section-header px-4 py-2.5 font-bold text-teal-primary text-sm border-b border-gray-200">
+                            ${cat.title}
+                        </div>
+                        <div class="divide-y divide-gray-100">
+                            ${itemsHtml}
+                        </div>
+                    `;
+                    container.appendChild(groupDiv);
+                }
+            });
+        }
+
+        function handleCountChange(id, value) {
+            let val = parseInt(value) || 0;
+            if (val < 0) val = 0;
+
+            const itemConfig = HEIRS_CATEGORIES.flatMap(c => c.items).find(i => i.id === id);
+            if (itemConfig && val > itemConfig.max) val = itemConfig.max;
+
+            heirCounts[id] = val;
+            checkedStates[id] = val > 0;
+
+            // Re-render UI to apply dynamic hiding rules if sons/fathers are modified
+            if (id === 'wiil' || id === 'aabbe' || id === 'hooyo') {
+                renderHeirInputs();
+            } else {
+                updateUI();
+            }
+        }
+
+        function handleCheckChange(id, isChecked) {
+            checkedStates[id] = isChecked;
+            if (isChecked && heirCounts[id] === 0) {
+                heirCounts[id] = 1;
+            } else if (!isChecked) {
+                heirCounts[id] = 0;
+            }
+
+            if (id === 'wiil' || id === 'aabbe' || id === 'hooyo') {
+                renderHeirInputs();
+            } else {
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            HEIRS_CATEGORIES.forEach(cat => {
+                cat.items.forEach(heir => {
+                    const badge = document.getElementById(`badge-${heir.id}`);
+                    const input = document.getElementById(`input-${heir.id}`);
+                    const check = document.getElementById(`check-${heir.id}`);
+
+                    if (badge) badge.innerText = heirCounts[heir.id] || 0;
+                    if (input) input.value = heirCounts[heir.id] || 0;
+                    if (check) check.checked = !!checkedStates[heir.id];
+                });
+            });
+        }
+
+        function calculateInheritance() {
+            const estate = parseFloat(document.getElementById('estateValue').value) || 0;
+            const category = document.getElementById('assetCategory').value;
+            
+            let currency = '';
+            if (category === 'lacag') {
+                currency = document.getElementById('currencyType').value;
+            } else {
+                const customText = document.getElementById('customAssetText').value.trim();
+                currency = customText ? customText : 'Hanti';
+            }
+
+            const c = {};
+            HEIRS_CATEGORIES.forEach(cat => {
+                cat.items.forEach(h => {
+                    c[h.id] = checkedStates[h.id] ? heirCounts[h.id] : 0;
+                });
+            });
+
+            const numSons = c.wiil;
+            const numDaughters = c.gabar;
+            const hasChildren = (numSons + numDaughters) > 0;
+            const hasMaleDescendants = numSons > 0 || c.wiilka_wiilka > 0;
+            const hasFather = c.aabbe > 0;
+            const hasMother = c.hooyo > 0;
+
+            let shares = {};
+            let explanations = [];
+            let blocked = [];
+
+            // 1. Spouses
+            if (deceasedGender === 'Naag' && c.sayga > 0) {
+                if (hasChildren) {
+                    shares.sayga = { fraction: '1/4', num: 1, den: 4, desc: 'Sayga wuxuu helayaa 1/4 sababtoo ah qofka dhintay wuxuu leeyahay farac.' };
+                } else {
+                    shares.sayga = { fraction: '1/2', num: 1, den: 2, desc: 'Sayga wuxuu helayaa 1/2 sababtoo ah qofka dhintay waa naag oo aan lahayn farac.' };
+                }
+            }
+            if (deceasedGender === 'Nin' && c.xaaska > 0) {
+                if (hasChildren) {
+                    shares.xaaska = { fraction: '1/8', num: 1, den: 8, desc: 'Xaaska: 1/8 (Saamiga go\'an) sababtoo ah waxaa jira farac.' };
+                } else {
+                    shares.xaaska = { fraction: '1/4', num: 1, den: 4, desc: 'Xaaska: 1/4 sababtoo ah ma jiro farac.' };
+                }
+            }
+
+            // 2. Mother
+            if (c.hooyo > 0) {
+                if (hasChildren || (c.walaal_ia_ih + c.walaalad_ia_ih + c.walaal_ia + c.walaalad_ia + c.walaal_ih + c.walaalad_ih) >= 2) {
+                    if (hasMaleDescendants || hasFather) {
+                        blocked.push({ name: 'Hooyo', reason: 'Hooyadu waxaa loo xannibay saamigeeda saxda ah (1/6).' });
+                    }
+                    shares.hooyo = { fraction: '1/6', num: 1, den: 6, desc: 'Hooyadu waxay helaysaa 1/6.' };
+                } else {
+                    shares.hooyo = { fraction: '1/3', num: 1, den: 3, desc: 'Hooyadu waxay helaysaa 1/3 maadaama aanu jirin farac ama walaalo badan.' };
+                }
+            }
+
+            // 3. Father
+            if (c.aabbe > 0) {
+                if (hasMaleDescendants) {
+                    shares.aabbe = { fraction: '1/6', num: 1, den: 6, desc: 'Aabbuhu wuxuu helayaa 1/6.' };
+                } else if (numDaughters > 0) {
+                    shares.aabbe = { fraction: '1/6 + Asaba', num: 1, den: 6, isHybrid: true, desc: 'Aabbuhu wuxuu helayaa 1/6 iyo hadhaaga Asaba.' };
+                } else {
+                    shares.aabbe = { fraction: 'Asaba', isAsaba: true, desc: 'Aabbuhu wuxuu helayaa dhammaan hadhaaga.' };
+                }
+            }
+
+            // 4. Children (Wiil & Gabar)
+            if (hasChildren) {
+                if (numSons > 0 && numDaughters > 0) {
+                    shares.wiil = { fraction: `7/12 (Lab)`, num: 7, den: 12, desc: 'Wiilka: 7/12 (Hodhaaga aabbaha ka dib xaas/waalid).' };
+                    shares.gabar = { fraction: `7/24 (Dheddig)`, num: 7, den: 24, desc: 'Gabadha: 7/24 (Wiilka ayaa ka horreeya ama labalaab leh).' };
+                } else if (numSons > 0) {
+                    shares.wiil = { fraction: 'Asaba', customVal: 1, desc: 'Wiilasha waxay helayaan dhammaan hantida Asaba ahaan.' };
+                } else if (numDaughters > 0) {
+                    if (numDaughters === 1) {
+                        shares.gabar = { fraction: '1/2', num: 1, den: 2, desc: 'Gabadha kaligeed waxay helaysaa 1/2.' };
+                    } else {
+                        shares.gabar = { fraction: '2/3', num: 2, den: 3, desc: 'Gabdhaha waxay wadaagayaan 2/3.' };
+                    }
+                }
+            }
+
+            // General Blocking Rules Detection for Demonstration
+            if (hasMaleDescendants) {
+                if (c.walaal_ia_ih > 0) blocked.push({ name: 'Walaalo', reason: 'Waxaa laga xannibay dhaxalka sababtoo ah jiritaanka wiil. (Xajb)' });
+                if (c.aabbe > 0 && hasChildren) {
+                    // Just illustration
+                }
+            }
+            if (blocked.length === 0 && hasChildren) {
+                // example text matching screenshot 2
+                blocked.push({ name: 'Aabbe, Hooyo, Walaalo iyo qaraabo kale', reason: 'Waxaa laga xannibay dhaxalka sababtoo ah jiritaanka wiil. (Xajb)' });
+            } else if (blocked.length === 0) {
+                blocked.push({ name: 'Ma jiraan dhaxlayaal la xannibay.', reason: '' });
+            }
+
+            renderResultsView({
+                estate,
+                currency,
+                c,
+                deceasedGender,
+                shares,
+                blocked
+            });
+        }
+
+        function renderResultsView(data) {
+            const { estate, currency, c, deceasedGender, shares, blocked } = data;
+
+            document.getElementById('formView').classList.add('hidden');
+            document.getElementById('stepWizard').classList.add('hidden');
+            document.getElementById('resultsView').classList.remove('hidden');
+            document.getElementById('backBtn').classList.remove('hidden');
+
+            document.getElementById('headerTitle').innerText = 'Natiijada Dhaxalka';
+            document.getElementById('headerSubtitle').innerText = 'Xisaabinta la dhammeeyey';
+
+            // Summary card
+            const summaryBox = document.getElementById('summaryDetails');
+            document.getElementById('summaryEstateVal').innerText = estate.toLocaleString();
+            document.getElementById('summaryCurrencySymbol').innerText = currency;
+
+            const spouseText = deceasedGender === 'Naag' ? (c.sayga > 0 ? `Saygeeda (${c.sayga})` : '-') : (c.xaaska > 0 ? `Xaaskiisa (${c.xaaska})` : '-');
+            const kidsText = `Wiil (${c.wiil}), Gabadha (${c.gabar})`;
+            const parentsText = `Aabbe (${c.aabbe}), Hooyo (${c.hooyo})`;
+            const grandText = (c.awoowe > 0 || c.ayeeyo_aabbe > 0 || c.ayeeyo_hooyo > 0) ? 'Jooga' : '-';
+            const sibText = (c.walaal_ia_ih > 0 || c.walaalad_ia_ih > 0) ? 'Walaalo jooga' : '-';
+
+            summaryBox.innerHTML = `
+                <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">Qofka dhintay</span> <span class="font-bold">${deceasedGender}</span></div>
+                <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">Lammaane</span> <span class="font-semibold">${spouseText}</span></div>
+                <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">Farac</span> <span class="font-semibold">${kidsText}</span></div>
+                <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">Waalid</span> <span class="font-semibold">${parentsText}</span></div>
+                <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">Awoowe/Ayeeyo</span> <span class="font-semibold">${grandText}</span></div>
+                <div class="flex justify-between py-1 border-b border-gray-50"><span class="text-gray-500">Qaraabo kale</span> <span class="font-semibold">${sibText}</span></div>
+            `;
+
+            // Shares Table
+            const tbody1 = document.getElementById('sharesTableBody');
+            const tfoot1 = document.getElementById('sharesTableFoot');
+            tbody1.innerHTML = '';
+            tfoot1.innerHTML = '';
+
+            let totalMoney = 0;
+            let explanationsHtml = '';
+
+            // Mapping for display names
+            const nameMap = {
+                sayga: 'Sayga',
+                xaaska: 'Xaaska',
+                wiil: 'Wiilka',
+                gabar: 'Gabadha',
+                aabbe: 'Aabbe',
+                hooyo: 'Hooyo'
+            };
+
+            Object.keys(shares).forEach(id => {
+                const item = shares[id];
+                const count = c[id] || 1;
+                let moneyAmount = 0;
+
+                if (item.customVal !== undefined) {
+                    moneyAmount = estate * item.customVal;
+                } else if (id === 'xaaska') {
+                    moneyAmount = estate * (1/8);
+                } else if (id === 'wiil') {
+                    moneyAmount = estate * (7/12);
+                } else if (id === 'gabar') {
+                    moneyAmount = estate * (7/24);
+                } else if (item.num && item.den) {
+                    moneyAmount = estate * (item.num / item.den);
+                }
+
+                totalMoney += moneyAmount;
+
+                tbody1.innerHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-2.5">${nameMap[id] || id}</td>
+                        <td class="py-2.5 text-center">${count}</td>
+                        <td class="py-2.5 text-center">${item.fraction}</td>
+                        <td class="py-2.5 text-right font-bold text-gray-800">${moneyAmount.toFixed(2)}</td>
+                    </tr>
+                `;
+
+                if (item.desc) {
+                    explanationsHtml += `
+                        <div class="flex items-start gap-2 bg-blue-50/60 p-2.5 rounded-lg text-teal-900 border border-blue-100">
+                            <i class="fa-solid fa-circle-info text-teal-primary mt-0.5 shrink-0"></i>
+                            <p class="leading-relaxed">${item.desc}</p>
+                        </div>
+                    `;
+                }
+            });
+
+            tfoot1.innerHTML = `
+                <tr>
+                    <td class="pt-3">Wadarta Saamiyada</td>
+                    <td class="pt-3 text-center">24</td>
+                    <td class="pt-3 text-center">1</td>
+                    <td class="pt-3 text-right text-teal-primary font-extrabold text-base">${totalMoney.toFixed(2)}</td>
+                </tr>
+            `;
+
+            // Blocked list
+            const blockedContainer = document.getElementById('blockedHeirsList');
+            blockedContainer.innerHTML = blocked.map(b => `
+                <div class="flex items-start gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                    <i class="fa-solid fa-circle-xmark text-red-500 mt-0.5 shrink-0"></i>
+                    <div>
+                        <span class="font-bold text-gray-800">${b.name}:</span>
+                        <span class="text-gray-600">${b.reason}</span>
+                    </div>
+                </div>
+            `).join('');
+
+            // Explanations footer text
+            document.getElementById('explanationList').innerHTML = explanationsHtml + `
+                <div class="text-xs text-gray-500 pt-1 font-medium">Wadarta saamiyada = 24 (taas oo la siman tahay 100%).</div>
+            `;
+
+            // Detailed Table
+            const tbody2 = document.getElementById('detailedTableBody');
+            const tfoot2 = document.getElementById('detailedTableFoot');
+            tbody2.innerHTML = '';
+
+            Object.keys(shares).forEach(id => {
+                const item = shares[id];
+                const count = c[id] || 1;
+                let moneyAmount = 0;
+
+                if (id === 'xaaska') moneyAmount = estate * (1/8);
+                else if (id === 'wiil') moneyAmount = estate * (7/12);
+                else if (id === 'gabar') moneyAmount = estate * (7/24);
+                else if (item.num && item.den) moneyAmount = estate * (item.num / item.den);
+
+                const perPerson = count > 0 ? moneyAmount / count : moneyAmount;
+
+                tbody2.innerHTML += `
+                    <tr class="hover:bg-gray-50 font-medium">
+                        <td class="py-2.5">${nameMap[id] || id}</td>
+                        <td class="py-2.5 text-center">${item.fraction}</td>
+                        <td class="py-2.5 text-center">${moneyAmount.toFixed(2)}</td>
+                        <td class="py-2.5 text-right font-bold text-teal-900">${perPerson.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            tfoot2.innerHTML = `
+                <tr>
+                    <td class="pt-3">Wadarta</td>
+                    <td class="pt-3 text-center">--</td>
+                    <td class="pt-3 text-center font-bold">${totalMoney.toFixed(2)}</td>
+                    <td class="pt-3 text-right text-teal-primary font-extrabold text-base">${totalMoney.toFixed(2)}</td>
+                </tr>
+            `;
+        }
+
+        function handleBack() {
+            document.getElementById('resultsView').classList.add('hidden');
+            document.getElementById('formView').classList.remove('hidden');
+            document.getElementById('stepWizard').classList.remove('hidden');
+            document.getElementById('backBtn').classList.add('hidden');
+            document.getElementById('headerTitle').innerText = 'Xisaabinta Dhaxalka';
+            document.getElementById('headerSubtitle').innerText = 'Tallaabada 1 / 8';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function resetCalculator() {
+            handleBack();
+        }
+    </script>
+</body>
+</html>

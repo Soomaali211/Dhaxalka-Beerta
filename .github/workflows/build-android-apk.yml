@@ -1,0 +1,72 @@
+name: Dhismo & Update Toos ah — Android APK (Beerta & Dhaxalka)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-signed-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Soo deji Koodhka Mashruuca
+        uses: actions/checkout@v4
+
+      - name: Diyaari Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Diyaari Java JDK 21 (Android Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Rakib Packages-ka & Dhis Web App-ka (dist)
+        run: |
+          npm install
+          npm run build
+
+      - name: Isku xidh Mashruuca Android (Capacitor) & Ogolaanshaha GPS
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
+          node scripts/configure-android-permissions.mjs
+
+      - name: Dhis Signed Release APK (Taageeraya Update Toos ah)
+        working-directory: android
+        env:
+          RUN_NUM: ${{ github.run_number }}
+        run: |
+          export APP_VERSION_CODE=$((100 + RUN_NUM))
+          export APP_VERSION_NAME="1.0.${RUN_NUM}"
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          cp "$APK_PATH" ../Beerta-iyo-Dhaxalka.apk
+
+      - name: Soo dhig Faylka Tooska ah ee Beerta-iyo-Dhaxalka.apk qaybta GitHub Releases (Latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Beerta & Dhaxalka — Nooca v1.0.${{ github.run_number }} (APK)"
+          body: |
+            ### Beerta & Dhaxalka — Android APK (`v1.0.${{ github.run_number }}`)
+            - **Soo Dejinta Tooska ah:** Hoos ka taabo **`Beerta-iyo-Dhaxalka.apk`** si aad u soo dejiso una rakibto (**Install** ama **Update**).
+            - **Xogtaadu way badbaadaysaa:** Haddii nooc hore telefoonka kuugu jiray, toos u taabo **Update** — kiisaskaaga iyo khariidadaha kaydsan ma tirmayaan.
+          files: Beerta-iyo-Dhaxalka.apk
+          make_latest: true
+
+      - name: Kaydi Nuqulka APK qaybta Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Beerta-iyo-Dhaxalka-v1.0.${{ github.run_number }}-APK
+          path: Beerta-iyo-Dhaxalka.apk
+          if-no-files-found: error

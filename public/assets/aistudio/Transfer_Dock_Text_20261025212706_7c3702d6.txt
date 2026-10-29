@@ -1,0 +1,472 @@
+MASTER PROMPT — INTEGRATE THE NEW MOBILE DESIGN INTO OUR EXISTING GIS DHAXALKA APPLICATION
+
+1. YOUR ROLE
+
+Act as a senior full-stack application architect, GIS engineer, mobile UI/UX designer, and software maintenance specialist.
+
+Your task is to redesign and improve the existing GIS Dhaxalka / Beerta & Dhaxalka application so that its mobile interface closely matches the supplied dark navy and emerald-green mobile design reference.
+
+This is an existing application, not a new project.
+
+You MUST inspect and understand the existing source code, GIS calculations, inheritance calculation system, data model, map functionality, import/export features, and existing workflows before making changes.
+
+The goal is to improve the application's appearance and usability while preserving its existing business logic, data integrity, and functionality.
+
+2. ABSOLUTE NON-NEGOTIABLE RULE: DO NOT CHANGE INHERITANCE DISTRIBUTION
+
+The existing inheritance distribution logic is protected and must remain unchanged.
+
+Do not rewrite, replace, simplify, reinterpret, or independently redesign the inheritance calculation engine.
+
+Specifically, do not change:
+
+- The existing inheritance distribution rules.
+- Existing heir eligibility and exclusion logic.
+- The existing prescribed shares and residual distribution rules.
+- The existing calculation formulas and calculation order.
+- Existing rounding and precision rules.
+- Existing treatment of different combinations of heirs.
+- Existing allocation of land, plots, or fractional interests.
+- Existing calculation outputs and their established meanings.
+- Existing inheritance-related validations and exceptions.
+
+Do not substitute a simplified inheritance calculator based only on sons, daughters, wives, and parents.
+
+Do not assume that a generic inheritance formula is equivalent to the existing application's implementation.
+
+Required implementation approach
+
+1. Locate the actual inheritance calculation functions and their dependencies.
+2. Identify the existing functions, inputs, outputs, rules, and test cases.
+3. Preserve the current calculation engine as the single source of truth.
+4. Connect the redesigned forms and result screens to the existing functions.
+5. Change only presentation, layout, navigation, and user interaction code where necessary.
+6. If the new interface requires data that the existing engine does not accept, introduce an adapter at the interface boundary without changing the calculation rules.
+7. Preserve the existing calculation engine's input and output contracts wherever possible.
+8. Run regression tests against existing calculation cases before and after the redesign.
+
+If a change to inheritance logic appears necessary, STOP and explain why. Do not implement that change without explicit approval.
+
+Acceptance requirement: For identical input data, the redesigned application must produce exactly the same inheritance results as the existing application, including shares, allocations, rounding, and exceptional cases.
+
+Do not claim that this requirement has been satisfied until the existing engine has been inspected and regression tests have passed.
+
+3. PRESERVE THE EXISTING APPLICATION
+
+Do not rebuild the application from scratch.
+
+Before editing anything, inspect:
+
+- All existing source files and project folders.
+- The current application framework and build system.
+- Existing routes, screens, navigation, and form workflows.
+- Existing GIS map engine and geometry calculations.
+- Existing blocks, plots, boundaries, roads, and other GIS layers.
+- Existing half-plot calculations and validation rules.
+- Existing inheritance engine and case management.
+- Existing local database and persistent storage.
+- Existing imports, exports, backups, and restore functions.
+- Existing Undo/Redo functionality, if implemented.
+- Existing Android packaging configuration, if available.
+
+Create an internal map of which components and functions implement each feature.
+
+Preserve the existing project architecture unless there is a demonstrated technical reason to change it.
+
+Do not replace an existing working implementation with a visual mockup, placeholder data, static HTML, or an unrelated demonstration application.
+
+Do not remove existing features merely because they are not visible in the supplied design reference.
+
+Do not create a second inheritance engine, a second conflicting GIS data store, or duplicate case-management logic.
+
+4. DESIGN OBJECTIVE
+
+Use the supplied mobile design image as the primary visual reference.
+
+The redesigned application should have a compact, professional, modern Android interface with the following visual characteristics:
+
+- Deep navy and dark slate backgrounds.
+- Emerald-green primary actions and selected navigation items.
+- White primary text and muted secondary text.
+- Subtle borders and restrained shadows.
+- Rounded cards and buttons.
+- Compact, readable typography.
+- Clear spacing and strong visual hierarchy.
+- Touch-friendly controls.
+- A map-first dashboard.
+- Consistent icons and status indicators.
+- Minimal unnecessary decoration.
+- Smooth, restrained transitions where appropriate.
+
+Suggested design tokens:
+
+- Main background: "#030712"
+- Secondary background: "#0B1220"
+- Card background: "#0F1B2D"
+- Border: "#243449"
+- Primary accent: "#10B981"
+- Primary text: "#F8FAFC"
+- Secondary text: "#94A3B8"
+
+These are design suggestions, not permission to replace existing application functionality.
+
+If the supplied reference image conflicts with the existing application workflow, preserve the workflow and adapt the visual layout around it.
+
+Do not copy sample data or example inheritance results from the reference image into the real application.
+
+5. MOBILE NAVIGATION
+
+Create a compact top navigation bar containing:
+
+- Menu button.
+- Current section title.
+- Context-appropriate actions, such as Undo or Export, when those functions already exist.
+
+The navigation drawer must have exactly three primary destinations:
+
+1. Dashboard
+2. Calculate Dhaxalka
+3. List Data
+
+Additional existing functions should be accessible through contextual menus, secondary screens, settings, or relevant actions without adding more primary destinations.
+
+Dashboard
+
+The main GIS map and associated inspection tools.
+
+Calculate Dhaxalka
+
+The existing inheritance workflow, including its current case selection, inputs, validation, calculation, and results.
+
+List Data
+
+Searchable and filterable access to existing GIS records, cases, and other supported data categories.
+
+Do not remove existing screens or functionality simply to enforce this three-item navigation design.
+
+Add a floating "+" action button where appropriate. It may provide actions such as importing GIS data or creating an inheritance case, provided those actions are supported by the existing application.
+
+The button must not create duplicate cases or bypass existing validation.
+
+Use bottom navigation only if it improves usability on the target Android screens and can be integrated without duplicating the navigation state.
+
+6. DASHBOARD — GIS MAP
+
+The dashboard should prioritize the actual GIS map.
+
+Preserve the existing map engine and its working functionality. If the application already uses Leaflet, SVG, or another mapping implementation, inspect it before deciding whether any engine changes are necessary.
+
+The redesigned map interface should support the existing applicable features, including:
+
+- Displaying actual plot and block geometries.
+- Displaying the actual land boundary.
+- Displaying roads, streams, and other existing layers.
+- Selecting a plot or block.
+- Inspecting the selected feature's actual attributes.
+- Showing or hiding individual layers.
+- Zooming and panning.
+- Searching for plots, blocks, or other supported records.
+- Importing GIS files through existing supported workflows.
+- Displaying appropriate map legends and feature details.
+
+Use compact floating map controls for zoom, layer visibility, location or extent controls, and other existing map actions.
+
+When a plot is selected, show a compact bottom sheet or detail card with available real information, such as:
+
+- Plot ID.
+- Block ID or name.
+- Actual area.
+- Owner or ownership status, if available.
+- Geometry or validation status, if available.
+- Relevant actions.
+
+Do not invent missing attribute values.
+
+Do not change the underlying GIS geometry merely to make the map look cleaner.
+
+GIS data integrity
+
+Use the application's actual dataset and its existing data-loading process.
+
+Never hardcode plot counts, block counts, total area, owner names, or other values that should come from the dataset.
+
+Preserve original feature IDs, attributes, geometry, coordinate reference systems, and existing relationships.
+
+Any summary statistics displayed in the new interface must be derived from the actual current dataset.
+
+7. EXISTING BLOCK, PLOT, AND HALF-PLOT RULES
+
+Preserve the application's established land geometry and half-plot rules.
+
+The approved dimensions are:
+
+- Block: 48 × 90 metres.
+- Each block contains 10 plots.
+- Full plot: 18 × 24 metres.
+- Half-plots in positions 1, 5, 6, and 10: 12 × 18 metres.
+- Half-plots in positions 2, 3, 4, 7, 8, and 9: 9 × 24 metres.
+
+These rules must not be replaced with a universal half-plot area rule.
+
+Preserve the existing logic for:
+
+- Identifying plots and their half-plots.
+- Determining whether plot geometry lies inside a farm boundary.
+- Counting only qualifying portions within the boundary.
+- Identifying portions outside the boundary.
+- Preserving the relationship between each half-plot and its original plot ID.
+- Handling plots intersected by boundaries.
+- Excluding plots from a particular inheritance case without deleting their original GIS records.
+
+Do not validate half-plots using area alone. Where geometry validation is already implemented, preserve it. Where a required validation is demonstrably missing, report the gap and propose a separate, carefully scoped enhancement without silently changing existing calculations.
+
+Do not change land dimensions, geometry, plot IDs, or ownership records simply to match the visual reference.
+
+8. CALCULATE DHAXALKA — REDESIGN THE EXISTING WORKFLOW
+
+Redesign the appearance of the existing inheritance workflow without replacing its underlying logic.
+
+Use compact forms, clear section headings, visible progress indicators where appropriate, and readable result cards.
+
+The interface may present the existing workflow as steps, provided that all existing fields, validations, dependencies, and actions remain available.
+
+The redesigned workflow must:
+
+- Use the existing inheritance case model.
+- Load the selected case's actual data.
+- Preserve all existing heir input fields and supported heir types.
+- Preserve existing validation and eligibility rules.
+- Preserve existing land and plot selection behavior.
+- Preserve existing excluded-plot handling.
+- Preserve the existing calculation engine.
+- Display the existing calculation results without changing their meanings.
+- Preserve the ability to return to the map without losing unsaved form data.
+- Prevent one case's inputs from leaking into another case.
+
+Do not assume that a new form can be limited to the fields shown in the reference image.
+
+Do not delete existing advanced options because they are not visible in the proposed design.
+
+Result presentation
+
+Improve the presentation of existing results using cards, tables, labels, and clear typography.
+
+Do not recalculate, reinterpret, round differently, redistribute, or modify results for visual presentation.
+
+Any displayed percentages, shares, plot allocations, or area totals must be taken from the existing calculation outputs or derived only through a demonstrably presentation-only transformation that preserves their exact meaning and precision.
+
+If the existing engine reports an error, limitation, or exceptional case, preserve that behavior and communicate it clearly.
+
+9. LIST DATA
+
+Create a compact, searchable data interface consistent with the design reference.
+
+Use the actual application data and its existing relationships.
+
+Where supported, provide tabs or filters for:
+
+- Inheritance cases.
+- Blocks.
+- Plots.
+- Heirs or related records.
+
+Preserve other existing data categories that are required by the application.
+
+Include:
+
+- Search.
+- Filtering.
+- Sorting, where appropriate.
+- Record counts derived from real data.
+- Actual area totals where supported.
+- A detail view for each record.
+- Appropriate actions based on the existing permissions and workflows.
+
+Do not create fake case records, example owners, or invented plot details.
+
+Do not merge separate cases or alter relationships between GIS features and inheritance records.
+
+10. IMPORT, EXPORT, BACKUP, AND RESTORE
+
+Preserve all working import and export features.
+
+Inspect which formats are actually implemented before designing the export menu.
+
+Maintain existing supported formats, including GeoJSON, CSV, PDF, or Shapefile where currently implemented.
+
+If the design includes an option such as “Kuwa Muuqda Keliya” (only visible layers), ensure that it exports the correct features according to the existing layer visibility state.
+
+If the option is unchecked, follow the application's established full-dataset export behavior.
+
+Do not silently remove export formats to simplify the interface.
+
+Keep GIS exports separate from full application backups.
+
+A backup should preserve the supported application state, including relevant case data, settings, and other persistent records.
+
+Restore operations must validate the incoming backup and avoid accidentally overwriting existing data without appropriate confirmation.
+
+Do not claim that an export or backup has succeeded until the operation has completed successfully.
+
+11. OFFLINE OPERATION AND ANDROID COMPATIBILITY
+
+Preserve the existing application's supported offline behavior.
+
+Inspect the current project and its build system before choosing an Android packaging method.
+
+Do not force the application into a single HTML file if doing so would damage its existing architecture or remove functionality.
+
+If the project already uses multiple HTML, CSS, JavaScript, TypeScript, or other source files, preserve that structure unless a tested and justified alternative is required.
+
+Package essential libraries locally when licensing and build requirements permit.
+
+Avoid runtime dependencies on CDNs for core functionality, including:
+
+- Application styling.
+- Required JavaScript libraries.
+- Icons.
+- Inheritance calculations.
+- Local data access.
+- Essential navigation and forms.
+
+Do not promise fully offline maps unless the required map data or tiles are actually available offline.
+
+Distinguish between:
+
+- Offline application functionality.
+- Locally stored GIS data.
+- Offline map tiles.
+- Features that require an internet connection.
+
+Preserve existing persistent storage and migrate it safely if a migration is necessary.
+
+Do not clear, reset, or replace user data during installation or upgrades.
+
+If an Android APK build system already exists, maintain compatibility with it and test the resulting build.
+
+12. UNDO, DATA SAFETY, AND ERROR HANDLING
+
+Preserve the existing Undo/Redo and history behavior.
+
+If these functions already exist, connect them to the redesigned controls without changing their semantics.
+
+Protect destructive operations with appropriate confirmation dialogs.
+
+Avoid duplicate submissions, duplicate cases, accidental data loss, and unsaved form loss.
+
+Show clear Somali-language messages for:
+
+- Successful actions.
+- Validation errors.
+- Import failures.
+- Export failures.
+- Missing or invalid data.
+- Offline limitations.
+- Unsaved changes.
+
+Do not silently swallow errors or display false success messages.
+
+13. LANGUAGE AND ACCESSIBILITY
+
+Keep the user interface primarily in Somali, preserving established Somali labels and terminology.
+
+Use concise labels suitable for a small phone screen.
+
+Use English technical terms only where they are already established in the application or where they improve clarity.
+
+Ensure text is legible, buttons are easy to tap, forms can scroll, and keyboard input does not hide essential fields or actions.
+
+Test on different Android viewport sizes and account for safe areas, status bars, and bottom navigation.
+
+14. IMPLEMENTATION STRATEGY
+
+Work in controlled stages.
+
+Stage A — Inspect
+
+Read the existing source files and identify:
+
+- The inheritance engine.
+- GIS geometry and half-plot logic.
+- Data storage.
+- Case management.
+- Map and layer handling.
+- Import/export functions.
+- Current UI components.
+- Android build configuration.
+
+Do not modify files before completing this inspection.
+
+Stage B — Map existing functionality
+
+Create a concise inventory mapping each current feature to its source files, functions, data structures, and tests.
+
+Identify which components can be restyled safely and which components contain protected business logic.
+
+Stage C — Plan the redesign
+
+Explain which UI components will change, which existing functions will be reused, and how the new design will connect to them.
+
+Explicitly identify the inheritance engine and GIS calculation components that will remain untouched.
+
+Stage D — Implement incrementally
+
+Apply the visual redesign to the existing application.
+
+Prefer changes to CSS, layout components, navigation, and presentation logic.
+
+Modify business logic only when strictly necessary to repair a verified defect, and do not change inheritance distribution rules.
+
+Keep changes small enough to review and test.
+
+Stage E — Test
+
+Run the existing tests before and after the changes.
+
+Add regression tests where necessary without replacing existing test coverage.
+
+Verify that identical inheritance inputs produce identical outputs before and after the redesign.
+
+Test actual GIS data, plot selection, half-plot rules, boundary handling, case isolation, persistence, imports, exports, backup/restore, and offline behavior.
+
+Stage F — Deliver
+
+Provide:
+
+- The modified existing project.
+- A list of files changed.
+- A list of features preserved.
+- A list of UI improvements.
+- Test results.
+- Any remaining limitations.
+- Android build and installation instructions appropriate to the actual project.
+
+Do not report unexecuted tests as passed.
+
+Do not claim that an APK has been generated unless a real APK file has been built and verified.
+
+15. FINAL ACCEPTANCE CRITERIA
+
+The task is complete only when:
+
+1. The application visually follows the supplied dark navy and emerald-green design.
+2. The existing application architecture and working features are preserved.
+3. The three primary navigation destinations work correctly.
+4. The GIS dashboard uses real application data.
+5. Existing plot, block, geometry, and half-plot rules remain intact.
+6. The inheritance engine has not been replaced or modified to change distribution rules.
+7. Identical inheritance inputs produce identical results to the original implementation.
+8. Existing cases remain independent and their data persists correctly.
+9. Existing import/export functionality remains available and works.
+10. The application's offline capabilities are accurately implemented and documented.
+11. The application works on the intended Android screen sizes.
+12. No existing user data is deleted or overwritten during the redesign.
+13. All reported test results reflect tests actually executed.
+
+FINAL INSTRUCTION
+
+The supplied design reference is a guide for visual presentation, not a specification that overrides existing application behavior.
+
+Preserve the existing inheritance distribution logic exactly. Preserve the existing GIS rules and data. Adapt the design to the application, not the application's business rules to the design.
+
+Inspect first, plan second, implement incrementally, and test before reporting completion.

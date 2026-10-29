@@ -1,0 +1,866 @@
+{
+  "comprehensive_estate_distribution": {
+    "aslAlMasalah": 24,
+    "isAwl": false,
+    "isRadd": false,
+    "tashihBase": 144,
+    "grossEstateUSD": 280000,
+    "totalFuneralUSD": 800,
+    "totalDebtsUSD": 4200,
+    "totalWasiyyahUSD": 0,
+    "maxAllowableWasiyyahUSD": 91666.66666666667,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 275000,
+    "heirShares": [
+      {
+        "id": "wives",
+        "nameSomali": "Xaas",
+        "nameArabic": "الزوجة",
+        "count": 1,
+        "category": "spouse",
+        "reason": "fard",
+        "quranicFraction": "1/8",
+        "quranicFractionValue": 0.125,
+        "rawShares": 3,
+        "tashihShares": 18,
+        "percentage": 12.5,
+        "totalAmountUSD": 34375,
+        "perPersonAmountUSD": 34375,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 12): \"Haddii aad carruur leedihiin waxay leeyihiin 1/8, haddii aydnaan carruur lahaynna 1/4\"",
+        "notesSomali": "Waxay qaadanaysaa 1/8 hantida saafiga ah.",
+        "isBlocked": false,
+        "individualNames": [
+          "Xaliimo Cali Faarax"
+        ]
+      },
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada",
+        "nameArabic": "الأم",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 24,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 45833.33333333333,
+        "perPersonAmountUSD": 45833.33333333333,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur ama walaalo badan\"",
+        "notesSomali": "Carruur ayaa jirta awgeed waxay qaadanaysaa 1/6.",
+        "isBlocked": false,
+        "individualNames": [
+          "Maryan Xasan Rooble"
+        ]
+      },
+      {
+        "id": "father",
+        "nameSomali": "Aabbaha",
+        "nameArabic": "الأب",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 24,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 45833.33333333333,
+        "perPersonAmountUSD": 45833.33333333333,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur\"",
+        "notesSomali": "Wiilal ama wiilasha carruurtooda ayaa jira awgeed wuxuu leeyahay 1/6 go'an.",
+        "isBlocked": false,
+        "individualNames": [
+          "Xaaji Nuur Warsame"
+        ]
+      },
+      {
+        "id": "sons",
+        "nameSomali": "Wiilasha (2)",
+        "nameArabic": "الأبناء (2)",
+        "count": 2,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Labanlaab)",
+        "quranicFractionValue": 0.3611111111111111,
+        "rawShares": 8.666666666666666,
+        "tashihShares": 52,
+        "percentage": 36.11111111111111,
+        "totalAmountUSD": 99305.55555555555,
+        "perPersonAmountUSD": 49652.777777777774,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo lab ah wuxuu qaadanayaa 2 saami (labanlaabka gabadha).",
+        "isBlocked": false,
+        "individualNames": [
+          "Cabdiraxmaan Maxamed Nuur",
+          "Axmed Maxamed Nuur"
+        ]
+      },
+      {
+        "id": "daughters",
+        "nameSomali": "Gabdhaha (2)",
+        "nameArabic": "البنات (2)",
+        "count": 2,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Hal saami)",
+        "quranicFractionValue": 0.18055555555555555,
+        "rawShares": 4.333333333333333,
+        "tashihShares": 26,
+        "percentage": 18.055555555555554,
+        "totalAmountUSD": 49652.777777777774,
+        "perPersonAmountUSD": 24826.388888888887,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo dheddig ahi waxay qaadanaysaa 1 saami (kala bar labka).",
+        "isBlocked": false,
+        "individualNames": [
+          "Faadumo Maxamed Nuur",
+          "Caasha Maxamed Nuur"
+        ]
+      }
+    ],
+    "blockedHeirs": [],
+    "explanationSomali": [
+      "Casabah (العصبة): Haraaga mas'alada oo dhan 13/24 waxaa qaadanaya Wiilasha (2) iyo Gabdhaha (2)."
+    ]
+  },
+  "unpriced_land_plots": {
+    "aslAlMasalah": 24,
+    "isAwl": false,
+    "isRadd": false,
+    "tashihBase": 120,
+    "grossEstateUSD": 0,
+    "totalFuneralUSD": 0,
+    "totalDebtsUSD": 0,
+    "totalWasiyyahUSD": 0,
+    "maxAllowableWasiyyahUSD": 0,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 0,
+    "heirShares": [
+      {
+        "id": "wives",
+        "nameSomali": "Xaas",
+        "nameArabic": "الزوجة",
+        "count": 1,
+        "category": "spouse",
+        "reason": "fard",
+        "quranicFraction": "1/8",
+        "quranicFractionValue": 0.125,
+        "rawShares": 3,
+        "tashihShares": 15,
+        "percentage": 12.5,
+        "totalAmountUSD": 0,
+        "perPersonAmountUSD": 0,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 12): \"Haddii aad carruur leedihiin waxay leeyihiin 1/8, haddii aydnaan carruur lahaynna 1/4\"",
+        "notesSomali": "Waxay qaadanaysaa 1/8 hantida saafiga ah.",
+        "isBlocked": false,
+        "individualNames": [
+          "Xaaska"
+        ]
+      },
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada",
+        "nameArabic": "الأم",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 20,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 0,
+        "perPersonAmountUSD": 0,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur ama walaalo badan\"",
+        "notesSomali": "Carruur ayaa jirta awgeed waxay qaadanaysaa 1/6.",
+        "isBlocked": false,
+        "individualNames": [
+          "Hooyada"
+        ]
+      },
+      {
+        "id": "sons",
+        "nameSomali": "Wiilasha (2)",
+        "nameArabic": "الأبناء (2)",
+        "count": 2,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Labanlaab)",
+        "quranicFractionValue": 0.5666666666666667,
+        "rawShares": 13.6,
+        "tashihShares": 68,
+        "percentage": 56.666666666666664,
+        "totalAmountUSD": 0,
+        "perPersonAmountUSD": 0,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo lab ah wuxuu qaadanayaa 2 saami (labanlaabka gabadha).",
+        "isBlocked": false,
+        "individualNames": [
+          "Wiilka 1aad",
+          "Wiilka 2aad"
+        ]
+      },
+      {
+        "id": "daughters",
+        "nameSomali": "Gabdhaha (1)",
+        "nameArabic": "البنات (1)",
+        "count": 1,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Hal saami)",
+        "quranicFractionValue": 0.14166666666666666,
+        "rawShares": 3.4,
+        "tashihShares": 17,
+        "percentage": 14.166666666666666,
+        "totalAmountUSD": 0,
+        "perPersonAmountUSD": 0,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo dheddig ahi waxay qaadanaysaa 1 saami (kala bar labka).",
+        "isBlocked": false,
+        "individualNames": [
+          "Gabadha"
+        ]
+      }
+    ],
+    "blockedHeirs": [],
+    "explanationSomali": [
+      "Casabah (العصبة): Haraaga mas'alada oo dhan 17/24 waxaa qaadanaya Wiilasha (2) iyo Gabdhaha (1)."
+    ]
+  },
+  "plots_and_quality_tiers": {
+    "aslAlMasalah": 24,
+    "isAwl": false,
+    "isRadd": false,
+    "tashihBase": 72,
+    "grossEstateUSD": 240000,
+    "totalFuneralUSD": 1000,
+    "totalDebtsUSD": 9000,
+    "totalWasiyyahUSD": 0,
+    "maxAllowableWasiyyahUSD": 76666.66666666667,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 230000,
+    "heirShares": [
+      {
+        "id": "wives",
+        "nameSomali": "Xaas",
+        "nameArabic": "الزوجة",
+        "count": 1,
+        "category": "spouse",
+        "reason": "fard",
+        "quranicFraction": "1/8",
+        "quranicFractionValue": 0.125,
+        "rawShares": 3,
+        "tashihShares": 9,
+        "percentage": 12.5,
+        "totalAmountUSD": 28750,
+        "perPersonAmountUSD": 28750,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 12): \"Haddii aad carruur leedihiin waxay leeyihiin 1/8, haddii aydnaan carruur lahaynna 1/4\"",
+        "notesSomali": "Waxay qaadanaysaa 1/8 hantida saafiga ah.",
+        "isBlocked": false,
+        "individualNames": [
+          "Xaaska"
+        ]
+      },
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada",
+        "nameArabic": "الأم",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 12,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 38333.33333333333,
+        "perPersonAmountUSD": 38333.33333333333,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur ama walaalo badan\"",
+        "notesSomali": "Carruur ayaa jirta awgeed waxay qaadanaysaa 1/6.",
+        "isBlocked": false,
+        "individualNames": [
+          "Hooyada"
+        ]
+      },
+      {
+        "id": "father",
+        "nameSomali": "Aabbaha",
+        "nameArabic": "الأب",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 12,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 38333.33333333333,
+        "perPersonAmountUSD": 38333.33333333333,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur\"",
+        "notesSomali": "Wiilal ama wiilasha carruurtooda ayaa jira awgeed wuxuu leeyahay 1/6 go'an.",
+        "isBlocked": false,
+        "individualNames": [
+          "Aabbaha"
+        ]
+      },
+      {
+        "id": "sons",
+        "nameSomali": "Wiilasha (1)",
+        "nameArabic": "الأبناء (1)",
+        "count": 1,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Labanlaab)",
+        "quranicFractionValue": 0.3611111111111111,
+        "rawShares": 8.666666666666666,
+        "tashihShares": 26,
+        "percentage": 36.11111111111111,
+        "totalAmountUSD": 83055.55555555555,
+        "perPersonAmountUSD": 83055.55555555555,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo lab ah wuxuu qaadanayaa 2 saami (labanlaabka gabadha).",
+        "isBlocked": false,
+        "individualNames": [
+          "Wiilka"
+        ]
+      },
+      {
+        "id": "daughters",
+        "nameSomali": "Gabdhaha (1)",
+        "nameArabic": "البنات (1)",
+        "count": 1,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Hal saami)",
+        "quranicFractionValue": 0.18055555555555555,
+        "rawShares": 4.333333333333333,
+        "tashihShares": 13,
+        "percentage": 18.055555555555554,
+        "totalAmountUSD": 41527.777777777774,
+        "perPersonAmountUSD": 41527.777777777774,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo dheddig ahi waxay qaadanaysaa 1 saami (kala bar labka).",
+        "isBlocked": false,
+        "individualNames": [
+          "Gabadha"
+        ]
+      }
+    ],
+    "blockedHeirs": [],
+    "explanationSomali": [
+      "Casabah (العصبة): Haraaga mas'alada oo dhan 13/24 waxaa qaadanaya Wiilasha (1) iyo Gabdhaha (1)."
+    ]
+  },
+  "standard_family": {
+    "aslAlMasalah": 24,
+    "isAwl": false,
+    "isRadd": false,
+    "tashihBase": 168,
+    "grossEstateUSD": 250000,
+    "totalFuneralUSD": 800,
+    "totalDebtsUSD": 12200,
+    "totalWasiyyahUSD": 10000,
+    "maxAllowableWasiyyahUSD": 79000,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 227000,
+    "heirShares": [
+      {
+        "id": "wives",
+        "nameSomali": "Xaas",
+        "nameArabic": "الزوجة",
+        "count": 1,
+        "category": "spouse",
+        "reason": "fard",
+        "quranicFraction": "1/8",
+        "quranicFractionValue": 0.125,
+        "rawShares": 3,
+        "tashihShares": 21,
+        "percentage": 12.5,
+        "totalAmountUSD": 28375,
+        "perPersonAmountUSD": 28375,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 12): \"Haddii aad carruur leedihiin waxay leeyihiin 1/8, haddii aydnaan carruur lahaynna 1/4\"",
+        "notesSomali": "Waxay qaadanaysaa 1/8 hantida saafiga ah.",
+        "isBlocked": false,
+        "individualNames": [
+          "Xaaska"
+        ]
+      },
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada",
+        "nameArabic": "الأم",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 28,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 37833.33333333333,
+        "perPersonAmountUSD": 37833.33333333333,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur ama walaalo badan\"",
+        "notesSomali": "Carruur ayaa jirta awgeed waxay qaadanaysaa 1/6.",
+        "isBlocked": false,
+        "individualNames": [
+          "Hooyada"
+        ]
+      },
+      {
+        "id": "father",
+        "nameSomali": "Aabbaha",
+        "nameArabic": "الأب",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 28,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 37833.33333333333,
+        "perPersonAmountUSD": 37833.33333333333,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur\"",
+        "notesSomali": "Wiilal ama wiilasha carruurtooda ayaa jira awgeed wuxuu leeyahay 1/6 go'an.",
+        "isBlocked": false,
+        "individualNames": [
+          "Aabbaha"
+        ]
+      },
+      {
+        "id": "sons",
+        "nameSomali": "Wiilasha (2)",
+        "nameArabic": "الأبناء (2)",
+        "count": 2,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Labanlaab)",
+        "quranicFractionValue": 0.30952380952380953,
+        "rawShares": 7.428571428571429,
+        "tashihShares": 52,
+        "percentage": 30.952380952380953,
+        "totalAmountUSD": 70261.90476190476,
+        "perPersonAmountUSD": 35130.95238095238,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo lab ah wuxuu qaadanayaa 2 saami (labanlaabka gabadha).",
+        "isBlocked": false,
+        "individualNames": [
+          "Wiilka 1aad",
+          "Wiilka 2aad"
+        ]
+      },
+      {
+        "id": "daughters",
+        "nameSomali": "Gabdhaha (3)",
+        "nameArabic": "البنات (3)",
+        "count": 3,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Hal saami)",
+        "quranicFractionValue": 0.23214285714285715,
+        "rawShares": 5.571428571428571,
+        "tashihShares": 39,
+        "percentage": 23.214285714285715,
+        "totalAmountUSD": 52696.42857142857,
+        "perPersonAmountUSD": 17565.47619047619,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo dheddig ahi waxay qaadanaysaa 1 saami (kala bar labka).",
+        "isBlocked": false,
+        "individualNames": [
+          "Gabadha 1aad",
+          "Gabadha 2aad",
+          "Gabadha 3aad"
+        ]
+      }
+    ],
+    "blockedHeirs": [
+      {
+        "nameSomali": "Walaalaha hooyada (1)",
+        "nameArabic": "الإخوة والأخوات لأم (1)",
+        "count": 1,
+        "blockedBy": "Carruurta ama carruurta carruurtooda",
+        "rule": "Walaalaha hooyada waxaa xannibaya faraca dhaxalka (carruurta) iyo asalka labka ah (aabbaha/awoowaha)."
+      },
+      {
+        "nameSomali": "Walaalaha dhashay (2 lab, 1 dheddig)",
+        "nameArabic": "الإخوة والأخوات الأشقاء",
+        "count": 3,
+        "blockedBy": "Wiilasha",
+        "rule": "Wiilasha iyo aabbuhu waxay gebi ahaanba xannibaan walaalaha dhashay."
+      }
+    ],
+    "explanationSomali": [
+      "Casabah (العصبة): Haraaga mas'alada oo dhan 13/24 waxaa qaadanaya Wiilasha (2) iyo Gabdhaha (3)."
+    ]
+  },
+  "masalah_minbariyyah": {
+    "aslAlMasalah": 24,
+    "awlValue": 27,
+    "isAwl": true,
+    "isRadd": false,
+    "tashihBase": 27,
+    "grossEstateUSD": 54000,
+    "totalFuneralUSD": 0,
+    "totalDebtsUSD": 0,
+    "totalWasiyyahUSD": 0,
+    "maxAllowableWasiyyahUSD": 18000,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 54000,
+    "heirShares": [
+      {
+        "id": "wives",
+        "nameSomali": "Xaas",
+        "nameArabic": "الزوجة",
+        "count": 1,
+        "category": "spouse",
+        "reason": "fard",
+        "quranicFraction": "3/27 (Cawl ka yimid 1/8)",
+        "quranicFractionValue": 0.1111111111111111,
+        "rawShares": 3,
+        "tashihShares": 3,
+        "percentage": 11.11111111111111,
+        "totalAmountUSD": 6000,
+        "perPersonAmountUSD": 6000,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 12): \"Haddii aad carruur leedihiin waxay leeyihiin 1/8, haddii aydnaan carruur lahaynna 1/4\"",
+        "notesSomali": "Waxay qaadanaysaa 1/8 hantida saafiga ah.",
+        "isBlocked": false,
+        "individualNames": [
+          "Xaaska"
+        ]
+      },
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada",
+        "nameArabic": "الأم",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "4/27 (Cawl ka yimid 1/6)",
+        "quranicFractionValue": 0.14814814814814814,
+        "rawShares": 4,
+        "tashihShares": 4,
+        "percentage": 14.814814814814813,
+        "totalAmountUSD": 8000,
+        "perPersonAmountUSD": 8000,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur ama walaalo badan\"",
+        "notesSomali": "Carruur ayaa jirta awgeed waxay qaadanaysaa 1/6.",
+        "isBlocked": false,
+        "individualNames": [
+          "Hooyada"
+        ]
+      },
+      {
+        "id": "father",
+        "nameSomali": "Aabbaha",
+        "nameArabic": "الأب",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard_and_tasib",
+        "quranicFraction": "4/27 (Cawl ka yimid 1/6 + Casabah)",
+        "quranicFractionValue": 0.14814814814814814,
+        "rawShares": 4,
+        "tashihShares": 4,
+        "percentage": 14.814814814814813,
+        "totalAmountUSD": 8000,
+        "perPersonAmountUSD": 8000,
+        "quranicProof": "Shareecada Islaamka: Aabbuhu wuxuu leeyahay 1/6 fardi ah iyo wixii haraaga ah ee ka soo hara gabdhaha (Casabah).",
+        "notesSomali": "Gabdhaha ka dib wuxuu leeyahay 1/6 go'an oo lagu daray wixii hanti ah ee soo harta.",
+        "isBlocked": false,
+        "individualNames": [
+          "Aabbaha"
+        ]
+      },
+      {
+        "id": "daughters",
+        "nameSomali": "Gabdhaha (2)",
+        "nameArabic": "البنات (2)",
+        "count": 2,
+        "category": "descendant",
+        "reason": "fard",
+        "quranicFraction": "16/27 (Cawl ka yimid 2/3)",
+        "quranicFractionValue": 0.5925925925925926,
+        "rawShares": 16,
+        "tashihShares": 16,
+        "percentage": 59.25925925925925,
+        "totalAmountUSD": 32000,
+        "perPersonAmountUSD": 16000,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Haddii ay dumar yihiin laba ama wax ka badan waxay leeyihiin 2/3, hadday mid kaliya tahayna waxay leedahay 1/2\"",
+        "notesSomali": "2 gabdhood waxay si siman ugu qaybsanayaan 2/3.",
+        "isBlocked": false,
+        "individualNames": [
+          "Gabadha 1aad",
+          "Gabadha 2aad"
+        ]
+      }
+    ],
+    "blockedHeirs": [],
+    "explanationSomali": [
+      "Xaalad Cawl ah (العول): Saamiyada go'an wadartoodu (27) waxay ka badatay asalka mas'alada (24). Sidaa darteed, asalka mas'aladu wuxuu isu beddelayaa 27, si qof walba saamigiisu ugu yaraado si caddaalad ah oo saami-dhig ah."
+    ]
+  },
+  "masalah_umariyatan": {
+    "aslAlMasalah": 6,
+    "isAwl": false,
+    "isRadd": false,
+    "tashihBase": 6,
+    "grossEstateUSD": 60000,
+    "totalFuneralUSD": 0,
+    "totalDebtsUSD": 0,
+    "totalWasiyyahUSD": 0,
+    "maxAllowableWasiyyahUSD": 20000,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 60000,
+    "heirShares": [
+      {
+        "id": "husband",
+        "nameSomali": "Sayga (Ninka)",
+        "nameArabic": "الزوج",
+        "count": 1,
+        "category": "spouse",
+        "reason": "fard",
+        "quranicFraction": "1/2",
+        "quranicFractionValue": 0.5,
+        "rawShares": 3,
+        "tashihShares": 3,
+        "percentage": 50,
+        "totalAmountUSD": 30000,
+        "perPersonAmountUSD": 30000,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 12): \"Waxaad leedihiin 1/2 waxa ay ka tageen xaasaskaagu haddaynaan carruur lahayn, hadday carruur leeyihiinna 1/4\"",
+        "notesSomali": "Carruur ma jirto awgeed wuxuu qaadanayaa 1/2.",
+        "isBlocked": false,
+        "individualNames": [
+          "Sayga (Ninka)"
+        ]
+      },
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada (Mas'alada Cumariga ah)",
+        "nameArabic": "الأم (المسألة العمرية)",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6 (1/3 ka soo haray Sayga)",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 1,
+        "tashihShares": 1,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 10000,
+        "perPersonAmountUSD": 10000,
+        "quranicProof": "Xukunkii Saxaabada (Sayidna Cumar, Sayidna Cali, Sayidna Cismaan iyo Zayd bin Thaabit): Hooyadu waxay qaadanaysaa 1/3 ka soo hara xaaska/sayga si aabbuhu labanlaabkeeda u helo.",
+        "notesSomali": "Mas'alatu al-Gharrawayn / Umariyatan: 1/3 ka soo haray qaybta xaaska ama sayga.",
+        "isBlocked": false,
+        "individualNames": [
+          "Hooyada"
+        ]
+      },
+      {
+        "id": "father_pure_asabah",
+        "nameSomali": "Aabbaha (Casabah kali)",
+        "nameArabic": "الأب (عصبة بالنفس)",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "tasib",
+        "quranicFraction": "Casabah (2/6)",
+        "quranicFractionValue": 0.3333333333333333,
+        "rawShares": 2,
+        "tashihShares": 2,
+        "percentage": 33.33333333333333,
+        "totalAmountUSD": 20000,
+        "perPersonAmountUSD": 20000,
+        "quranicProof": "Xadiiska Nabiga (NNKH): \"U dhiiba saamiyada ehelkooda, wixii soo harana waxaa leh ninka ugu xiga marxuumka\"",
+        "notesSomali": "Marxuumku ma laha carruur, aabbuhuna wuxuu qaadanayaa dhammaan hantida ka soo harta saamiyada go'an.",
+        "isBlocked": false,
+        "individualNames": [
+          "Aabbaha"
+        ]
+      }
+    ],
+    "blockedHeirs": [],
+    "explanationSomali": [
+      "Casabah (العصبة): Haraaga mas'alada oo dhan 2/6 waxaa qaadanaya Aabbaha (Casabah kali)."
+    ]
+  },
+  "case_radd": {
+    "aslAlMasalah": 6,
+    "isAwl": false,
+    "isRadd": true,
+    "tashihBase": 4,
+    "grossEstateUSD": 40000,
+    "totalFuneralUSD": 0,
+    "totalDebtsUSD": 0,
+    "totalWasiyyahUSD": 0,
+    "maxAllowableWasiyyahUSD": 13333.333333333334,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 40000,
+    "heirShares": [
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada",
+        "nameArabic": "الأم",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6 + Radd",
+        "quranicFractionValue": 0.25,
+        "rawShares": 1.5,
+        "tashihShares": 1,
+        "percentage": 25,
+        "totalAmountUSD": 10000,
+        "perPersonAmountUSD": 10000,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur ama walaalo badan\"",
+        "notesSomali": "Carruur ayaa jirta awgeed waxay qaadanaysaa 1/6. (Waxaa lagu daray qayb ka mid ah dheeraadka Radd-ka).",
+        "isBlocked": false,
+        "individualNames": [
+          "Hooyada"
+        ]
+      },
+      {
+        "id": "daughters",
+        "nameSomali": "Gabadha",
+        "nameArabic": "البنت",
+        "count": 1,
+        "category": "descendant",
+        "reason": "fard",
+        "quranicFraction": "1/2 + Radd",
+        "quranicFractionValue": 0.75,
+        "rawShares": 4.5,
+        "tashihShares": 3,
+        "percentage": 75,
+        "totalAmountUSD": 30000,
+        "perPersonAmountUSD": 30000,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Haddii ay dumar yihiin laba ama wax ka badan waxay leeyihiin 2/3, hadday mid kaliya tahayna waxay leedahay 1/2\"",
+        "notesSomali": "Hal gabadh oo aan walaal wiil lahayn waxay leedahay 1/2. (Waxaa lagu daray qayb ka mid ah dheeraadka Radd-ka).",
+        "isBlocked": false,
+        "individualNames": [
+          "Gabadha"
+        ]
+      }
+    ],
+    "blockedHeirs": [],
+    "explanationSomali": [
+      "Xaalad Radd ah (الرد): Hantidu waxay ka badatay saamiyada go'an (4 ka mid ah 6), mana jiro qof Casabah ah. Waxaa dheeraadka si saami-dhig ah loogu celinayaa dhaxaleeyda xaqqa u leh radd-ka."
+    ]
+  },
+  "somali_livestock": {
+    "aslAlMasalah": 24,
+    "isAwl": false,
+    "isRadd": false,
+    "tashihBase": 336,
+    "grossEstateUSD": 200000,
+    "totalFuneralUSD": 500,
+    "totalDebtsUSD": 4500,
+    "totalWasiyyahUSD": 8000,
+    "maxAllowableWasiyyahUSD": 65000,
+    "wasiyyahExceededCap": false,
+    "netDistributableEstateUSD": 187000,
+    "heirShares": [
+      {
+        "id": "wives",
+        "nameSomali": "Xasaska (2)",
+        "nameArabic": "الزوجات (2)",
+        "count": 2,
+        "category": "spouse",
+        "reason": "fard",
+        "quranicFraction": "1/8",
+        "quranicFractionValue": 0.125,
+        "rawShares": 3,
+        "tashihShares": 42,
+        "percentage": 12.5,
+        "totalAmountUSD": 23375,
+        "perPersonAmountUSD": 11687.5,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 12): \"Haddii aad carruur leedihiin waxay leeyihiin 1/8, haddii aydnaan carruur lahaynna 1/4\"",
+        "notesSomali": "Waxay si siman ugu qaybsanayaan saamiga 1/8 ee guud.",
+        "isBlocked": false,
+        "individualNames": [
+          "Xaaska 1aad",
+          "Xaaska 2aad"
+        ]
+      },
+      {
+        "id": "mother",
+        "nameSomali": "Hooyada",
+        "nameArabic": "الأم",
+        "count": 1,
+        "category": "ascendant",
+        "reason": "fard",
+        "quranicFraction": "1/6",
+        "quranicFractionValue": 0.16666666666666666,
+        "rawShares": 4,
+        "tashihShares": 56,
+        "percentage": 16.666666666666664,
+        "totalAmountUSD": 31166.666666666664,
+        "perPersonAmountUSD": 31166.666666666664,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Labada waalid mid kasta wuxuu leeyahay 1/6 haddii uu marxuumku ka tagay carruur ama walaalo badan\"",
+        "notesSomali": "Carruur ayaa jirta awgeed waxay qaadanaysaa 1/6.",
+        "isBlocked": false,
+        "individualNames": [
+          "Hooyada"
+        ]
+      },
+      {
+        "id": "sons",
+        "nameSomali": "Wiilasha (4)",
+        "nameArabic": "الأبناء (4)",
+        "count": 4,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Labanlaab)",
+        "quranicFractionValue": 0.40476190476190477,
+        "rawShares": 9.714285714285714,
+        "tashihShares": 136,
+        "percentage": 40.476190476190474,
+        "totalAmountUSD": 75690.4761904762,
+        "perPersonAmountUSD": 18922.61904761905,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo lab ah wuxuu qaadanayaa 2 saami (labanlaabka gabadha).",
+        "isBlocked": false,
+        "individualNames": [
+          "Wiilka 1aad",
+          "Wiilka 2aad",
+          "Wiilka 3aad",
+          "Wiilka 4aad"
+        ]
+      },
+      {
+        "id": "daughters",
+        "nameSomali": "Gabdhaha (6)",
+        "nameArabic": "البنات (6)",
+        "count": 6,
+        "category": "descendant",
+        "reason": "tasib_bil_ghayr",
+        "quranicFraction": "Casabah (2:1 — Hal saami)",
+        "quranicFractionValue": 0.30357142857142855,
+        "rawShares": 7.285714285714286,
+        "tashihShares": 102,
+        "percentage": 30.357142857142854,
+        "totalAmountUSD": 56767.85714285714,
+        "perPersonAmountUSD": 9461.309523809523,
+        "quranicProof": "Suuradda An-Nisaa (Aayadda 11): \"Eebbe wuxuu idiinku dardaarayaa carruurtiinna: Labku wuxuu leeyahay saamiga laba dheddig (للذكر مثل حظ الأنثيين)\"",
+        "notesSomali": "Casabah bil-ghayr: Qof kasta oo dheddig ahi waxay qaadanaysaa 1 saami (kala bar labka).",
+        "isBlocked": false,
+        "individualNames": [
+          "Gabadha 1aad",
+          "Gabadha 2aad",
+          "Gabadha 3aad",
+          "Gabadha 4aad",
+          "Gabadha 5aad",
+          "Gabadha 6aad"
+        ]
+      }
+    ],
+    "blockedHeirs": [
+      {
+        "nameSomali": "Walaalaha dhashay (1 lab, 2 dheddig)",
+        "nameArabic": "الإخوة والأخوات الأشقاء",
+        "count": 3,
+        "blockedBy": "Wiilasha",
+        "rule": "Wiilasha iyo aabbuhu waxay gebi ahaanba xannibaan walaalaha dhashay."
+      }
+    ],
+    "explanationSomali": [
+      "Casabah (العصبة): Haraaga mas'alada oo dhan 17/24 waxaa qaadanaya Wiilasha (4) iyo Gabdhaha (6)."
+    ]
+  }
+}

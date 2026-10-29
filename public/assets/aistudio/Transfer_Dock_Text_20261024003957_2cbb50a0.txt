@@ -1,0 +1,343 @@
+PROJECT MASTER PROMPT: INHERITANCE MANAGEMENT + WEB GIS + FAIR LAND ALLOCATION
+
+1. UJEEDDADA MASHRUUCA
+
+Waxaan doonayaa in la isku xidho laba nidaam oo hore u jira:
+
+1. Inheritance Management System: nidaamka xisaabiya saamiyada dhaxalka iyo xuquuqda dhaxal-sugayaasha.
+2. Web GIS — Naqshadeeyaha Blocks & Plots: nidaamka soo geliya xuduudaha dhulka, sameeya blocks iyo plots, muujiya khariidadda, isla markaana leh hawlaha GIS ee hadda jira.
+
+Ujeeddadu waa in marka la dhammeeyo xisaabinta dhaxalka, nidaamku awood u yeesho in dhulka dhabta ah ee blocks iyo plots loo qoondeeyo dhaxal-sugayaasha, iyadoo la tixgelinayo xuquuqdooda dhaxalka, cabbirka dhulka, tayada, goobta, xaaladda dooxa iyo qiimaha dhulka marka xogtaas la hayo.
+
+Nidaamku waa inuu noqdaa application dhab ah oo ku shaqaynaya xogta iyo koodhka hadda jira, mana aha mockup ama demo xog tusaale ah ku shaqaynaya.
+
+2. XEERKA UGU MUHIIMSAN: HA JEBIN NIDAAMYADA HORE
+
+Ka hor intaadan wax ka beddelin mashruuca:
+
+- Baadh dhammaan faylasha, koodhka, qaab-dhismeedka, xogta iyo hawlaha labada nidaam.
+- Aqoonso sida nidaamka dhaxalku u xisaabiyo saamiyada iyo sida GIS-ku u maamulo GeoJSON, blocks iyo plots.
+- Isticmaal qaab-dhismeedka, framework-ka, database-ka, routing-ka iyo document engine-ka jira.
+- Ha dib u qorin application-ka oo dhan haddii aanay jirin sabab farsamo oo cad.
+- Ha beddelin hawl shaqaynaysa si aan loo baahnayn.
+- Ha tirtirin ama ha dib u abuurin xogtii hore.
+- Samee backup ka hor isbeddellada waaweyn.
+- Dib u isticmaal IDs-ka, geometry-ga iyo xogta asalka ah halkii aad abuuri lahayd xog nuqul ah.
+- Haddii xog ama xeer muhiim ahi aanu caddayn, marka hore baadh koodhka jira, kadibna weydii su'aal cad halkii aad wax ka qiyaasi lahayd.
+
+Ugu dambayn, labada nidaam waa inay sii haystaan dhammaan hawlahoodii hore, iyadoo lagu darayo awoodda cusub ee isku xidhka dhaxalka iyo GIS-ka.
+
+3. QAYBTA WEB GIS: SOO GELINTA GEOJSON
+
+GIS-ku waa inuu sii hayaa habka uu hadda u shaqeeyo, wuxuuna taageerayaa GeoJSON leh xog iyo GeoJSON aan lahayn xog faahfaahsan.
+
+A. GeoJSON aan xog faahfaahsan lahayn
+
+Tani waa habka muhiimka ah ee ay tahay in si gaar ah loo ilaaliyo.
+
+GeoJSON-ku wuxuu ka koobnaan karaa xuduudda guud ee dhulka oo keliya, ama geometry-ga blocks iyo plots, isaga oo aan lahayn xog faahfaahsan oo ku saabsan tayada dhulka, qiimaha, dooxa ama lahaanshaha.
+
+Habka shaqadu waa inuu ahaadaa:
+
+1. Isticmaaluhu wuxuu soo gelinayaa GeoJSON.
+2. Nidaamku wuxuu u akhrinayaa sidii uu markii hore u shaqayn jiray.
+3. Isticmaaluhu wuxuu samaynayaa blocks isagoo adeegsanaya qalabka GIS-ka ee hadda jira.
+4. Isticmaaluhu wuxuu samaynayaa plots gudaha blocks-ka.
+5. Wuxuu dib u eegayaa cabbirrada, tirada plots-ka, xuduudaha iyo qaabka khariidadda.
+6. Nidaamku wuxuu kaydinayaa natiijada iyo aqoonsiyada blocks iyo plots-ka.
+7. Marka naqshadaynta la dhammeeyo, isticmaaluhu wuxuu geli karaa xogta faahfaahinta dheeraadka ah.
+
+Ha ku khasbin isticmaalaha inuu buuxiyo xogta dhulka ka hor inta aanu samayn blocks iyo plots. Xogta dheeraadka ahi waa qayb dambe oo lagu darayo geometry-ga hore loo sameeyey.
+
+Ha beddelin ama dib ha u samayn geometry-ga plots-ka sababta oo keliya ah in xog cusub lagu darayo.
+
+B. GeoJSON xog leh
+
+Haddii GeoJSON-ku leeyahay xog faahfaahsan:
+
+- Akhri geometry-ga iyo properties-ka jira.
+- Ilaali xogta asalka ah ee muhiimka ah.
+- Aqoonso IDs-ka blocks iyo plots-ka haddii ay jiraan.
+- Ogaaw xogta maqan, IDs isku soo noqnoqda iyo geometry-ga khaldan.
+- Isku xidh xogta jirta iyo nidaamka cusub adigoon samayn nuqullo aan loo baahnayn.
+- Ka hor inta aan xog cusub lagu dul qorin xog hore, muuji khilaafaadka oo u oggolow isticmaalaha inuu dib u eego.
+
+C. Noocyada geometry-ga
+
+Nidaamku waa inuu baadhaa nooca xogta la soo geliyey, sida boundary, Polygon, MultiPolygon ama lakabyo kala duwan oo blocks iyo plots ah.
+
+Haddii nooca xogtu aanu caddayn, weydii isticmaalaha inuu doorto ama xaqiijiyo. Ha u qaadan in dhammaan GeoJSON-yadu isku qaab yihiin.
+
+Waa inuu hubiyaa CRS/coordinate reference system-ka, saxnaanta geometry-ga iyo habka bedka loo xisaabinayo. Haddii bedka la xisaabiyey iyo bedka la xaqiijiyey ay kala duwan yihiin, labadaba si cad u muuji.
+
+4. GELINTA XOGTA FAHFAAHINTA DHULKA KA DIB SAMAYNTA BLOCKS IYO PLOTS
+
+Marka blocks iyo plots la dhammeeyo, ku dar qayb cusub oo la yidhaahdo:
+
+“Xogta Dhulka & Qiimaynta Plots”
+
+Qaybtani waa inay noqotaa mid si toos ah ula shaqaysa GIS-ka hadda jira.
+
+Isticmaaluhu waa inuu awood u yeeshaa inuu:
+
+- Plot kasta ka doorto khariidadda oo uu xogtiisa buuxiyo.
+- Block kasta ka doorto khariidadda oo uu xogtiisa buuxiyo.
+- Xogta gacanta ku qoro.
+- Xog badan ka soo geliyo GeoJSON ama CSV iyadoo IDs la waafajinayo.
+- Xog hore u jirtay wax ka beddelo ama cusboonaysiiyo.
+- Xogta u dhoofiyo qaabab ay nidaamka hadda jira taageeraan.
+
+Xogta plot kasta
+
+Taageer xogahan marka loo baahdo:
+
+- Block ID.
+- Plot ID.
+- Magaca ama lambarka dhulka.
+- Bedka GIS-ku xisaabiyey.
+- Bedka la xaqiijiyey, haddii la hayo.
+- Xaaladda dooxa.
+- Tayada goobta.
+- Xaaladda oogada dhulka.
+- Qaabka plot-ka iyo isticmaalka dhulka.
+- Qiimaha dhulka, haddii la qiimeeyey.
+- Xaddidaadaha isticmaalka, haddii la xaqiijiyey.
+- Faahfaahin dheeraad ah.
+- Sawirro ama dukumentiyo taageeraya, haddii nidaamku taageero.
+
+Xogta block-ga waa in sidoo kale lagu kaydin karaa heerka block-ga, sida magaca, xaaladda guud, faahfaahinta iyo xog kale oo block-ga khusaysa.
+
+Xeerarka xogta
+
+- Xogta aan la hayn waa inay ahaan kartaa bannaan ama “Lama xaqiijin”.
+- Ha abuurin qiimayaal, bed ama tayada dhul oo been ah.
+- Xogta waa in lagu xidhaa IDs joogto ah.
+- Xogta dheeraadka ahi waa inaanay beddelin geometry-ga asalka ah.
+- Xog cusub oo la soo geliyo waa inaanay si aamusan u tirtirin xogtii hore.
+- Haddii ID aanu jirin, soo jeedi aqoonsi gaar ah oo joogto ah, adigoo hubinaya inaanu isku dhicin.
+- Xogta la beddelo waa in la kaydiyaa, waxaana habboon in la hayo taariikhda isbeddellada.
+
+5. MAAREYNTA DOOXA IYO TAYADA DHULKA
+
+Nidaamku waa inuu taageeraa in la diiwaangeliyo meelaha dooxu maro iyo xaaladda dhulka.
+
+Plot kasta waa in lagu kala saari karaa:
+
+- Dooxu wuxuu dhex maraa plot-ka.
+- Dooxu qayb ayuu ka maraa plot-ka.
+- Plot-ku wuxuu ku dhow yahay doox.
+- Plot-ku kuma jiro doox.
+- Xaaladda dooxa lama xaqiijin.
+
+Sidoo kale tayada dhulka waxaa lagu diiwaangelin karaa:
+
+- Aad u wanaagsan.
+- Wanaagsan.
+- Dhexdhexaad.
+- Liidata.
+- Lama xaqiijin.
+
+Xogtan waa in lagu saleeyaa xog GIS, cabbir la xaqiijiyey ama qiimayn uu isticmaaluhu geliyey.
+
+Ha u qaadan in plot kasta oo doox ku yaal uu si toos ah u liito. Xaaladda dhabta ah, isticmaalka dhulka iyo qiimaynta la xaqiijiyey ayaa go'aaminaya sida loo tixgelinayo.
+
+Haddii la heli karo xog GIS oo dooxyo ah, nidaamku wuxuu isticmaali karaa lakabkaas si uu u ogaado plots-ka ay khusayso. Haddii lakabkaasi aanu jirin, isticmaaluhu waa inuu xogta geliyaa ama nidaamku muujiyaa in xaaladdu aanay weli xaqiijisnayn.
+
+6. ISKU XIDHKA NIDAAMKA DHAXALKA
+
+Marka xisaabinta dhaxalka la dhammeeyo, isticmaaluhu waa inuu awood u yeeshaa inuu kiiska dhaxalka ku xidho dhulka la qaybinayo.
+
+Nidaamku waa inuu adeegsadaa xogta dhaxalka ee hadda jirta, mana aha inuu sameeyo hab xisaabeed cusub oo beddela kii hore.
+
+Kiis kasta waa inuu awood u yeeshaa inuu la xiriiro:
+
+- Dhaxal-sugayaasha.
+- Saamiga dhaxal-suge kasta.
+- Dhulka iyo blocks-ka la qaybinayo.
+- Plots-ka la heli karo.
+- Plots-ka loo qoondeeyey.
+- Xaaladda qoondaynta iyo ansixinta.
+- Taariikhda wax-ka-beddellada.
+
+Saamiga dhaxalka iyo plots-ka loo qoondeeyey waa laba xogood oo kala duwan. Nidaamku waa inuu ilaaliyaa kala duwanaanshahooda.
+
+Haddii nidaamka dhaxalku soo saaro saamiyo ama jajabyo oo keliya, ha u beddelin si toos ah mitir laba-jibbaaran ama qiime dhul ilaa xeer sax ah iyo xog ku filan la hayo.
+
+7. QAYBINTA DHULKA EE CADDAALADDA LEH
+
+Nidaamku waa inuu leeyahay laba hab oo qoondayn.
+
+A. Qoondayn gacanta ah
+
+Isticmaaluhu wuxuu khariidadda ka dooranayaa plots-ka uu doonayo inuu dhaxal-suge kasta u qoondeeyo.
+
+Marka plot la doorto, muuji:
+
+- Plot ID iyo Block ID.
+- Bedka.
+- Xaaladda dooxa.
+- Tayada goobta.
+- Qiimaha la xaqiijiyey, haddii la hayo.
+- Haddii plot-ka hore qof kale loogu qoondeeyey.
+- Saamaynta qoondaynta ku yeelanayso wadarta dhaxal-sugaha.
+
+Nidaamku waa inuu digniin bixiyaa marka qoondayntu keento khalad ama kala duwanaansho muhiim ah.
+
+B. Soo-jeedin otomaatig ah
+
+Nidaamku waa inuu falanqeeyaa plots-ka la heli karo iyo xogta dhaxal-sugayaasha, kadibna soo jeediyaa qaybin isku dheellitiran.
+
+Soo-jeedintu waa inay tixgelisaa, marka xogta la hayo:
+
+- Xuquuqda dhaxalka.
+- Wadarta bedka.
+- Tirada plots-ka.
+- Tayada goobta.
+- Xaaladda dooxa.
+- Qiimaha dhulka ee la xaqiijiyey.
+- Isku-dhowaanshaha plots-ka iyo block-yada.
+- Qaabka iyo isticmaalka dhulka.
+- Xaddidaadaha dhabta ah ee dhulka.
+
+Haddii qiimaha dhulku la hayo, nidaamku waa inuu qiimaha guud u tixgeliyo si ka muhiimsan tirada plots-ka oo keliya. Haddii qiime sugan aan la hayn, isticmaaluhu waa inuu awood u yeeshaa inuu dejiyo xeerar tayadeed oo cad, isagoo ogaanaya in dhibcaha tayadu aanay la mid ahayn qiime lacageed.
+
+C. Mabda'a caddaaladda
+
+Ujeeddadu ma aha in qof kasta la siiyo tiro plots oo isku mid ah oo keliya.
+
+Nidaamku waa inuu isku dayaa inuu yareeyo kala duwanaanshaha aan loo baahnayn ee bedka, tayada iyo qiimaha qaybaha, iyadoo la ilaalinayo xuquuqda dhaxalka ee saxda ah.
+
+Tusaale ahaan, haddii dhaxal-suge helo plots ku yaal meel dooxu maro oo aan ku habboonayn isticmaalka loogu talagalay, halka dhaxal-suge kale helo plots wanaagsan, nidaamku waa inuu aqoonsadaa kala duwanaanshahaas oo soo jeediyaa beddel ama qaybin dheellitiran.
+
+Si kastaba ha ahaatee:
+
+- Ha go'aamin in qaybintu sharci ahaan sax tahay adigoon haysan xeerka ku habboon.
+- Ha beddelin saamiyada dhaxalka si loo simo tayada dhulka.
+- Ha samayn qiimayn dhul oo aan xog lagu kalsoon yahay ku salaysnayn.
+- Soo-jeedinta otomaatigga ahi waa talo, mana aha qoondayn kama dambays ah ilaa la ansixiyo.
+- Marka xogtu ku filnayn, muuji waxa maqan oo codso xogta loo baahan yahay.
+
+8. KHARIIDADDA DHAXAL-SUGE KASTA
+
+Marka dhaxal-suge la doorto, khariidaddu waa inay muujisaa plots-ka loo qoondeeyey.
+
+- Midab kala duwan u isticmaal dhaxal-sugayaasha.
+- Muujinta dooxa iyo xogta tayada dhulka waa inay noqotaa mid la shidi karo ama la damin karo.
+- Marka plot la taabto ama la doorto, muuji faahfaahintiisa.
+- Muuji block-ga uu ku jiro.
+- Muuji haddii plot-ka la qoondeeyey, la sugayo ama la heli karo.
+- Ha ku tiirsanaan magacyo tusaale ah ama xog la sameeyey; isticmaal xogta dhabta ah ee mashruuca.
+
+Khariidaddu waa inay sii shaqaysaa sidii hore, oo ay ku jiraan hawlaha zoom, selection, import iyo export ee hadda jira.
+
+9. WAR-BIXINTA DHAXAL-SUGE KASTA
+
+Warbixinta dhaxal-suge kasta waa inay muujisaa:
+
+- Magaca dhaxal-sugaha.
+- Saamiga dhaxalka ee nidaamku xisaabiyey.
+- Tirada plots-ka loo qoondeeyey.
+- Wadarta bedka.
+- Liiska Plot IDs iyo Block IDs.
+- Xaaladda dooxa iyo tayada dhulka.
+- Wadarta qiimaha la xaqiijiyey, haddii qiime la hayo.
+- Isbarbardhigga qaybta la qoondeeyey iyo xuquuqda dhaxalka.
+- Digniinaha ama xogta aan weli la xaqiijin.
+- Xaaladda ansixinta.
+
+Warbixintu waa inay si cad u kala saartaa xogta la xaqiijiyey, xogta la qiyaasay iyo xogta aan la hayn.
+
+10. KA HORTAGGA KHALADAADKA
+
+Nidaamku waa inuu xaqiijiyaa:
+
+- Hal plot inaan laba dhaxal-suge loo qoondeyn isku mar.
+- Wadarta plots-ka la qaybiyey inaanay ka badnaan plots-ka la heli karo.
+- Wadarta bedka inaan si khaldan loo xisaabin.
+- IDs-ka blocks iyo plots inaanay si aan loo baahnayn isu beddelin.
+- Geometry-ga asalka ah inaan la tirtirin marka xog cusub lagu darayo.
+- Xogta la soo geliyey inaan lagu dul qorin xog hore iyadoo aan digniin la bixin.
+- In la hayo taariikhda qoondaynta, wax-ka-beddellada iyo ansixinta.
+- In dib loo xisaabiyo natiijooyinka marka qoondayn la beddelo.
+- In la muujiyo digniin haddii xogta tayada, dooxa ama qiimaha dhulku maqan tahay.
+
+11. QAAB-DHISMEEDKA XOGTA IYO ISKU XIDHKA
+
+Ka hor inta aan la samayn database tables ama collections cusub, baadh database-ka hadda jira.
+
+Haddii xogta muhiimka ahi hore u jirto, dib u isticmaal. Haddii xog cusub loo baahdo, ku dar si aanay u jebin xogta iyo hawlaha hadda jira.
+
+Ugu yaraan waa in qaab-dhismeedku taageeraa xiriirka u dhexeeya:
+
+- Kiiska dhaxalka.
+- Dhaxal-sugayaasha iyo saamiyadooda.
+- Blocks.
+- Plots.
+- Xogta faahfaahinta dhulka.
+- Qoondaynta plots-ka.
+- Taariikhda isbeddellada iyo ansixinta.
+
+Xogta geometry-ga iyo xogta faahfaahinta dhulka waa in si sax ah la isugu xidhaa. Ha ku tiirsanaan lambarka safka ama booska polygon-ku kaga jiro faylka GeoJSON; isticmaal IDs joogto ah.
+
+Haddii mashruucu yahay offline ama xogtiisa maxalliga ah ku kaydiyo, ilaali habka kaydinta ee hadda jira. Ha ku darin server ama adeeg dibadeed khasab ah haddii aan loo baahnayn.
+
+12. TALLAABOOYINKA FULINTA
+
+U shaqee marxalado:
+
+Marxaladda 1 — Audit
+
+- Baadh faylasha iyo hawlaha hadda jira.
+- Soo bandhig sida labada nidaam u shaqeeyaan.
+- Aqoonso halka ay ku kala xidhmi karaan.
+- Soo sheeg khataraha iyo faylasha u baahan isbeddelka.
+
+Marxaladda 2 — Qorshaha isku xidhka
+
+- Sharax xogta laga soo qaadanayo nidaamka dhaxalka.
+- Sharax sida blocks iyo plots loo aqoonsanayo.
+- Sharax sida xogta dhulka loogu dari doono iyada oo aan la beddelin geometry-ga.
+- Soo bandhig qorshe ilaalinaya hawlaha hore.
+
+Marxaladda 3 — Xogta dhulka
+
+- Ku dar qaybta xogta faahfaahinta.
+- Taageer gelinta gacanta iyo soo gelinta xog badan.
+- Ku xidh xogta IDs-ka saxda ah.
+- Ku dar hubinta xogta iyo digniinaha.
+
+Marxaladda 4 — Qoondaynta dhaxalka
+
+- Ku xidh kiiska dhaxalka iyo plots-ka.
+- Ku dar qoondaynta gacanta.
+- Ku dar soo-jeedinta otomaatigga ah.
+- Ku dar xaqiijinta iyo ansixinta.
+
+Marxaladda 5 — Khariidad iyo warbixin
+
+- Muuji plots-ka dhaxal-suge kasta.
+- Muuji xaaladda dhulka marka xogtu jirto.
+- Samee warbixin ka tarjumaysa xogta dhabta ah.
+- Ilaali hawlaha export-ka ee hadda jira.
+
+Marxaladda 6 — Tijaabinta
+Tijaabi dhammaan hawlaha hore iyo kuwa cusub. Hubi in GeoJSON xog leh iyo mid aan xog lahayn labaduba shaqeeyaan, blocks iyo plots si sax ah loo sameeyo, xogta dambe lagu daro iyada oo aan geometry-gu isbeddelin, isla markaana qaybinta dhaxalku aanay laba jeer u qoondayn hal plot.
+
+Ha sheegan in shaqadu dhammaatay ilaa koodhka la fuliyey oo tijaabooyinka muhiimka ahi gudbeen.
+
+13. SHURUUDAHA GUUSHA
+
+Mashruuca waxaa lagu guulaystay marka:
+
+1. GeoJSON aan xog faahfaahsan lahayn loo maamulo sidii GIS-kii hore.
+2. Isticmaaluhu samayn karo blocks iyo plots isaga oo aan horay u buuxin xogta dhulka.
+3. Xogta faahfaahinta lagu dari karo kadib marka blocks iyo plots la dhammeeyo.
+4. GeoJSON xog leh si sax ah loo akhriyo, xogtiisana la ilaaliyo.
+5. Xogta dhulka lagu xidho Block IDs iyo Plot IDs sax ah.
+6. Nidaamka dhaxalku isticmaali karo xogta GIS-ka ee dhabta ah.
+7. Dhaxal-sugayaasha loogu samayn karo qoondayn gacanta ah iyo soo-jeedin otomaatig ah.
+8. Qoondayntu tixgeliso xuquuqda dhaxalka, bedka, tayada, dooxa iyo qiimaha marka xogtu jirto.
+9. Khariidadda iyo warbixintu muujiyaan plots-ka dhaxal-suge kasta.
+10. Dhammaan hawlihii hore ee labada nidaam ay sii shaqeeyaan.
+
+Amar kama dambays ah: Marka hore baadh mashruuca dhabta ah. Ha ku bilaabin dib-u-dhis, mockup ama xog tusaale ah. Ilaali hawlaha hadda jira, kuna dar awoodaha cusub si marxalado ah, adigoo tijaabinaya tallaabo kasta ka hor intaadan u gudbin tan xigta.

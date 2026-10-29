@@ -1,0 +1,6 @@
+{
+  "name": "Nidaamka Xisaabinta Dhaxalka (Islamic Inheritance Spreadsheet)",
+  "description": "Nidaam balaadhan oo qaab Excel ah oo lagu xisaabiyo hantida dhaxalka shareecada Islaamka (Cilmiga Faraa'idka), dhimista deymaha, dardaaranka, iyo qaybinta saami-qaybsiga dhaxaleeyda.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

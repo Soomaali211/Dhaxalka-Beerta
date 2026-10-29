@@ -1,0 +1,13 @@
+{
+  "appId": "so.beerta.dhaxalka.gis",
+  "appName": "Beerta & Dhaxalka",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#060D18"
+  }
+}
