@@ -3,6 +3,9 @@ name: Dhismo & Update Toos ah — Android APK (Beerta & Dhaxalka)
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - 'Beerta-iyo-Dhaxalka.apk'
+      - 'README.md'
   workflow_dispatch:
 
 permissions:
@@ -14,6 +17,8 @@ jobs:
     steps:
       - name: Soo deji Koodhka Mashruuca
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Diyaari Node.js 22
         uses: actions/setup-node@v4
@@ -45,28 +50,31 @@ jobs:
         env:
           RUN_NUM: ${{ github.run_number }}
         run: |
-          export APP_VERSION_CODE=$((100 + RUN_NUM))
-          export APP_VERSION_NAME="1.0.${RUN_NUM}"
+          export APP_VERSION_CODE=$((200 + RUN_NUM))
+          export APP_VERSION_NAME="1.2.${RUN_NUM}"
           chmod +x gradlew
           ./gradlew assembleRelease
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           cp "$APK_PATH" ../Beerta-iyo-Dhaxalka.apk
 
+      - name: Ku kaydi Faylka Cusub ee Beerta-iyo-Dhaxalka.apk Toos Bogga Hore ee GitHub Repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f Beerta-iyo-Dhaxalka.apk
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(apk): cusboonaysii Beerta-iyo-Dhaxalka.apk v1.2.${{ github.run_number }} [skip ci]"
+            git push
+          fi
+
       - name: Soo dhig Faylka Tooska ah ee Beerta-iyo-Dhaxalka.apk qaybta GitHub Releases (Latest)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: "Beerta & Dhaxalka — Nooca v1.0.${{ github.run_number }} (APK)"
+          tag_name: v1.2.${{ github.run_number }}
+          name: "Beerta & Dhaxalka — Nooca v1.2.${{ github.run_number }} (APK)"
           body: |
-            ### Beerta & Dhaxalka — Android APK (`v1.0.${{ github.run_number }}`)
-            - **Soo Dejinta Tooska ah:** Hoos ka taabo **`Beerta-iyo-Dhaxalka.apk`** si aad u soo dejiso una rakibto (**Install** ama **Update**).
+            ### Beerta & Dhaxalka — Android APK (`v1.2.${{ github.run_number }}`)
+            - **Soo Dejinta Tooska ah:** Hoos ka taabo **`Beerta-iyo-Dhaxalka.apk`** (ama toos uga soo dejiso bogga hore ee Repo-ga) si aad u rakibto (**Install** ama **Update**).
             - **Xogtaadu way badbaadaysaa:** Haddii nooc hore telefoonka kuugu jiray, toos u taabo **Update** — kiisaskaaga iyo khariidadaha kaydsan ma tirmayaan.
           files: Beerta-iyo-Dhaxalka.apk
           make_latest: true
-
-      - name: Kaydi Nuqulka APK qaybta Actions Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Beerta-iyo-Dhaxalka-v1.0.${{ github.run_number }}-APK
-          path: Beerta-iyo-Dhaxalka.apk
-          if-no-files-found: error
