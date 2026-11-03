@@ -1,8 +1,11 @@
 package so.beerta.dhaxalka.gis;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
@@ -11,28 +14,60 @@ import android.util.Base64;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.BridgeActivity;
 import java.io.File;
 import java.io.FileOutputStream;
 
 public class MainActivity extends BridgeActivity {
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 4102;
+    private static final long EXPORT_CACHE_TTL_MS = 24L * 60L * 60L * 1000L;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        pruneStaleExports();
+
         if (getBridge() != null && getBridge().getWebView() != null) {
             WebView webView = getBridge().getWebView();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
+            }
             WebSettings settings = webView.getSettings();
             settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
             settings.setJavaScriptCanOpenWindowsAutomatically(true);
             settings.setAllowFileAccess(true);
             settings.setAllowContentAccess(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
+
             String ua = settings.getUserAgentString();
-            if (ua != null && ua.contains("; wv")) {
-                settings.setUserAgentString(ua.replace("; wv", ""));
+            String cleanedUa = ua != null ? ua.replace("; wv", "") : "Android";
+            if (!cleanedUa.contains("BeertaAPK/")) {
+                cleanedUa = cleanedUa + " BeertaAPK/1.6.1";
             }
+            settings.setUserAgentString(cleanedUa);
+
             webView.addJavascriptInterface(new BeertaAndroidBridge(this, webView), "BeertaAndroidBridge");
+        }
+    }
+
+    private void pruneStaleExports() {
+        try {
+            File exportDir = new File(getCacheDir(), "exports");
+            if (!exportDir.exists() || !exportDir.isDirectory()) return;
+            File[] files = exportDir.listFiles();
+            if (files == null) return;
+            long cutoff = System.currentTimeMillis() - EXPORT_CACHE_TTL_MS;
+            for (File f : files) {
+                if (f != null && f.isFile() && f.lastModified() < cutoff) {
+                    //noinspection ResultOfMethodCallIgnored
+                    f.delete();
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -46,9 +81,38 @@ public class MainActivity extends BridgeActivity {
         }
 
         @JavascriptInterface
+        public boolean requestLocationPermission() {
+            try {
+                int fine = ContextCompat.checkSelfPermission(
+                    activity,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                );
+                int coarse = ContextCompat.checkSelfPermission(
+                    activity,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                );
+                if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
+                    return true;
+                }
+                ActivityCompat.requestPermissions(
+                    activity,
+                    new String[] {
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    },
+                    LOCATION_PERMISSION_REQUEST_CODE
+                );
+                return false;
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
         public void printCurrentPage(final String jobTitle, final boolean landscape, final String paperSize) {
             activity.runOnUiThread(() -> {
                 try {
+                    if (activity.isFinishing() || activity.isDestroyed()) return;
                     PrintManager printManager = (PrintManager) activity.getSystemService(Context.PRINT_SERVICE);
                     if (printManager == null) return;
 
@@ -71,7 +135,7 @@ public class MainActivity extends BridgeActivity {
                         .build();
 
                     printManager.print(safeTitle, adapter, attrs);
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                 }
             });
         }
@@ -84,12 +148,16 @@ public class MainActivity extends BridgeActivity {
         ) {
             activity.runOnUiThread(() -> {
                 try {
+                    if (activity.isFinishing() || activity.isDestroyed()) return;
+                    if (base64Payload == null || base64Payload.isEmpty()) return;
+
                     String cleanName = (fileName != null && !fileName.trim().isEmpty())
                         ? fileName.replaceAll("[^a-zA-Z0-9._-]", "_")
                         : "Beerta_Export.dat";
 
                     File exportDir = new File(activity.getCacheDir(), "exports");
                     if (!exportDir.exists()) {
+                        //noinspection ResultOfMethodCallIgnored
                         exportDir.mkdirs();
                     }
                     File outFile = new File(exportDir, cleanName);
@@ -117,7 +185,7 @@ public class MainActivity extends BridgeActivity {
 
                     Intent chooser = Intent.createChooser(shareIntent, cleanName);
                     activity.startActivity(chooser);
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                 }
             });
         }

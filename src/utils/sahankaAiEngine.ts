@@ -17,6 +17,7 @@ import {
   parseGeoJsonItems,
 } from './landSubdivisionEngine';
 import { runSameeNashqadWorkflow } from './nashqadWorkflowEngine';
+import { isNativeAndroidApkRuntime } from './androidApkBridge';
 
 /* ============================================================================
  * 1. DATA CONTRACTS FOR SAHANKA AI v2 (10-YEAR ARCHIVE + 15m / 90x48m AUDIT)
@@ -123,7 +124,7 @@ function computePolygonAreaAbs(pts: Point2D[]): number {
   return Math.abs(sum) * 0.5;
 }
 
-function measureBlockLongAndShortSidesM(rectUtm: Point2D[]): {
+export function measureBlockLongAndShortSidesM(rectUtm: Point2D[]): {
   longSideM: number;
   shortSideM: number;
   isRectangular: boolean;
@@ -1097,11 +1098,8 @@ function resolveApiBaseUrl(): string {
       : '';
   if (configured) return configured;
 
-  if (typeof window !== 'undefined') {
-    const proto = window.location.protocol;
-    if (proto === 'capacitor:' || proto === 'file:') {
-      return 'https://ais-pre-ikxmqhgq2xuyc54fkocnrg-560312417624.europe-west1.run.app';
-    }
+  if (isNativeAndroidApkRuntime()) {
+    return 'https://ais-pre-ikxmqhgq2xuyc54fkocnrg-560312417624.europe-west1.run.app';
   }
   return '';
 }
@@ -1135,7 +1133,8 @@ export async function requestSahankaGeminiInsights(payload: {
     });
     clearTimeout(timer);
 
-    if (!resp.ok) {
+    const contentType = resp.headers.get('content-type') || '';
+    if (!resp.ok || !contentType.toLowerCase().includes('application/json')) {
       return fallback;
     }
 

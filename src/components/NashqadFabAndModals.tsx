@@ -227,7 +227,7 @@ export const NashqadSummaryCard: React.FC<{
           {/* 90×48m Standard Rule Summary Line */}
           {Math.round(summary.standardPlotAreaSqM) === 432 && (
             <div className="rounded-xl bg-[#0F1B2D]/85 border border-[#22C55E]/30 px-2.5 py-1.5 text-[10.5px] text-[#E2E8F0] leading-snug tabular-nums">
-              <strong className="text-[#22C55E]">Xeerka 90×48 m:</strong> Waddo 15 m (4 dhinac) · Plot 18×24 m · Half 1,5,6,10 = 18×12 m · Half 2,3,4,7,8,9 = 9×24 m
+              <strong className="text-[#22C55E]">Halbeegga 48×90 m:</strong> Ballac 48 m · Dherer 90 m · Waddo 15 m (4 dhinac) · Plot 18×24 m · Half 1,5,6,10 = 18×12 m · Half 2,3,4,7,8,9 = 9×24 m
             </div>
           )}
 
@@ -1077,14 +1077,15 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                     </button>
                   )}
 
-                  {/* Automatic 90×48m Rule Explanation — Zero Extra Inputs Needed */}
-                  <div className="rounded-xl bg-[#0F1B2D]/85 border border-[#243449] px-3.5 py-2.5 space-y-1 text-[11px] text-[#94A3B8] leading-relaxed">
+                  {/* Automatic 48×90m + 15m Rule Explanation — Zero Extra Inputs Needed */}
+                  <div className="rounded-xl bg-[#0F1B2D]/85 border border-[#243449] px-3.5 py-2.5 space-y-1 text-[11px] text-[#94A3B8] leading-relaxed tabular-nums">
                     <div className="font-bold text-[#22C55E]">
-                      Xisaabin toos ah (wax kale looma baahna):
+                      Halbeegga rasmiga ah (Ballac 48m × Dherer 90m · Waddo 15m):
                     </div>
                     <div>
-                      • Block <strong className="text-[#F8FAFC]">90×48 m</strong>: afarta dhinacba waddo{' '}
-                      <strong className="text-[#F8FAFC]">15 m</strong>, plot kasta{' '}
+                      • Block kasta: <strong className="text-[#F8FAFC]">Ballac = 48 m</strong>,{' '}
+                      <strong className="text-[#F8FAFC]">Dherer = 90 m</strong>, afarta dhinacna{' '}
+                      <strong className="text-[#F8FAFC]">Waddo = 15 m</strong>, plot kasta{' '}
                       <strong className="text-[#F8FAFC]">18×24 m</strong>.
                     </div>
                     <div>
@@ -1123,25 +1124,40 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
 
                   {/* 2) Cabbirka Block-ga & Bearing-ka Jihada Ballaca */}
                   <div className="space-y-2.5">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <label className="block font-bold text-[#F8FAFC]">
                         2. Cabbirka Block-ga &amp; Bearing-ka Jihada Ballaca
                       </label>
-                      {detectedSampleMetrics && (
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => {
-                            setBlockLengthM(String(detectedSampleMetrics.lengthM));
-                            setBlockWidthM(String(detectedSampleMetrics.widthM));
-                            setWidthBearingDeg(String(detectedSampleMetrics.widthBearingDeg));
-                            setLengthBearingDeg(String(detectedSampleMetrics.lengthBearingDeg));
-                            setUserEditedBearing(false);
+                            setBlockWidthM('48');
+                            setBlockLengthM('90');
+                            setPlotWidthM('18');
+                            setPlotDepthM('24');
+                            setRoadWidthM('15');
                           }}
-                          className="min-h-[26px] px-2 py-0.5 rounded-lg bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 border border-[#38BDF8]/45 text-[10.5px] font-bold text-[#38BDF8] shrink-0 cursor-pointer"
+                          className="min-h-[26px] px-2 py-0.5 rounded-lg bg-[#22C55E]/15 hover:bg-[#22C55E]/25 border border-[#22C55E]/45 text-[10.5px] font-bold text-[#22C55E] shrink-0 cursor-pointer tabular-nums"
                         >
-                          Waafaji Block Tusaale
+                          48×90m · Waddo 15m
                         </button>
-                      )}
+                        {detectedSampleMetrics && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBlockLengthM(String(detectedSampleMetrics.lengthM));
+                              setBlockWidthM(String(detectedSampleMetrics.widthM));
+                              setWidthBearingDeg(String(detectedSampleMetrics.widthBearingDeg));
+                              setLengthBearingDeg(String(detectedSampleMetrics.lengthBearingDeg));
+                              setUserEditedBearing(false);
+                            }}
+                            className="min-h-[26px] px-2 py-0.5 rounded-lg bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 border border-[#38BDF8]/45 text-[10.5px] font-bold text-[#38BDF8] shrink-0 cursor-pointer"
+                          >
+                            Waafaji Block Tusaale
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5">

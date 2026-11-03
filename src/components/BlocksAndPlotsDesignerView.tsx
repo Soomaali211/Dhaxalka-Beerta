@@ -1443,12 +1443,45 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
           {/* STEP 2: CABBIRRADA SHABAKADDA (MITIR) */}
           {!subdivisionState.prebuiltSubdivision && (
             <section className="bg-[#0B1220] border border-[#243449] rounded-2xl p-4 space-y-3">
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#10B981] flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[#10B981] text-[#030712] text-[11px] font-mono-numbers tabular-nums flex items-center justify-center">
-                  2
-                </span>
-                <span>Cabbirrada Blocks, Plots &amp; Waddooyinka (m)</span>
-              </h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#10B981] flex items-center gap-2 min-w-0">
+                  <span className="w-5 h-5 rounded-md bg-[#10B981] text-[#030712] text-[11px] font-mono-numbers tabular-nums flex items-center justify-center shrink-0">
+                    2
+                  </span>
+                  <span className="truncate">Cabbirrada Blocks, Plots &amp; Waddooyinka (m)</span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateSubdivisionState((prev) => ({
+                      ...prev,
+                      prebuiltSubdivision: null,
+                      approvalStatus:
+                        prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+                      params: {
+                        ...prev.params,
+                        L: 90,
+                        W: 48,
+                        pw: 18,
+                        pd: 24,
+                        rU: 15,
+                        rV: 15,
+                        linkRoads: true,
+                        rot: 0,
+                        su: 0,
+                        sv: 0,
+                      },
+                    }));
+                    onNotify(
+                      'Halbeegga 48×90m & Waddo 15m',
+                      'Block kasta waxaa lagu fadhiisiyey Ballac = 48 m, Dherer = 90 m, iyo Waddo = 15 m.'
+                    );
+                  }}
+                  className="min-h-[28px] px-2 py-0.5 rounded-lg bg-[#0F1B2D] hover:bg-[#16263D] border border-[#10B981]/50 text-[10px] font-extrabold text-[#10B981] shrink-0 cursor-pointer tabular-nums"
+                >
+                  48×90m · 15m
+                </button>
+              </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>

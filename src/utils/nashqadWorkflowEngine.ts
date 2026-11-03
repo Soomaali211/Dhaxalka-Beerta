@@ -133,14 +133,21 @@ export interface InspectedNashqadFile {
   recognizedBy: 'filename' | 'geometry' | 'manual';
 }
 
+export const STANDARD_BLOCK_WIDTH_M = 48;
+export const STANDARD_BLOCK_LENGTH_M = 90;
+export const STANDARD_ROAD_WIDTH_M = 15;
+export const STANDARD_PLOT_WIDTH_M = 18;
+export const STANDARD_PLOT_DEPTH_M = 24;
+
 export interface SampleBlockAxisAlignOptions {
   /**
    * - 'both' (default): align both Dherer & Ballac (dimensions + bearings) to sample block
    * - 'length_only': align ONLY Dherer (L & length bearing) to sample block; keep current Ballac
    * - 'width_only': align ONLY Ballac (W & width bearing) to sample block; keep current Dherer locked
    * - 'manual_bearing': apply manual bearing degree (e.g. Ballac bearing while Dherer stays locked to sample block)
+   * - 'standard_90x48_15m': keep sample block's exact bearing while locking every block to Ballaca=48m, Dhererka=90m, Waddo=15m
    */
-  mode?: 'both' | 'length_only' | 'width_only' | 'manual_bearing';
+  mode?: 'both' | 'length_only' | 'width_only' | 'manual_bearing' | 'standard_90x48_15m';
   swapAxes?: boolean;
   exactDimensions?: boolean;
   manualLengthM?: number;
@@ -1176,8 +1183,14 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
       };
     }
   } else {
-    const bw = Number(input.blockWidthM);
-    const bl = Number(input.blockLengthM);
+    const bw =
+      input.blockWidthM !== undefined && input.blockWidthM !== null
+        ? Number(input.blockWidthM)
+        : STANDARD_BLOCK_WIDTH_M;
+    const bl =
+      input.blockLengthM !== undefined && input.blockLengthM !== null
+        ? Number(input.blockLengthM)
+        : STANDARD_BLOCK_LENGTH_M;
     if (!Number.isFinite(bw) || bw <= 0 || !Number.isFinite(bl) || bl <= 0) {
       return {
         ok: false,
@@ -1413,8 +1426,14 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
   } else {
     const fr = frameFromRing(boundaryCCW);
     c0 = fr.c;
-    L = Number(input.blockLengthM);
-    W = Number(input.blockWidthM);
+    L =
+      input.blockLengthM !== undefined && input.blockLengthM !== null
+        ? Number(input.blockLengthM)
+        : STANDARD_BLOCK_LENGTH_M;
+    W =
+      input.blockWidthM !== undefined && input.blockWidthM !== null
+        ? Number(input.blockWidthM)
+        : STANDARD_BLOCK_WIDTH_M;
 
     if (hasExplicitLengthBearing && hasExplicitBearing) {
       u = unitVectorFromCompassBearing(parsedLengthBearingDeg, false);
@@ -1442,16 +1461,22 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
 
   const axesAreOrthogonal = Math.abs(Math.abs(u[0] * v[1] - u[1] * v[0]) - 1) <= 0.01;
 
-  // Check if block is 90×48 m (or 48×90 m within survey tolerance ±2.5 m)
+  // Enforce canonical Ballaca = 48 m, Dhererka = 90 m, Waddo = 15 m:
+  // - In 'file' mode without explicit exact-sample override or manual axis dimensions, ALWAYS adopt sample bearing + 90×48m + 15m!
+  // - In 'dimensions' mode, apply canonical 90×48m + 15m whenever dimensions are 90×48m (within ±2.5m).
   const rawLongSide = Math.max(L, W);
   const rawShortSide = Math.min(L, W);
   const isExact90x48 =
-    Math.abs(rawLongSide - 90) <= 0.15 && Math.abs(rawShortSide - 48) <= 0.15;
+    Math.abs(rawLongSide - STANDARD_BLOCK_LENGTH_M) <= 0.15 &&
+    Math.abs(rawShortSide - STANDARD_BLOCK_WIDTH_M) <= 0.15;
   const is90x48Block =
     axesAreOrthogonal &&
     (forceExactSample || hasIndependentAxisControl
       ? isExact90x48
-      : Math.abs(rawLongSide - 90) <= 2.5 && Math.abs(rawShortSide - 48) <= 2.5);
+      : input.sampleBlockMode === 'file'
+      ? true
+      : Math.abs(rawLongSide - STANDARD_BLOCK_LENGTH_M) <= 2.5 &&
+        Math.abs(rawShortSide - STANDARD_BLOCK_WIDTH_M) <= 2.5);
 
   const hasCustomNonStandardOverride =
     (hasCallerPlotW || hasCallerPlotD || hasCallerRoad) &&
@@ -1661,31 +1686,15 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
 
         if (survivingPlots.length === 0) continue;
 
-        let bestBlockRing = blockRectUtm;
-        if (classifyRectInsideBoundaryUtm(blockRectUtm, boundaryCCW) !== 'full') {
-          const blockClipOut = intersectPolygonWithTriangulatedBoundary(
-            blockRectUtm,
-            boundaryTriangles
-          );
-          if (blockClipOut.insideRingsUtm.length > 0) {
-            let maxBA = 0;
-            for (const bp of blockClipOut.insideRingsUtm) {
-              const ba = Math.abs(shoelaceArea(bp));
-              if (ba > maxBA && bp.length >= 3) {
-                maxBA = ba;
-                bestBlockRing = bp;
-              }
-            }
-          }
-        }
-
+        // Every canonical block keeps its exact 4-vertex 90m × 48m (4,320 m²) rectangle
+        // with 15m 4-sided road spacing; child plots & half-plots are strictly 100% inside the farm boundary.
         const centerPt = P90(cu, cv);
         rawBlocks.push({
           ci,
           rj,
           centerEast: centerPt[0],
           centerNorth: centerPt[1],
-          blockRingUtm: bestBlockRing,
+          blockRingUtm: blockRectUtm,
           clippedPlots: survivingPlots,
         });
       }
@@ -1909,6 +1918,8 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
       ringLonLat: blockRingLonLat,
       rawProperties: {
         block: blockSeqName,
+        dherer_m: +Math.max(L, W).toFixed(2),
+        ballac_m: +Math.min(L, W).toFixed(2),
         area_m2: blockAreaSqM,
         bearing_deg: appliedBearingDeg,
         waddo_m: roadM,
@@ -3347,6 +3358,11 @@ export function alignAllBlocksToSampleBlock(
           'Bearing-ka Ballaca iyo Bearing-ka Dhererka isku xariiq ma noqon karaan (ugu yaraan 10° ha u dhexeeyo).',
       };
     }
+  } else if (mode === 'standard_90x48_15m') {
+    targetL = STANDARD_BLOCK_LENGTH_M;
+    targetW = STANDARD_BLOCK_WIDTH_M;
+    targetLenB = swapAxes ? sampleWidB : sampleLenB;
+    targetWidB = normalizeCompassBearingMod180(targetLenB + 90);
   } else {
     // mode === 'both'
     targetL = exactDimensions ? sampleLenM : curLenM;
@@ -3374,7 +3390,21 @@ export function alignAllBlocksToSampleBlock(
     };
 
     const res =
-      mode === 'both'
+      mode === 'standard_90x48_15m'
+        ? runSameeNashqadWorkflow({
+            boundaryFileName: state.boundaryFileName || 'Xuduudka_Beerta.geojson',
+            boundaryFileText: toFcText(boundaryRingLonLat),
+            sampleBlockMode: 'file',
+            sampleBlockFileName: sampleName,
+            sampleBlockFileText: toFcText(sampleRingLonLat),
+            matchExactSampleBlock: false,
+            swapSampleAxes: swapAxes,
+            roadWidthM: STANDARD_ROAD_WIDTH_M,
+            plotWidthM: STANDARD_PLOT_WIDTH_M,
+            plotDepthM: STANDARD_PLOT_DEPTH_M,
+            previousState: state,
+          })
+        : mode === 'both'
         ? runSameeNashqadWorkflow({
             boundaryFileName: state.boundaryFileName || 'Xuduudka_Beerta.geojson',
             boundaryFileText: toFcText(boundaryRingLonLat),
@@ -3436,12 +3466,21 @@ export function alignAllBlocksToSampleBlock(
   }
 
   // MODE B: Parametric CAD Designer Mode -> Snap params (L, W, pw, pd, customLengthBearingDeg, customWidthBearingDeg)
-  const basePw = state.params.pw > 0 ? state.params.pw : 18;
-  const basePd = state.params.pd > 0 ? state.params.pd : 24;
+  const isStandardMode = mode === 'standard_90x48_15m';
+  const basePw = isStandardMode
+    ? STANDARD_PLOT_WIDTH_M
+    : state.params.pw > 0
+    ? state.params.pw
+    : STANDARD_PLOT_WIDTH_M;
+  const basePd = isStandardMode
+    ? STANDARD_PLOT_DEPTH_M
+    : state.params.pd > 0
+    ? state.params.pd
+    : STANDARD_PLOT_DEPTH_M;
   const nC = Math.max(1, Math.round(targetL / basePw));
   const nR = Math.max(1, Math.round(targetW / basePd));
-  const alignedPw = +(targetL / nC).toFixed(3);
-  const alignedPd = +(targetW / nR).toFixed(3);
+  const alignedPw = isStandardMode ? STANDARD_PLOT_WIDTH_M : +(targetL / nC).toFixed(3);
+  const alignedPd = isStandardMode ? STANDARD_PLOT_DEPTH_M : +(targetW / nR).toFixed(3);
 
   const nextParams: SubdivisionParams = {
     ...state.params,
@@ -3449,18 +3488,23 @@ export function alignAllBlocksToSampleBlock(
     W: targetW,
     pw: alignedPw,
     pd: alignedPd,
+    rU: isStandardMode ? STANDARD_ROAD_WIDTH_M : state.params.rU,
+    rV: isStandardMode ? STANDARD_ROAD_WIDTH_M : state.params.rV,
+    linkRoads: isStandardMode ? true : state.params.linkRoads,
     rot: 0,
-    swap: mode === 'both' ? swapAxes : false,
+    swap: mode === 'both' || isStandardMode ? swapAxes : false,
     su: 0,
     sv: 0,
     customLengthBearingDeg:
-      mode === 'both' &&
-      computeBearingDiffMod180(sampleLenB, normalizeCompassBearingMod180(sampleWidB + 90)) < 0.25
+      isStandardMode ||
+      (mode === 'both' &&
+        computeBearingDiffMod180(sampleLenB, normalizeCompassBearingMod180(sampleWidB + 90)) < 0.25)
         ? null
         : (targetLenB ?? sampleLenB),
     customWidthBearingDeg:
-      mode === 'both' &&
-      computeBearingDiffMod180(sampleLenB, normalizeCompassBearingMod180(sampleWidB + 90)) < 0.25
+      isStandardMode ||
+      (mode === 'both' &&
+        computeBearingDiffMod180(sampleLenB, normalizeCompassBearingMod180(sampleWidB + 90)) < 0.25)
         ? null
         : (targetWidB ?? sampleWidB),
   };
@@ -3509,7 +3553,9 @@ export function alignAllBlocksToSampleBlock(
   };
 
   const modeAuditLabel =
-    mode === 'length_only'
+    mode === 'standard_90x48_15m'
+      ? 'Halbeegga 90×48m & Waddo 15m'
+      : mode === 'length_only'
       ? 'Dhererka oo keliya'
       : mode === 'width_only'
       ? 'Ballaca oo keliya'

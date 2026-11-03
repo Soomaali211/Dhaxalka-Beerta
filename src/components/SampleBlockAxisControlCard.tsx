@@ -411,36 +411,52 @@ export const SampleBlockAxisControlCard: React.FC<SampleBlockAxisControlCardProp
         </div>
       )}
 
-      {/* Bottom Action Row: Align Both + 90° Swap */}
-      <div className="flex items-center gap-1.5">
+      {/* Bottom Action Row: Align Both + 90° Swap + Canonical 48×90m + 15m Standard */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() =>
+              onAlign({ mode: 'both', exactDimensions: true, swapAxes: false })
+            }
+            className="flex-1 min-h-[31px] rounded-lg bg-[#22C55E] hover:bg-[#16A34A] text-[#05130B] px-2.5 py-1 text-[10.5px] font-black inline-flex items-center justify-center gap-1 transition-colors cursor-pointer"
+          >
+            <Check className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">Waafaji Labadaba</span>
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onAlign({
+                mode: 'both',
+                exactDimensions: true,
+                swapAxes: !alignment.axesSwapped,
+              })
+            }
+            title="Wareeji 90° (Dherer ↔ Ballac)"
+            className={`min-h-[31px] rounded-lg border px-2 py-1 text-[10.5px] font-bold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0 ${
+              isPaperMode
+                ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                : 'bg-[#0F1B2D] border-[#243449] text-[#E2E8F0] hover:border-amber-400'
+            }`}
+          >
+            <ArrowLeftRight className="w-3 h-3 shrink-0" />
+            <span>90°</span>
+          </button>
+        </div>
+
         <button
           type="button"
           onClick={() =>
-            onAlign({ mode: 'both', exactDimensions: true, swapAxes: false })
+            onAlign({ mode: 'standard_90x48_15m', swapAxes: alignment.axesSwapped })
           }
-          className="flex-1 min-h-[31px] rounded-lg bg-[#22C55E] hover:bg-[#16A34A] text-[#05130B] px-2.5 py-1 text-[10.5px] font-black inline-flex items-center justify-center gap-1 transition-colors cursor-pointer"
-        >
-          <Check className="w-3.5 h-3.5 shrink-0" />
-          <span className="truncate">Waafaji Labadaba</span>
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onAlign({
-              mode: 'both',
-              exactDimensions: true,
-              swapAxes: !alignment.axesSwapped,
-            })
-          }
-          title="Wareeji 90° (Dherer ↔ Ballac)"
-          className={`min-h-[31px] rounded-lg border px-2 py-1 text-[10.5px] font-bold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer shrink-0 ${
+          className={`w-full min-h-[30px] rounded-lg border px-2.5 py-1 text-[10px] font-extrabold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer ${
             isPaperMode
-              ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
-              : 'bg-[#0F1B2D] border-[#243449] text-[#E2E8F0] hover:border-amber-400'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100'
+              : 'bg-[#0F1B2D] border-[#22C55E]/45 text-[#22C55E] hover:bg-[#16263D]'
           }`}
         >
-          <ArrowLeftRight className="w-3 h-3 shrink-0" />
-          <span>90°</span>
+          <span>Halbeegga: Ballac 48m × Dherer 90m · Waddo 15m</span>
         </button>
       </div>
     </div>

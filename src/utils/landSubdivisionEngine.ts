@@ -893,6 +893,39 @@ export function hydrateLandSubdivisionState(raw: any): LandSubdivisionState {
     raw.boundaryItems.length === 0 &&
     !raw.prebuiltSubdivision;
 
+  const rawParams = raw.params && typeof raw.params === 'object' ? raw.params : {};
+  const posNum = (val: unknown, def: number): number => {
+    const n = Number(val);
+    return Number.isFinite(n) && n > 0 ? n : def;
+  };
+  const nonNegNum = (val: unknown, def: number): number => {
+    const n = Number(val);
+    return Number.isFinite(n) && n >= 0 ? n : def;
+  };
+  const finNum = (val: unknown, def: number): number => {
+    const n = Number(val);
+    return Number.isFinite(n) ? n : def;
+  };
+  const sanitizedParams: SubdivisionParams = {
+    ...fallback.params,
+    ...rawParams,
+    L: posNum(rawParams.L, DEFAULT_SUBDIVISION_PARAMS.L),
+    W: posNum(rawParams.W, DEFAULT_SUBDIVISION_PARAMS.W),
+    pw: posNum(rawParams.pw, DEFAULT_SUBDIVISION_PARAMS.pw),
+    pd: posNum(rawParams.pd, DEFAULT_SUBDIVISION_PARAMS.pd),
+    rU: nonNegNum(rawParams.rU, DEFAULT_SUBDIVISION_PARAMS.rU),
+    rV: nonNegNum(rawParams.rV, DEFAULT_SUBDIVISION_PARAMS.rV),
+    minP: Math.max(1, Math.round(posNum(rawParams.minP, DEFAULT_SUBDIVISION_PARAMS.minP))),
+    rot: finNum(rawParams.rot, DEFAULT_SUBDIVISION_PARAMS.rot),
+    su: finNum(rawParams.su, DEFAULT_SUBDIVISION_PARAMS.su),
+    sv: finNum(rawParams.sv, DEFAULT_SUBDIVISION_PARAMS.sv),
+    linkRoads:
+      typeof rawParams.linkRoads === 'boolean'
+        ? rawParams.linkRoads
+        : DEFAULT_SUBDIVISION_PARAMS.linkRoads,
+    swap: typeof rawParams.swap === 'boolean' ? rawParams.swap : false,
+  };
+
   return {
     ...fallback,
     ...raw,
@@ -901,7 +934,7 @@ export function hydrateLandSubdivisionState(raw: any): LandSubdivisionState {
       typeof raw.specialAreaFileName === 'string'
         ? raw.specialAreaFileName
         : fallback.specialAreaFileName,
-    params: { ...fallback.params, ...(raw.params || {}) },
+    params: sanitizedParams,
     tierUnitPrices: { ...fallback.tierUnitPrices, ...(raw.tierUnitPrices || {}) },
     blockZones:
       raw.blockZones && typeof raw.blockZones === 'object'

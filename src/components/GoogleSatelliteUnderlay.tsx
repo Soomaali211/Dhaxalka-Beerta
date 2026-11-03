@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   APIProvider,
   Map,
@@ -63,6 +63,17 @@ const CameraAndStatusSync: React.FC<{
     }
   }, [loadingStatus]);
 
+  // Safety timeout: if Android APK referrer restriction or slow mobile data prevents Google Maps JS API from loading within 6.5s, fall back cleanly to free Esri Satellite tiles
+  useEffect(() => {
+    if (loadingStatus === APILoadingStatus.LOADED) return;
+    const timeoutId = window.setTimeout(() => {
+      if (lastReportedRef.current !== 'ready') {
+        reportStatus('fallback');
+      }
+    }, 6500);
+    return () => window.clearTimeout(timeoutId);
+  }, [loadingStatus]);
+
   useEffect(() => {
     if (!map) return;
     map.moveCamera({
@@ -86,6 +97,33 @@ export const GoogleSatelliteUnderlay: React.FC<GoogleSatelliteUnderlayProps> = (
   showHybridLabels,
   onStatusChange,
 }) => {
+  const [isOffline, setIsOffline] = useState<boolean>(
+    () => typeof navigator !== 'undefined' && navigator.onLine === false
+  );
+
+  useEffect(() => {
+    const handleOffline = () => {
+      setIsOffline(true);
+      onStatusChange('fallback');
+    };
+    const handleOnline = () => {
+      setIsOffline(false);
+    };
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    if (isOffline || !apiKey) {
+      onStatusChange('fallback');
+    }
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [apiKey, isOffline, onStatusChange]);
+
+  if (isOffline || !apiKey) {
+    return null;
+  }
+
   return (
     <div className="absolute inset-0 z-0 pointer-events-none select-none overflow-hidden">
       <APIProvider

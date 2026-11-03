@@ -24,6 +24,7 @@ import {
   computeStandalonePlotModeAllocation,
   createInitialSampleSubdivisionState,
   getDistinctHeirColor,
+  hydrateLandSubdivisionState,
   inspectMultipleGeoJsonUploads,
   prepareBulkMetadataImportFromCSV,
   syncSubdivisionToEstateAssets,
@@ -68,6 +69,11 @@ import {
   selectMapFeaturesByRadiusUtm,
 } from '../src/utils/demAndRoadTierEngine';
 import {
+  STANDARD_BLOCK_LENGTH_M,
+  STANDARD_BLOCK_WIDTH_M,
+  STANDARD_PLOT_DEPTH_M,
+  STANDARD_PLOT_WIDTH_M,
+  STANDARD_ROAD_WIDTH_M,
   alignAllBlocksToSampleBlock,
   buildNashqadBeerState,
   buildPlotsGeoJsonClipboardText,
@@ -87,8 +93,10 @@ import {
   autoFixToStandard15m90x48,
   buildSurveyBoundaryGeoJsonFromCenter,
   computeOfflineClimatology10Yr,
+  measureBlockLongAndShortSidesM,
   runSahankaAiSurvey,
 } from '../src/utils/sahankaAiEngine';
+import { safePersistJsonToLocalStorage } from '../src/utils/androidApkBridge';
 
 let passedCount = 0;
 let failedCount = 0;
@@ -3151,7 +3159,238 @@ async function runSection16SahankaTests(): Promise<void> {
   );
 }
 
+async function runSection17CanonicalBlockAndApkSafetyTests(): Promise<void> {
+  console.log('\n17. Halbeegga Ballac=48m × Dherer=90m · Waddo=15m & Ilaalinta APK (v1.6.1)');
+
+  // 17A. Canonical constants & default params match Ballac = 48m, Dherer = 90m, Waddo = 15m
+  assert(
+    STANDARD_BLOCK_WIDTH_M === 48 &&
+      STANDARD_BLOCK_LENGTH_M === 90 &&
+      STANDARD_ROAD_WIDTH_M === 15 &&
+      STANDARD_PLOT_WIDTH_M === 18 &&
+      STANDARD_PLOT_DEPTH_M === 24 &&
+      DEFAULT_SUBDIVISION_PARAMS.W === 48 &&
+      DEFAULT_SUBDIVISION_PARAMS.L === 90 &&
+      DEFAULT_SUBDIVISION_PARAMS.rU === 15 &&
+      DEFAULT_SUBDIVISION_PARAMS.rV === 15,
+    '17A: Canonical constants & DEFAULT_SUBDIVISION_PARAMS lock Ballaca=48m, Dhererka=90m, Waddo=15m, Plot=18×24m'
+  );
+
+  // 17B. Irregular polygon boundary: EVERY single generated block (including edge blocks) is exact 48×90m (4,320 m²) + 15m road
+  const irregularFarmGeoJson = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Beerta Geesaha Qalloocan' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [500000, 1050000],
+              [500410, 1050015],
+              [500445, 1050290],
+              [500030, 1050315],
+              [500000, 1050000],
+            ],
+          ],
+        },
+      },
+    ],
+  });
+
+  const stdBuild = runSameeNashqadWorkflow({
+    boundaryFileName: 'beerta_qalloocan.geojson',
+    boundaryFileText: irregularFarmGeoJson,
+    sampleBlockMode: 'dimensions',
+  });
+
+  assert(stdBuild.ok === true && stdBuild.summary.blocksCount >= 6, '17B.1: Default dimensions workflow builds >= 6 blocks with omitted dimensions defaulting to 48×90m');
+  if (stdBuild.ok && stdBuild.nextState.prebuiltSubdivision) {
+    const subComp = computeLandSubdivision(
+      stdBuild.nextState.boundaryItems[0],
+      null,
+      stdBuild.nextState.params,
+      stdBuild.nextState.prebuiltSubdivision
+    );
+    const allBlocksExact48x90 = Boolean(
+      subComp &&
+        subComp.blocks.length > 0 &&
+        subComp.blocks.every((b) => {
+          const sides = measureBlockLongAndShortSidesM(b.rect);
+          return (
+            b.rect.length === 4 &&
+            approxEqual(sides.longSideM, 90, 0.25) &&
+            approxEqual(sides.shortSideM, 48, 0.25)
+          );
+        })
+    );
+    const audit = audit15mAnd90x48mCompliance(stdBuild.nextState);
+    assert(
+      allBlocksExact48x90 &&
+        audit.isFullyCompliant === true &&
+        audit.minMeasuredBlockGapM !== null &&
+        approxEqual(audit.minMeasuredBlockGapM, 15.0, 0.25),
+      `17B.2: All ${subComp?.blocks.length || 0} blocks (100% including edge blocks) measure exact 48×90m with ${audit.minMeasuredBlockGapM}m 4-sided roads`
+    );
+  }
+
+  // 17C. Rough sample block (82×44m @ 33° width bearing) in 'file' mode adopts 33° bearing while enforcing 48×90m + 15m road
+  const wRad33 = (33 * Math.PI) / 180;
+  const lRad123 = ((33 + 90) * Math.PI) / 180;
+  const vx33 = Math.sin(wRad33), vy33 = Math.cos(wRad33);
+  const ux33 = Math.sin(lRad123), uy33 = Math.cos(lRad123);
+  const roughSample82x44 = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Rough Sample 82x44' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [500150 - ux33 * 41 - vx33 * 22, 1050140 - uy33 * 41 - vy33 * 22],
+              [500150 + ux33 * 41 - vx33 * 22, 1050140 + uy33 * 41 - vy33 * 22],
+              [500150 + ux33 * 41 + vx33 * 22, 1050140 + uy33 * 41 + vy33 * 22],
+              [500150 - ux33 * 41 + vx33 * 22, 1050140 - uy33 * 41 + vy33 * 22],
+              [500150 - ux33 * 41 - vx33 * 22, 1050140 - uy33 * 41 - vy33 * 22],
+            ],
+          ],
+        },
+      },
+    ],
+  });
+
+  const roughAutoRes = runSameeNashqadWorkflow({
+    boundaryFileName: 'beerta.geojson',
+    boundaryFileText: irregularFarmGeoJson,
+    sampleBlockMode: 'file',
+    sampleBlockFileName: 'rough_sample.geojson',
+    sampleBlockFileText: roughSample82x44,
+  });
+
+  assert(
+    Boolean(
+      roughAutoRes.ok &&
+        roughAutoRes.summary.sampleBlockAlignment &&
+        roughAutoRes.summary.sampleBlockAlignment.appliedLengthM === 90 &&
+        roughAutoRes.summary.sampleBlockAlignment.appliedWidthM === 48 &&
+        approxEqual(roughAutoRes.summary.sampleBlockAlignment.appliedWidthBearingDeg, 33, 0.6) &&
+        audit15mAnd90x48mCompliance(roughAutoRes.nextState).isFullyCompliant === true
+    ),
+    '17C: Rough 82×44m sample block in file mode adopts 33° bearing while enforcing canonical Ballac=48m × Dherer=90m + Waddo=15m'
+  );
+
+  // 17D. 1-click mode='standard_90x48_15m' snaps custom exact-sample layout back to 48×90m + 15m while keeping bearing 33°
+  if (roughAutoRes.ok) {
+    const customExact = alignAllBlocksToSampleBlock(roughAutoRes.nextState, {
+      mode: 'both',
+      exactDimensions: true,
+    });
+    assert(
+      Boolean(customExact.ok && approxEqual(customExact.summary.sampleBlockAlignment?.appliedLengthM || 0, 82, 0.4)),
+      '17D.1: Exact sample mode switches to 82×44m when explicitly requested'
+    );
+    if (customExact.ok) {
+      const snappedBack = alignAllBlocksToSampleBlock(customExact.nextState, {
+        mode: 'standard_90x48_15m',
+      });
+      const backAudit = snappedBack.ok ? audit15mAnd90x48mCompliance(snappedBack.nextState) : null;
+      assert(
+        Boolean(
+          snappedBack.ok &&
+            backAudit?.isFullyCompliant === true &&
+            snappedBack.summary.sampleBlockAlignment?.appliedLengthM === 90 &&
+            snappedBack.summary.sampleBlockAlignment?.appliedWidthM === 48 &&
+            approxEqual(snappedBack.summary.sampleBlockAlignment?.appliedWidthBearingDeg || 0, 33, 0.6)
+        ),
+        '17D.2: mode="standard_90x48_15m" restores Ballac=48m, Dherer=90m, Waddo=15m while preserving 33° sample bearing'
+      );
+    }
+  }
+
+  // 17E. Corrupt localStorage hydration sanitization & QuotaExceededError non-destructive recovery
+  const corruptedHydrated = hydrateLandSubdivisionState({
+    params: {
+      L: NaN,
+      W: 0,
+      pw: -5,
+      pd: null,
+      rU: -10,
+      rV: 'invalid',
+      minP: 0,
+    },
+  });
+  assert(
+    corruptedHydrated.params.L === 90 &&
+      corruptedHydrated.params.W === 48 &&
+      corruptedHydrated.params.pw === 18 &&
+      corruptedHydrated.params.pd === 24 &&
+      corruptedHydrated.params.rU === 15 &&
+      corruptedHydrated.params.rV === 15 &&
+      corruptedHydrated.params.minP === 1,
+    '17E.1: hydrateLandSubdivisionState sanitizes NaN/zero/negative localStorage params cleanly to 90×48m + 15m'
+  );
+
+  let writeAttempts = 0;
+  let storedPayload = '';
+  const mockQuotaStorage = {
+    setItem(_key: string, val: string) {
+      writeAttempts += 1;
+      if (writeAttempts === 1) {
+        throw new Error('QuotaExceededError');
+      }
+      storedPayload = val;
+    },
+  };
+  const bloatedCases = [
+    {
+      id: 'case_1',
+      caseName: 'Kiiska Tijaabada APK',
+      changeHistory: Array.from({ length: 80 }, (_, idx) => ({ id: `chg_${idx}` })),
+    },
+  ];
+  const quotaRes = safePersistJsonToLocalStorage('test_cases', bloatedCases, mockQuotaStorage);
+  const parsedRecovered = JSON.parse(storedPayload || '[]');
+  assert(
+    quotaRes.saved === true &&
+      quotaRes.trimmedHistory === true &&
+      parsedRecovered[0]?.id === 'case_1' &&
+      parsedRecovered[0]?.changeHistory?.length === 12,
+    '17E.2: safePersistJsonToLocalStorage recovers from Android WebView QuotaExceededError by compacting history without losing case data'
+  );
+
+  // 17F. Static Android APK safety invariants across Gradle, Manifest, MainActivity.java & ApkErrorBoundary
+  const gradleText = fs.readFileSync(path.resolve(process.cwd(), 'android/app/build.gradle'), 'utf8');
+  const manifestText = fs.readFileSync(
+    path.resolve(process.cwd(), 'android/app/src/main/AndroidManifest.xml'),
+    'utf8'
+  );
+  const mainActivityText = fs.readFileSync(
+    path.resolve(process.cwd(), 'android/app/src/main/java/so/beerta/dhaxalka/gis/MainActivity.java'),
+    'utf8'
+  );
+  const mainTsxText = fs.readFileSync(path.resolve(process.cwd(), 'src/main.tsx'), 'utf8');
+
+  assert(
+    gradleText.includes('113') &&
+      gradleText.includes('"1.6.1"') &&
+      manifestText.includes('android:hardwareAccelerated="true"') &&
+      manifestText.includes('android:largeHeap="true"') &&
+      manifestText.includes('android:windowSoftInputMode="adjustResize"') &&
+      mainActivityText.includes('requestLocationPermission') &&
+      mainActivityText.includes('pruneStaleExports') &&
+      mainActivityText.includes('RENDERER_PRIORITY_IMPORTANT') &&
+      mainActivityText.includes('BeertaAPK/1.6.1') &&
+      mainTsxText.includes('ApkErrorBoundary') &&
+      mainTsxText.includes('purgeStaleServiceWorkersInNativeApk'),
+    '17F: Android APK v1.6.1 (code 113) enforces hardwareAcceleration, largeHeap, runtime GPS permission, cache pruning, SW purge & ApkErrorBoundary'
+  );
+}
+
 runSection16SahankaTests()
+  .then(() => runSection17CanonicalBlockAndApkSafetyTests())
   .then(() => {
     console.log('\n-------------------------------------------------------------------');
     console.log(` REGRESSION SUMMARY: ${passedCount} passed, ${failedCount} failed`);
@@ -3162,7 +3401,8 @@ runSection16SahankaTests()
     }
   })
   .catch((err) => {
-    console.error('Unhandled error in Section 16 tests:', err);
+    console.error('Unhandled error in async regression tests:', err);
     process.exit(1);
   });
+
 

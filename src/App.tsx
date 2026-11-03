@@ -85,6 +85,7 @@ import {
 } from './utils/undoRedoEngine';
 import { ValidatedBackupPreview } from './utils/backupRestoreEngine';
 import { computeUnifiedFarmMetrics, countEnteredHeirs } from './utils/unifiedMetrics';
+import { safePersistJsonToLocalStorage } from './utils/androidApkBridge';
 
 import {
   CheckCircle2,
@@ -347,19 +348,11 @@ export default function App() {
   }, [activeCaseId]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(GIS_SUBDIVISION_STORAGE_KEY, JSON.stringify(subdivisionState));
-    } catch {
-      // ignore storage quota errors
-    }
+    safePersistJsonToLocalStorage(GIS_SUBDIVISION_STORAGE_KEY, subdivisionState);
   }, [subdivisionState]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(SAVED_CASES_STORAGE_KEY, JSON.stringify(savedCases));
-    } catch {
-      // ignore storage errors
-    }
+    safePersistJsonToLocalStorage(SAVED_CASES_STORAGE_KEY, savedCases);
   }, [savedCases]);
 
   // Modals
