@@ -1651,7 +1651,7 @@ export default function App() {
     activeDestination === 'dashboard' && dashboardMode === 'interactive_map';
 
   return (
-    <div className="min-h-screen bg-[#060d18] text-[#e8eef7] flex flex-col lg:flex-row font-sans selection:bg-[#22c55e]/30">
+    <div className="w-full min-w-0 max-w-full min-h-screen bg-[#060d18] text-[#e8eef7] flex flex-col lg:flex-row font-sans selection:bg-[#22c55e]/30 overflow-x-clip">
       {/* OFFLINE STATUS BANNER */}
       <OfflineIndicator />
 
@@ -1803,8 +1803,8 @@ export default function App() {
         <main
           className={
             isFullBleedMapActive
-              ? 'flex-1 w-full relative pb-16 lg:pb-0'
-              : 'flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 pb-24 lg:pb-10'
+              ? 'flex-1 w-full min-w-0 max-w-full relative pb-16 lg:pb-0'
+              : 'flex-1 w-full min-w-0 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 pb-24 lg:pb-10'
           }
         >
           {/* 1A. SCREEN 2 & SCREEN 6: INTERACTIVE GIS MAP DASHBOARD (OSM + SATELLITE + OFFLINE) */}
