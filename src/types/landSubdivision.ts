@@ -15,6 +15,52 @@ export interface SampleBlockCandidate {
   ring: Point2D[];
 }
 
+export interface SampleBlockAlignmentInfo {
+  sampleFileName: string;
+  /** Exact uploaded sample block polygon in WGS84 [lon, lat] for map overlay & re-alignment */
+  sampleRingLonLat: Point2D[];
+  /** Surveyed long side (Dherer) of the uploaded sample block in meters */
+  sampleLengthM: number;
+  /** Surveyed short side (Ballac) of the uploaded sample block in meters */
+  sampleWidthM: number;
+  /** Natural compass bearing (0°–180°) of the sample block's short/width axis */
+  sampleWidthBearingDeg: number;
+  /** Natural compass bearing (0°–180°) of the sample block's long/length axis */
+  sampleLengthBearingDeg: number;
+  /** Currently applied block length (Dherer) of generated blocks in meters */
+  appliedLengthM: number;
+  /** Currently applied block width (Ballac) of generated blocks in meters */
+  appliedWidthM: number;
+  /** Currently applied compass bearing (0°–180°) of generated blocks' width axis */
+  appliedWidthBearingDeg: number;
+  /** Currently applied compass bearing (0°–180°) of generated blocks' length axis */
+  appliedLengthBearingDeg: number;
+  /** Maximum angular discrepancy (0°–90°) across length & width axes */
+  bearingDiffDeg: number;
+  /** Angular discrepancy (0°–90°) between generated blocks' Dherer axis and sample block's Dherer axis */
+  lengthBearingDiffDeg: number;
+  /** Angular discrepancy (0°–90°) between generated blocks' Ballac axis and sample block's Ballac axis */
+  widthBearingDiffDeg: number;
+  /** Absolute difference |appliedLengthM - targetSampleLengthM| in meters */
+  lengthDiffM: number;
+  /** Absolute difference |appliedWidthM - targetSampleWidthM| in meters */
+  widthDiffM: number;
+  /** True when Dherer bearing (>0.25°) or Dherer length (>0.15m) differs from sample block */
+  hasLengthMismatch: boolean;
+  /** True when Ballac bearing (>0.25°) or Ballac width (>0.15m) differs from sample block */
+  hasWidthMismatch: boolean;
+  /** True when Dherer length and bearing match sample block */
+  isLengthAligned: boolean;
+  /** True when Ballac width and bearing match sample block */
+  isWidthAligned: boolean;
+  /** True when either Dherer or Ballac has a bearing or dimension mismatch */
+  hasMismatch: boolean;
+  /** True when explicitly aligned to match exact sample block bearing, dherer & ballac */
+  isAlignedToExactSample: boolean;
+  /** True when Dherer <-> Ballac axes were swapped by 90° relative to sample block */
+  axesSwapped: boolean;
+}
+
 export interface SubdivisionParams {
   L: number;      // Block length (m)
   W: number;      // Block width (m)
@@ -28,6 +74,10 @@ export interface SubdivisionParams {
   su: number;     // U-offset (m)
   sv: number;     // V-offset (m)
   swap: boolean;  // Align block length along short side of sample
+  /** Optional independent compass bearing (0°–180°) for Block Length (Dhererka) */
+  customLengthBearingDeg?: number | null;
+  /** Optional independent compass bearing (0°–180°) for Block Width (Ballaca) */
+  customWidthBearingDeg?: number | null;
 }
 
 export type HalfPlotValidationStatus =
@@ -241,6 +291,8 @@ export interface PrebuiltGeoJsonSubdivision {
     rawProperties: Record<string, unknown>;
   }[];
   validationWarnings: string[];
+  /** Sample block bearing, dherer & ballac comparison when generated or uploaded alongside a sample block */
+  sampleBlockAlignment?: SampleBlockAlignmentInfo | null;
 }
 
 export interface SubdivisionComputationResult {
@@ -286,6 +338,7 @@ export interface SubdivisionComputationResult {
   } | null;
   sampleRect: Point2D[] | null;
   sampleNote: { dL: number; dW: number } | null;
+  sampleBlockAlignment?: SampleBlockAlignmentInfo | null;
   warnings: string[];
   isPrebuiltGeometry?: boolean;
   inv: (utm: Point2D) => Point2D;
@@ -482,6 +535,8 @@ export interface NashqadWorkflowSummary {
   standardPlotAreaSqM: number;
   /** Compass bearing in degrees (0°–360° clockwise from North) for the direction of Block Width (W) */
   widthBearingDeg?: number;
+  /** Sample block bearing, dherer & ballac comparison metadata */
+  sampleBlockAlignment?: SampleBlockAlignmentInfo | null;
 }
 
 export interface LandSubdivisionState {

@@ -21,6 +21,7 @@ import { ListDataView, ListDataCategoryTab } from './components/ListDataView';
 import { WelcomeSplashView } from './components/WelcomeSplashView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ExportOptionsModal } from './components/ExportOptionsModal';
+import { ExportHubView } from './components/ExportHubView';
 import {
   CartographicPdfDocMode,
   FarmCartographicPdfModal,
@@ -83,6 +84,7 @@ import {
   pushUndoSnapshot,
 } from './utils/undoRedoEngine';
 import { ValidatedBackupPreview } from './utils/backupRestoreEngine';
+import { computeUnifiedFarmMetrics, countEnteredHeirs } from './utils/unifiedMetrics';
 
 import {
   CheckCircle2,
@@ -90,8 +92,6 @@ import {
   Map,
   Wrench,
   LayoutDashboard,
-  Calculator,
-  Award,
 } from 'lucide-react';
 
 const SAVED_CASES_STORAGE_KEY = 'faraid_saved_inheritance_cases';
@@ -184,11 +184,8 @@ function loadInitialManagedWorkspace(): InitialBootstrapState {
         ? initialSubdivision.boundaryFileName || 'Beerta Tusaalaha'
         : 'Khariidad ma laha',
       blocksCount: initSubRes ? initSubRes.blocks.length : 0,
-      fullPlotsCount: initSubRes ? initSubRes.plots.length : 0,
-      validHalfPlotsCount:
-        initSubRes?.htmlHalvesCounted?.length ??
-        initSubRes?.halfPlotSummary?.validHalfPlotsCount ??
-        0,
+      fullPlotsCount: computeUnifiedFarmMetrics(initialSubdivision, initSubRes, hasMap).fullPlotsCount,
+      validHalfPlotsCount: computeUnifiedFarmMetrics(initialSubdivision, initSubRes, hasMap).halfPlotsCount,
       clippedPlotsCount: initSubRes?.halfPlotSummary?.boundaryClippedPlotsCount || 0,
       landSubdivisionSnapshot: cloneSubdivisionStateIsolated(initialSubdivision),
       changeHistory: [
@@ -413,36 +410,48 @@ export default function App() {
     []
   );
 
-  // Bridge legacy child navigation callbacks cleanly into the 3 Primary Destinations
-  const navigateLegacyTab = useCallback((tab: LegacyTab) => {
-    switch (tab) {
-      case 'land_designer':
-        setActiveDestination('dashboard');
-        setDashboardMode('interactive_map');
-        break;
-      case 'dashboard':
-        setActiveDestination('dashboard');
-        setDashboardMode('overview');
-        break;
-      case 'calculator':
-        setActiveDestination('calculate');
-        setCalculateMode('calculator');
-        break;
-      case 'results':
-        setActiveDestination('calculate');
-        setCalculateMode('results');
-        break;
-      case 'cases':
-        setActiveDestination('list_data');
-        setListDataMode('cases');
-        break;
-      case 'records':
-        setActiveDestination('list_data');
-        setListDataMode('excel');
-        break;
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  // Bridge legacy child navigation callbacks cleanly into the 4 Primary Destinations
+  const navigateLegacyTab = useCallback(
+    (tab: LegacyTab) => {
+      switch (tab) {
+        case 'land_designer':
+          setActiveDestination('dashboard');
+          setDashboardMode('interactive_map');
+          break;
+        case 'dashboard':
+          setActiveDestination('dashboard');
+          setDashboardMode('overview');
+          break;
+        case 'calculator':
+          setActiveDestination('calculate');
+          setCalculateMode('calculator');
+          break;
+        case 'results':
+          if (countEnteredHeirs(heirsInput) === 0) {
+            showToast(
+              'Geli Dhaxlayaasha Marka Hore',
+              'Fadlan geli ugu yaraan hal dhaxle ka hor inta aanad eegin natiijada.'
+            );
+            setActiveDestination('calculate');
+            setCalculateMode('calculator');
+            break;
+          }
+          setActiveDestination('calculate');
+          setCalculateMode('results');
+          break;
+        case 'cases':
+          setActiveDestination('list_data');
+          setListDataMode('cases');
+          break;
+        case 'records':
+          setActiveDestination('list_data');
+          setListDataMode('excel');
+          break;
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [heirsInput, showToast]
+  );
 
   // Real-time Shariah Faraid calculation (Single Source of Truth)
   const calculationResult = useMemo(() => {
@@ -545,23 +554,16 @@ export default function App() {
     [subdivisionState]
   );
 
-  // Automatically keep the active case's isolated snapshot synchronized in `savedCases`
+  // Automatically keep the active case's isolated snapshot synchronized in `savedCases` (E10, E11)
   useEffect(() => {
     if (!activeCaseId) return;
     const heirCountNow = calculationResult.heirShares.reduce((sum, h) => sum + h.count, 0);
     const hasMapNow = doesSubdivisionHaveGeometry(subdivisionState);
-    const blocksCountNow = hasMapNow && subdivisionResult ? subdivisionResult.blocks.length : 0;
-    const fullPlotsCountNow = hasMapNow && subdivisionResult ? subdivisionResult.plots.length : 0;
-    const validHalfPlotsCountNow =
-      hasMapNow && subdivisionResult
-        ? subdivisionResult.htmlHalvesCounted?.length ??
-          subdivisionResult.halfPlotSummary?.validHalfPlotsCount ??
-          0
-        : 0;
-    const clippedPlotsCountNow =
-      hasMapNow && subdivisionResult
-        ? subdivisionResult.halfPlotSummary?.boundaryClippedPlotsCount || 0
-        : 0;
+    const unifiedNow = computeUnifiedFarmMetrics(subdivisionState, subdivisionResult, hasMapNow);
+    const blocksCountNow = unifiedNow.blocksCount;
+    const fullPlotsCountNow = unifiedNow.fullPlotsCount;
+    const validHalfPlotsCountNow = unifiedNow.halfPlotsCount;
+    const clippedPlotsCountNow = unifiedNow.clippedPlotsCount;
 
     setSavedCases((prev) =>
       prev.map((c) => {
@@ -1615,27 +1617,30 @@ export default function App() {
   };
 
   const currentHeirCount = calculationResult.heirShares.reduce((s, h) => s + h.count, 0);
-  const currentPlotsCount = currentHasMap && subdivisionResult ? subdivisionResult.plots.length : 0;
-  const currentHalfPlotsCount =
-    currentHasMap && subdivisionResult
-      ? subdivisionResult.htmlHalvesCounted?.length ??
-        subdivisionResult.halfPlotSummary?.validHalfPlotsCount ??
-        0
-      : 0;
+  const unifiedFarmMetrics = useMemo(
+    () => computeUnifiedFarmMetrics(subdivisionState, subdivisionResult, currentHasMap),
+    [subdivisionState, subdivisionResult, currentHasMap]
+  );
+  const currentPlotsCount = unifiedFarmMetrics.fullPlotsCount;
+  const currentHalfPlotsCount = unifiedFarmMetrics.halfPlotsCount;
 
   const sectionTitle =
     activeDestination === 'dashboard'
       ? 'Beerta & Dhaxalka'
       : activeDestination === 'calculate'
       ? 'Xisaabi Dhaxalka'
-      : 'Liiska Xogta';
+      : activeDestination === 'list_data'
+      ? 'Xogta & Kiisaska'
+      : 'Soo saar & Daabacaad';
 
   const sectionSubtitle =
     activeDestination === 'dashboard'
       ? 'Maaraynta Beerta & GIS'
       : activeDestination === 'calculate'
       ? `${activeCaseMeta.referenceNumber} · Faraa'idka`
-      : `${savedCases.length} Kiis · ${currentPlotsCount} Plot`;
+      : activeDestination === 'list_data'
+      ? `${savedCases.length} Kiis · ${currentPlotsCount} Buuxa`
+      : `${currentPlotsCount} Buuxa · ${currentHalfPlotsCount} Half`;
 
   // SCREEN 1: FULL-SCREEN WELCOME / SPLASH VIEW
   if (showWelcomeSplash) {
@@ -1653,25 +1658,25 @@ export default function App() {
     activeDestination === 'dashboard' && dashboardMode === 'interactive_map';
 
   return (
-    <div className="min-h-screen bg-[#060D18] text-[#F8FAFC] flex flex-col lg:flex-row font-sans selection:bg-[#10B981]/30">
+    <div className="min-h-screen bg-[#060d18] text-[#e8eef7] flex flex-col lg:flex-row font-sans selection:bg-[#22c55e]/30">
       {/* OFFLINE STATUS BANNER */}
       <OfflineIndicator />
 
       {/* TOAST NOTIFICATION (Dark Navy & Emerald) */}
       {notification && (
-        <div className="fixed top-16 lg:top-5 right-4 z-50 max-w-sm w-[calc(100%-2rem)] bg-[#0F1B2D] border border-[#243449] rounded-2xl shadow-2xl p-3.5 flex items-start gap-3 no-print">
-          <div className="w-8 h-8 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center shrink-0">
+        <div className="fixed top-16 lg:top-5 right-4 z-50 max-w-sm w-[calc(100%-2rem)] bg-[#111b2e] border border-[#223250] rounded-2xl shadow-2xl p-3.5 flex items-start gap-3 no-print">
+          <div className="w-8 h-8 rounded-xl bg-[#22c55e]/15 text-[#22c55e] flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-4 h-4" />
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-xs font-bold text-[#F8FAFC]">{notification.title}</h4>
-            <p className="text-xs text-[#94A3B8] mt-0.5 leading-relaxed">{notification.message}</p>
+            <h4 className="text-xs font-bold text-[#e8eef7]">{notification.title}</h4>
+            <p className="text-xs text-[#a9b8d0] mt-0.5 leading-relaxed">{notification.message}</p>
           </div>
           <button
             type="button"
             onClick={() => setNotification(null)}
-            className="text-[#94A3B8] hover:text-[#F8FAFC] p-1 cursor-pointer"
-            aria-label="Xir ogeysiiska"
+            className="text-[#a9b8d0] hover:text-[#e8eef7] p-1 cursor-pointer"
+            aria-label="Xidh ogeysiiska"
           >
             <X className="w-4 h-4" />
           </button>
@@ -1687,6 +1692,8 @@ export default function App() {
         savedCasesCount={savedCases.length}
         currentPlotsCount={currentPlotsCount}
         currentHalfPlotsCount={currentHalfPlotsCount}
+        currentBoundaryAreaSqM={unifiedFarmMetrics.boundaryAreaSqM}
+        currentAllPlotsAreaSqM={unifiedFarmMetrics.allPlotsAreaSqM}
         currentHasMap={currentHasMap}
         currency={currency}
         onClose={() => setIsDrawerOpen(false)}
@@ -1736,91 +1743,62 @@ export default function App() {
           onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
         />
 
-        {/* Contextual Workspace Mode Bar (Desktop on Interactive Map, All Screens on CAD/Overview/Calculate) */}
-        {activeDestination !== 'list_data' && (
+        {/* Contextual Workspace Mode Bar (Dashboard sub-modes only — E14 removes duplicate Calculate sub-header) */}
+        {activeDestination === 'dashboard' && (
           <div
-            className={`border-b border-[#243449] bg-[#0B1220]/80 px-4 sm:px-6 lg:px-8 py-2 no-print ${
+            className={`border-b border-[#223250] bg-[#0a1220]/90 px-4 sm:px-6 lg:px-8 py-2 no-print ${
               isFullBleedMapActive ? 'hidden lg:block' : ''
             }`}
           >
             <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-              {activeDestination === 'dashboard' && (
-                <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#0F1B2D] border border-[#243449] overflow-x-auto no-scrollbar">
-                  <button
-                    type="button"
-                    onClick={() => setDashboardMode('interactive_map')}
-                    className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      dashboardMode === 'interactive_map'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    <Map className="w-3.5 h-3.5 shrink-0" />
-                    <span>Khariidad</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDashboardMode('cad_designer')}
-                    className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      dashboardMode === 'cad_designer'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    <Wrench className="w-3.5 h-3.5 shrink-0" />
-                    <span>Naqshadeeyaha</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDashboardMode('overview')}
-                    className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      dashboardMode === 'overview'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
-                    <span>Dulmarka</span>
-                  </button>
-                </div>
-              )}
-
-              {activeDestination === 'calculate' && (
-                <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#0F1B2D] border border-[#243449]">
-                  <button
-                    type="button"
-                    onClick={() => setCalculateMode('calculator')}
-                    className={`min-h-[34px] inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      calculateMode === 'calculator'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    <Calculator className="w-3.5 h-3.5 shrink-0" />
-                    <span>1. Xogta &amp; Dhaxlayaasha</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCalculateMode('results')}
-                    className={`min-h-[34px] inline-flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      calculateMode === 'results'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    <Award className="w-3.5 h-3.5 shrink-0" />
-                    <span>2. Natiijada ({currentHeirCount})</span>
-                  </button>
-                </div>
-              )}
+              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#111b2e] border border-[#223250] overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setDashboardMode('interactive_map')}
+                  className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    dashboardMode === 'interactive_map'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#a9b8d0] hover:text-[#e8eef7]'
+                  }`}
+                >
+                  <Map className="w-3.5 h-3.5 shrink-0" />
+                  <span>Khariidad</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDashboardMode('cad_designer')}
+                  className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    dashboardMode === 'cad_designer'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#a9b8d0] hover:text-[#e8eef7]'
+                  }`}
+                >
+                  <Wrench className="w-3.5 h-3.5 shrink-0" />
+                  <span>Naqshadeeyaha</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDashboardMode('overview')}
+                  className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    dashboardMode === 'overview'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#a9b8d0] hover:text-[#e8eef7]'
+                  }`}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Dulmarka</span>
+                </button>
+              </div>
 
               {/* Inline Contextual Summary Metadata */}
-              <div className="hidden md:flex items-center gap-2 text-xs text-[#94A3B8] font-mono tabular-nums">
-                <span>{currentHeirCount} Dhaxal-suge</span>
+              <div className="hidden md:flex items-center gap-2 text-xs text-[#a9b8d0] font-mono tabular-nums">
+                <span>{currentHeirCount} Dhaxle</span>
                 <span aria-hidden="true">·</span>
                 <span>
                   {currentHasMap
-                    ? `${currentPlotsCount} Plot · ${currentHalfPlotsCount} Half`
+                    ? `${currentPlotsCount} Buuxa · ${currentHalfPlotsCount} Half · ${Math.round(
+                        unifiedFarmMetrics.allPlotsAreaSqM
+                      ).toLocaleString()} m²`
                     : 'Bilaa khariidad'}
                 </span>
               </div>
@@ -1876,6 +1854,18 @@ export default function App() {
                 setCalculateMode('calculator');
               }}
               onVisiblePlotsChange={handleVisiblePlotsChange}
+              hasExternalOverlayOpen={Boolean(
+                isDrawerOpen ||
+                  isExportModalOpen ||
+                  cartoPdfModal.isOpen ||
+                  isBackupRestoreOpen ||
+                  isHeirConfigOpen ||
+                  isAssetsConfigOpen ||
+                  isPresetsOpen ||
+                  isCertificateOpen ||
+                  isQuranicOpen ||
+                  isSavedCasesOpen
+              )}
               onNotify={showToast}
             />
           )}
@@ -2037,6 +2027,31 @@ export default function App() {
               onPrintCertificate={() => setIsCertificateOpen(true)}
               inspectedPlotIdFromMap={mapInspectedPlotId}
               onClearInspectedPlotFromMap={() => setMapInspectedPlotId(null)}
+            />
+          )}
+
+          {/* 4. DEDICATED EXPORT & PRINT LAYOUT HUB (④ Soo saar — E17, E8, E10, E11) */}
+          {activeDestination === 'export' && (
+            <ExportHubView
+              visibleCount={
+                mapVisibleStats.totalCount > 0 ? mapVisibleStats.visibleCount : currentPlotsCount
+              }
+              totalCount={
+                mapVisibleStats.totalCount > 0 ? mapVisibleStats.totalCount : currentPlotsCount
+              }
+              visiblePlotIds={mapVisibleStats.visibleIds}
+              subdivisionState={subdivisionState}
+              subdivisionResult={currentHasMap ? subdivisionResult : null}
+              fairAllocation={fairLandAllocation}
+              activeCaseMeta={activeCaseMeta}
+              onExportLayoutPdf={() => setIsCertificateOpen(true)}
+              onOpenCartographicPdfModal={(mode) =>
+                setCartoPdfModal({ isOpen: true, mode })
+              }
+              onExportExcelWorkbook={handleExportExcel}
+              onExportInheritanceCsv={handleExportCSV}
+              onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
+              onNotify={showToast}
             />
           )}
         </main>

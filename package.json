@@ -4,7 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "tsx server.ts",
+    "start": "node server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
@@ -12,14 +13,15 @@
     "test": "tsx scripts/run-regression-tests.ts",
     "apk:init": "npm run build && npx cap add android && node scripts/configure-android-permissions.mjs",
     "apk:sync": "npm run build && npx cap sync android && node scripts/configure-android-permissions.mjs",
-    "apk:build": "npm run apk:sync && ./android/gradlew -p android assembleRelease && cp android/app/build/outputs/apk/release/app-release.apk ./Beerta-iyo-Dhaxalka.apk",
+    "apk:build": "npm run apk:sync && chmod +x android/gradlew && ./android/gradlew -p android assembleRelease --no-daemon -Dorg.gradle.jvmargs=\"-Xmx1280m -XX:MaxMetaspaceSize=512m\" --max-workers=2 && cp android/app/build/outputs/apk/release/app-release.apk ./Beerta-iyo-Dhaxalka.apk",
     "apk:open": "npx cap open android"
   },
   "dependencies": {
     "@capacitor/android": "^8.6.0",
     "@capacitor/core": "^8.6.0",
-    "@google/genai": "^2.4.0",
+    "@google/genai": "^2.32.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@vis.gl/react-google-maps": "^1.10.2",
     "@vitejs/plugin-react": "^6.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",

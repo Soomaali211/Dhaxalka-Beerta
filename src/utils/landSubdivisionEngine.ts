@@ -29,6 +29,7 @@ import {
   PlotDetailedMetadata,
   Point2D,
   PrebuiltGeoJsonSubdivision,
+  SampleBlockAlignmentInfo,
   SampleBlockCandidate,
   SharedPlotCoOwner,
   SiteQualityRating,
@@ -1100,45 +1101,267 @@ function minAreaRect(pts: Point2D[]): {
   };
 }
 
+function simplifyCollinearPolygonRing(pts: Point2D[]): Point2D[] {
+  if (pts.length <= 4) return pts;
+  const deduped: Point2D[] = [];
+  for (const pt of pts) {
+    if (
+      deduped.length === 0 ||
+      Math.hypot(pt[0] - deduped[deduped.length - 1][0], pt[1] - deduped[deduped.length - 1][1]) >
+        0.15
+    ) {
+      deduped.push(pt);
+    }
+  }
+  if (
+    deduped.length > 3 &&
+    Math.hypot(
+      deduped[0][0] - deduped[deduped.length - 1][0],
+      deduped[0][1] - deduped[deduped.length - 1][1]
+    ) <= 0.15
+  ) {
+    deduped.pop();
+  }
+  if (deduped.length <= 4) return deduped;
+
+  const simplified: Point2D[] = [];
+  const m = deduped.length;
+  const cosCollinearThreshold = Math.cos((2.5 * Math.PI) / 180);
+  for (let i = 0; i < m; i++) {
+    const prev = deduped[(i - 1 + m) % m];
+    const curr = deduped[i];
+    const next = deduped[(i + 1) % m];
+    const v1x = curr[0] - prev[0];
+    const v1y = curr[1] - prev[1];
+    const v2x = next[0] - curr[0];
+    const v2y = next[1] - curr[1];
+    const l1 = Math.hypot(v1x, v1y);
+    const l2 = Math.hypot(v2x, v2y);
+    if (l1 < 0.15 || l2 < 0.15) continue;
+    const dot = (v1x * v2x + v1y * v2y) / (l1 * l2);
+    if (dot >= cosCollinearThreshold) {
+      // Collinear intermediate vertex along straight edge — omit so 4-corner rectangles stay clean
+      continue;
+    }
+    simplified.push(curr);
+  }
+  return simplified.length >= 3 ? simplified : deduped;
+}
+
+function averageOppositePairUnitVector(
+  eA: Point2D,
+  lenA: number,
+  eB: Point2D,
+  lenB: number,
+  preferPositiveY: boolean
+): Point2D {
+  const x0 = eA[0] / (lenA || 1);
+  const y0 = eA[1] / (lenA || 1);
+  let x1 = eB[0] / (lenB || 1);
+  let y1 = eB[1] / (lenB || 1);
+  if (x0 * x1 + y0 * y1 < 0) {
+    x1 = -x1;
+    y1 = -y1;
+  }
+  let sx = x0 + x1;
+  let sy = y0 + y1;
+  if (preferPositiveY) {
+    if (sy < 0 || (Math.abs(sy) < 1e-12 && sx < 0)) {
+      sx = -sx;
+      sy = -sy;
+    }
+  } else if (sx < 0 || (Math.abs(sx) < 1e-12 && sy < 0)) {
+    sx = -sx;
+    sy = -sy;
+  }
+  const m = Math.hypot(sx, sy) || 1;
+  return [sx / m, sy / m];
+}
+
 export function frameFromRing(P: Point2D[]): {
   u: Point2D;
+  v?: Point2D;
   c: Point2D;
   long: number;
   short: number;
 } {
-  const n = P.length;
-  if (n === 4) {
+  const Q = P.length > 4 && P.length <= 24 ? simplifyCollinearPolygonRing(P) : P;
+  if (Q.length === 4) {
     const e = [0, 1, 2, 3].map((i) => {
-      const q = P[(i + 1) % 4];
-      const p = P[i];
+      const q = Q[(i + 1) % 4];
+      const p = Q[i];
       return [q[0] - p[0], q[1] - p[1]] as Point2D;
     });
     const L = e.map((v) => Math.hypot(v[0], v[1]));
-    const idx = [0, 1, 2, 3].sort((a, b) => L[b] - L[a]).slice(0, 2);
-    const s = [0, 0];
-    idx.forEach((i) => {
-      let x = e[i][0] / (L[i] || 1);
-      let y = e[i][1] / (L[i] || 1);
-      if (x < 0 || (x === 0 && y < 0)) {
-        x = -x;
-        y = -y;
-      }
-      s[0] += x;
-      s[1] += y;
-    });
-    const m = Math.hypot(s[0], s[1]) || 1;
-    const sides = L.slice().sort((a, b) => b - a);
+    // In any simple 4-vertex ring Q0->Q1->Q2->Q3, (e0, e2) and (e1, e3) are guaranteed opposite sides!
+    const avg02 = (L[0] + L[2]) / 2;
+    const avg13 = (L[1] + L[3]) / 2;
+    const pair02IsLong = avg02 >= avg13;
+
+    const longPair: [number, number] = pair02IsLong ? [0, 2] : [1, 3];
+    const shortPair: [number, number] = pair02IsLong ? [1, 3] : [0, 2];
+
+    const u = averageOppositePairUnitVector(
+      e[longPair[0]],
+      L[longPair[0]],
+      e[longPair[1]],
+      L[longPair[1]],
+      false
+    );
+    let v = averageOppositePairUnitVector(
+      e[shortPair[0]],
+      L[shortPair[0]],
+      e[shortPair[1]],
+      L[shortPair[1]],
+      true
+    );
+    // Ensure u and v are non-degenerate (at least ~10° apart)
+    if (Math.abs(u[0] * v[1] - u[1] * v[0]) < 0.17) {
+      v = [-u[1], u[0]];
+      if (v[1] < 0) v = [-v[0], -v[1]];
+    }
+
     return {
-      u: [s[0] / m, s[1] / m],
+      u,
+      v,
       c: [
-        (P[0][0] + P[1][0] + P[2][0] + P[3][0]) / 4,
-        (P[0][1] + P[1][1] + P[2][1] + P[3][1]) / 4,
+        (Q[0][0] + Q[1][0] + Q[2][0] + Q[3][0]) / 4,
+        (Q[0][1] + Q[1][1] + Q[2][1] + Q[3][1]) / 4,
       ],
-      long: (sides[0] + sides[1]) / 2,
-      short: (sides[2] + sides[3]) / 2,
+      long: pair02IsLong ? avg02 : avg13,
+      short: pair02IsLong ? avg13 : avg02,
     };
   }
-  return minAreaRect(P);
+  const mr = minAreaRect(P);
+  let vOrtho: Point2D = [-mr.u[1], mr.u[0]];
+  if (vOrtho[1] < 0 || (Math.abs(vOrtho[1]) < 1e-12 && vOrtho[0] < 0)) {
+    vOrtho = [-vOrtho[0], -vOrtho[1]];
+  }
+  return { ...mr, v: vOrtho };
+}
+
+export function unitVectorFromCompassBearing(
+  deg: number,
+  preferPositiveY = false
+): Point2D {
+  const rad = ((Number(deg) || 0) * Math.PI) / 180;
+  let x = Math.sin(rad);
+  let y = Math.cos(rad);
+  if (preferPositiveY) {
+    if (y < 0 || (Math.abs(y) < 1e-12 && x < 0)) {
+      x = -x;
+      y = -y;
+    }
+  } else if (x < 0 || (Math.abs(x) < 1e-12 && y < 0)) {
+    x = -x;
+    y = -y;
+  }
+  const m = Math.hypot(x, y) || 1;
+  return [x / m, y / m];
+}
+
+export function projectOntoBasisUV(
+  dx: number,
+  dy: number,
+  u: Point2D,
+  v: Point2D
+): Point2D {
+  const det = u[0] * v[1] - u[1] * v[0];
+  if (Math.abs(det) < 1e-6) {
+    return [dx * u[0] + dy * u[1], dx * v[0] + dy * v[1]];
+  }
+  return [(dx * v[1] - dy * v[0]) / det, (u[0] * dy - u[1] * dx) / det];
+}
+
+export function normalizeCompassBearingMod180(deg: number): number {
+  if (!Number.isFinite(deg)) return 0;
+  return +((((deg % 180) + 180) % 180).toFixed(2));
+}
+
+export function computeBearingDiffMod180(degA: number, degB: number): number {
+  const d = Math.abs(normalizeCompassBearingMod180(degA) - normalizeCompassBearingMod180(degB)) % 180;
+  return +(Math.min(d, 180 - d).toFixed(2));
+}
+
+export function buildSampleBlockAlignmentInfo(args: {
+  sampleFileName: string;
+  sampleRingLonLat: Point2D[];
+  sampleFrame: { u: Point2D; v?: Point2D; c: Point2D; long: number; short: number };
+  appliedLongAxisUtm: Point2D;
+  appliedWidthAxisUtm?: Point2D;
+  appliedLengthM: number;
+  appliedWidthM: number;
+  isAlignedToExactSample?: boolean;
+  axesSwapped?: boolean;
+}): SampleBlockAlignmentInfo {
+  const uS = args.sampleFrame.u;
+  const vS: Point2D = args.sampleFrame.v || [-uS[1], uS[0]];
+  const sampleLengthBearingDeg = normalizeCompassBearingMod180(
+    (Math.atan2(uS[0], uS[1]) * 180) / Math.PI
+  );
+  const sampleWidthBearingDeg = normalizeCompassBearingMod180(
+    (Math.atan2(vS[0], vS[1]) * 180) / Math.PI
+  );
+
+  const uA = args.appliedLongAxisUtm;
+  const vA: Point2D = args.appliedWidthAxisUtm || [-uA[1], uA[0]];
+  const appliedLengthBearingDeg = normalizeCompassBearingMod180(
+    (Math.atan2(uA[0], uA[1]) * 180) / Math.PI
+  );
+  const appliedWidthBearingDeg = normalizeCompassBearingMod180(
+    (Math.atan2(vA[0], vA[1]) * 180) / Math.PI
+  );
+
+  const axesSwapped = Boolean(args.axesSwapped);
+  const targetLengthBearing = axesSwapped ? sampleWidthBearingDeg : sampleLengthBearingDeg;
+  const targetWidthBearing = axesSwapped ? sampleLengthBearingDeg : sampleWidthBearingDeg;
+
+  const lengthBearingDiffDeg = computeBearingDiffMod180(
+    appliedLengthBearingDeg,
+    targetLengthBearing
+  );
+  const widthBearingDiffDeg = computeBearingDiffMod180(
+    appliedWidthBearingDeg,
+    targetWidthBearing
+  );
+  const bearingDiffDeg = +Math.max(lengthBearingDiffDeg, widthBearingDiffDeg).toFixed(2);
+
+  const sampleLengthM = +args.sampleFrame.long.toFixed(2);
+  const sampleWidthM = +args.sampleFrame.short.toFixed(2);
+  const appliedLengthM = +args.appliedLengthM.toFixed(2);
+  const appliedWidthM = +args.appliedWidthM.toFixed(2);
+
+  const lengthDiffM = +Math.abs(appliedLengthM - sampleLengthM).toFixed(2);
+  const widthDiffM = +Math.abs(appliedWidthM - sampleWidthM).toFixed(2);
+
+  const hasLengthMismatch = lengthBearingDiffDeg > 0.25 || lengthDiffM > 0.15;
+  const hasWidthMismatch = widthBearingDiffDeg > 0.25 || widthDiffM > 0.15;
+  const hasMismatch = hasLengthMismatch || hasWidthMismatch;
+
+  return {
+    sampleFileName: args.sampleFileName,
+    sampleRingLonLat: args.sampleRingLonLat,
+    sampleLengthM,
+    sampleWidthM,
+    sampleWidthBearingDeg: +sampleWidthBearingDeg.toFixed(1),
+    sampleLengthBearingDeg: +sampleLengthBearingDeg.toFixed(1),
+    appliedLengthM,
+    appliedWidthM,
+    appliedWidthBearingDeg: +appliedWidthBearingDeg.toFixed(1),
+    appliedLengthBearingDeg: +appliedLengthBearingDeg.toFixed(1),
+    bearingDiffDeg,
+    lengthBearingDiffDeg: +lengthBearingDiffDeg.toFixed(2),
+    widthBearingDiffDeg: +widthBearingDiffDeg.toFixed(2),
+    lengthDiffM,
+    widthDiffM,
+    hasLengthMismatch,
+    hasWidthMismatch,
+    isLengthAligned: !hasLengthMismatch,
+    isWidthAligned: !hasWidthMismatch,
+    hasMismatch,
+    isAlignedToExactSample: Boolean(args.isAlignedToExactSample) && !hasMismatch,
+    axesSwapped,
+  };
 }
 
 export function isValidSubdivisionParams(p: SubdivisionParams): boolean {
@@ -1446,9 +1669,26 @@ export function computePrebuiltSubdivisionResult(
     validHalfPlots: evalRes.validHalfPlots,
     plotValidations: evalRes.plotValidations,
     halfPlotSummary: evalRes.summary,
-    sample: null,
+    sample: prebuilt.sampleBlockAlignment?.sampleRingLonLat?.length
+      ? {
+          ring: prebuilt.sampleBlockAlignment.sampleRingLonLat.map(fwd),
+          long: prebuilt.sampleBlockAlignment.sampleLengthM,
+          short: prebuilt.sampleBlockAlignment.sampleWidthM,
+          isAutoDerived: false,
+        }
+      : null,
     sampleRect: null,
-    sampleNote: null,
+    sampleNote: prebuilt.sampleBlockAlignment
+      ? {
+          dL:
+            prebuilt.sampleBlockAlignment.sampleLengthM -
+            prebuilt.sampleBlockAlignment.appliedLengthM,
+          dW:
+            prebuilt.sampleBlockAlignment.sampleWidthM -
+            prebuilt.sampleBlockAlignment.appliedWidthM,
+        }
+      : null,
+    sampleBlockAlignment: prebuilt.sampleBlockAlignment || null,
     warnings: [
       ...evalRes.summary.boundaryValidationWarnings,
       `Lakabyada Blocks (${evalRes.blocks.length}) & Plots (${evalRes.allEvaluatedPlots.length} guud · ${finalFullPlots.length} buuxa · ${evalRes.summary.boundaryClippedPlotsCount} qayb go'an) si toos ah ayaa looga akhriyey GeoJSON-ka iyadoon geometry-ga asalka ah la beddelin.`,
@@ -1629,30 +1869,70 @@ export function computeLandSubdivision(
   }
 
   const fr = frameFromRing(sring);
-  let ux = fr.u[0];
-  let uy = fr.u[1];
-  const rad = (p.rot * Math.PI) / 180;
-  const ca = Math.cos(rad);
-  const sa = Math.sin(rad);
-  const nx = ux * ca - uy * sa;
-  const ny = ux * sa + uy * ca;
-  ux = nx;
-  uy = ny;
+  const hasCustomLenB =
+    p.customLengthBearingDeg !== undefined &&
+    p.customLengthBearingDeg !== null &&
+    Number.isFinite(Number(p.customLengthBearingDeg));
+  const hasCustomWidB =
+    p.customWidthBearingDeg !== undefined &&
+    p.customWidthBearingDeg !== null &&
+    Number.isFinite(Number(p.customWidthBearingDeg));
 
-  if (p.swap) {
-    const tmp = ux;
-    ux = -uy;
-    uy = tmp;
+  let ux: number;
+  let uy: number;
+  if (hasCustomLenB) {
+    const uVec = unitVectorFromCompassBearing(Number(p.customLengthBearingDeg), false);
+    ux = uVec[0];
+    uy = uVec[1];
+  } else {
+    ux = fr.u[0];
+    uy = fr.u[1];
+    const rad = (p.rot * Math.PI) / 180;
+    const ca = Math.cos(rad);
+    const sa = Math.sin(rad);
+    const nx = ux * ca - uy * sa;
+    const ny = ux * sa + uy * ca;
+    ux = nx;
+    uy = ny;
+
+    if (p.swap) {
+      if (fr.v && Math.abs(p.rot) < 1e-6) {
+        ux = fr.v[0];
+        uy = fr.v[1];
+      } else {
+        const tmp = ux;
+        ux = -uy;
+        uy = tmp;
+      }
+    }
+    if (ux < 0 || (Math.abs(ux) < 1e-12 && uy < 0)) {
+      ux = -ux;
+      uy = -uy;
+    }
   }
-  if (ux < 0 || (Math.abs(ux) < 1e-12 && uy < 0)) {
-    ux = -ux;
-    uy = -uy;
+
+  let vx: number;
+  let vy: number;
+  if (hasCustomWidB) {
+    const vVec = unitVectorFromCompassBearing(Number(p.customWidthBearingDeg), true);
+    vx = vVec[0];
+    vy = vVec[1];
+  } else {
+    vx = -uy;
+    vy = ux;
+    if (vy < 0 || (Math.abs(vy) < 1e-12 && vx < 0)) {
+      vx = -vx;
+      vy = -vy;
+    }
   }
-  let vx = -uy;
-  let vy = ux;
-  if (vy < 0) {
-    vx = -vx;
-    vy = -vy;
+
+  if (Math.abs(ux * vy - uy * vx) < 0.17) {
+    vx = -uy;
+    vy = ux;
+    if (vy < 0) {
+      vx = -vx;
+      vy = -vy;
+    }
   }
 
   const c0: Point2D = [fr.c[0] + p.su * ux + p.sv * vx, fr.c[1] + p.su * uy + p.sv * vy];
@@ -1673,8 +1953,7 @@ export function computeLandSubdivision(
   bring.forEach((q) => {
     const du = q[0] - c0[0];
     const dv = q[1] - c0[1];
-    const pu = du * ux + dv * uy;
-    const pv = du * vx + dv * vy;
+    const [pu, pv] = projectOntoBasisUV(du, dv, [ux, uy], [vx, vy]);
     us = [Math.min(us[0], pu), Math.max(us[1], pu)];
     vs = [Math.min(vs[0], pv), Math.max(vs[1], pv)];
   });
@@ -2137,6 +2416,19 @@ export function computeLandSubdivision(
     sample: { ring: sring, long: fr.long, short: fr.short, isAutoDerived },
     sampleRect: makeRect(0, 0, p.L, p.W),
     sampleNote,
+    sampleBlockAlignment: isAutoDerived
+      ? null
+      : buildSampleBlockAlignmentInfo({
+          sampleFileName: sampleCandidate?.label || 'Block Tusaale',
+          sampleRingLonLat: sring.map(inv),
+          sampleFrame: fr,
+          appliedLongAxisUtm: [ux, uy],
+          appliedWidthAxisUtm: [vx, vy],
+          appliedLengthM: p.L,
+          appliedWidthM: p.W,
+          isAlignedToExactSample: Math.abs(p.rot) < 0.05 && !p.swap,
+          axesSwapped: Boolean(p.swap),
+        }),
     warnings: finalWarnings,
     inv,
     fwd,

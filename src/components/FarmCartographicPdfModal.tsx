@@ -10,6 +10,8 @@ import {
   ZoomOut,
   RotateCcw,
   Users,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import {
   CaseExportMetadata,
@@ -27,6 +29,10 @@ import {
   computeFarmCartographicReport,
 } from '../utils/pdfCartographyEngine';
 import { InheritanceMapPdfComposer } from './InheritanceMapPdfComposer';
+import {
+  InteractivePanZoomHandle,
+  InteractivePanZoomViewport,
+} from './InteractivePanZoomViewport';
 
 export type CartographicPdfDocMode = 'layout11' | 'heerarka_report' | 'inheritance_map';
 
@@ -77,6 +83,13 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
 }) => {
   const [docMode, setDocMode] = useState<CartographicPdfDocMode>(initialMode);
   const [previewZoom, setPreviewZoom] = useState<number>(1);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [sheetViewportDims, setSheetViewportDims] = useState<{ w: number; h: number }>({
+    w: 960,
+    h: 760,
+  });
+  const modalRootRef = useRef<HTMLDivElement | null>(null);
+  const panZoomRef = useRef<InteractivePanZoomHandle | null>(null);
   const layout11SvgRef = useRef<SVGSVGElement | null>(null);
   const heerarkaSvgRef = useRef<SVGSVGElement | null>(null);
   const inheritanceSvgRef = useRef<SVGSVGElement | null>(null);
@@ -85,6 +98,27 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
     setDocMode(initialMode);
     setPreviewZoom(1);
   }, [initialMode, isOpen]);
+
+  const handleSwitchDocMode = (nextMode: CartographicPdfDocMode) => {
+    setDocMode(nextMode);
+    setPreviewZoom(1);
+  };
+
+  const handleToggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement && modalRootRef.current?.requestFullscreen) {
+        await modalRootRef.current.requestFullscreen();
+        setIsFullscreen(true);
+      } else if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      } else {
+        setIsFullscreen((prev) => !prev);
+      }
+    } catch {
+      setIsFullscreen((prev) => !prev);
+    }
+  };
 
   const wadiItemsForEngine: ParsedGeoItem[] = useMemo(
     () =>
@@ -154,6 +188,20 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
   // --- SVG Coordinate Transform for Automatic_Layout11 (A4 Portrait 794 x 1122 matching PDF 100%) ---
   const L11_W = 794;
   const L11_H = 1122;
+  const layout11FitWidthPx = Math.round(
+    sheetViewportDims.w < 640
+      ? Math.max(290, sheetViewportDims.w - 20)
+      : Math.max(
+          420,
+          Math.min(
+            L11_W,
+            Math.min(
+              sheetViewportDims.w - 36,
+              ((sheetViewportDims.h - 36) * L11_W) / L11_H
+            )
+          )
+        )
+  );
   const L11_FRAME = { x: 16, y: 16, w: L11_W - 32, h: L11_H - 32 };
   const l11PadLeft = 36;
   const l11PadRight = 32;
@@ -338,51 +386,60 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
       : 'bg-[#D9F0D3] text-slate-900 font-semibold';
 
   return (
-    <div className="cartographic-pdf-modal-root fixed inset-0 z-50 flex flex-col bg-slate-950/90 backdrop-blur-xs print:static print:bg-white print:backdrop-blur-none">
-      {/* Compact Single-Row Top Toolbar (Hidden when printing) */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-950 px-2.5 sm:px-4 py-1.5 text-white overflow-x-auto print:hidden">
-        {/* Left: Compact Document Switcher */}
-        <div className="flex items-center gap-1 rounded-lg bg-slate-900 p-0.5 border border-slate-800 shrink-0">
+    <div
+      ref={modalRootRef}
+      className="cartographic-pdf-modal-root fixed inset-0 z-[1100] h-[100dvh] max-h-[100dvh] overflow-hidden flex flex-col bg-[#060d18]/96 backdrop-blur-xs print:static print:h-auto print:max-h-none print:overflow-visible print:bg-white print:backdrop-blur-none"
+    >
+      {/* Compact Icon-First Top Toolbar (Hidden when printing) */}
+      <div className="flex items-center justify-between gap-2 border-b border-[#223250] bg-[#0a1220] px-2.5 sm:px-4 py-1.5 text-[#e8eef7] shrink-0 overflow-x-auto no-scrollbar print:hidden">
+        {/* Left: Compact Icon Document Switcher */}
+        <div className="flex items-center gap-1 rounded-xl bg-[#111b2e] p-0.5 border border-[#223250] shrink-0">
           <button
             type="button"
-            onClick={() => setDocMode('inheritance_map')}
-            className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+            onClick={() => handleSwitchDocMode('inheritance_map')}
+            title="Khariidadda Dhaxalka"
+            aria-label="Khariidadda Dhaxalka"
+            className={`h-8 inline-flex items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition cursor-pointer whitespace-nowrap ${
               docMode === 'inheritance_map'
-                ? 'bg-emerald-500 text-slate-950 shadow-xs'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-[#22c55e] text-[#060d18] shadow-xs'
+                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
           >
             <Users className="h-3.5 w-3.5 shrink-0" />
-            <span>Khariidadda Dhaxalka</span>
+            <span className="hidden md:inline">Khariidadda Dhaxalka</span>
           </button>
           <button
             type="button"
-            onClick={() => setDocMode('layout11')}
-            className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+            onClick={() => handleSwitchDocMode('layout11')}
+            title="Automatic_Layout11"
+            aria-label="Automatic_Layout11"
+            className={`h-8 inline-flex items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
               docMode === 'layout11'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-[#e8eef7] text-[#060d18] shadow-xs'
+                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
           >
             <Layers className="h-3.5 w-3.5 shrink-0" />
-            <span>Layout 11</span>
+            <span className="hidden md:inline">Layout 11</span>
           </button>
           <button
             type="button"
-            onClick={() => setDocMode('heerarka_report')}
-            className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+            onClick={() => handleSwitchDocMode('heerarka_report')}
+            title="Warbixinta Heerarka (4 Bog)"
+            aria-label="Warbixinta Heerarka (4 Bog)"
+            className={`h-8 inline-flex items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
               docMode === 'heerarka_report'
-                ? 'bg-white text-slate-900 shadow-xs'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-[#e8eef7] text-[#060d18] shadow-xs'
+                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
           >
             <FileText className="h-3.5 w-3.5 shrink-0" />
-            <span>Warbixin (4 Bog)</span>
+            <span className="hidden md:inline">Warbixin (4 Bog)</span>
           </button>
         </div>
 
-        {/* Center Info (Desktop only, quiet inline text) */}
-        <div className="hidden xl:flex items-center gap-1.5 text-xs text-slate-400 tabular-nums truncate">
+        {/* Center Info (Desktop only) */}
+        <div className="hidden xl:flex items-center gap-1.5 text-xs text-[#a9b8d0] tabular-nums truncate">
           <span>{report.totalPlots} Plot</span>
           <span aria-hidden="true">·</span>
           <span>{report.totalBlocks} Block</span>
@@ -390,40 +447,40 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
           <span>{report.boundaryAreaDisplayHa.toFixed(2)} ha</span>
         </div>
 
-        {/* Right: Zoom (Mobile + Desktop) & Export Actions */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className="flex items-center rounded-lg border border-slate-800 bg-slate-900 px-1 py-0.5">
+        {/* Right: Icon-First Zoom + Fullscreen + Export + Close Actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center rounded-xl border border-[#223250] bg-[#111b2e] px-0.5 py-0.5">
             <button
               type="button"
-              onClick={() => setPreviewZoom((z) => Math.max(0.6, +(z - 0.2).toFixed(2)))}
-              className="min-h-[32px] min-w-[30px] flex items-center justify-center text-slate-300 hover:text-white cursor-pointer"
-              title="Yaree Preview-ga"
-              aria-label="Yaree Preview-ga"
+              onClick={() => panZoomRef.current?.zoomOut()}
+              className="h-8 w-8 flex items-center justify-center text-[#a9b8d0] hover:text-[#e8eef7] cursor-pointer"
+              title="Fogee Preview-ga (Zoom Out)"
+              aria-label="Fogee Preview-ga"
             >
               <ZoomOut className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
-              onClick={() => setPreviewZoom(1)}
-              className="min-h-[32px] px-1.5 text-[11px] font-bold text-slate-200 hover:text-emerald-400 tabular-nums cursor-pointer"
-              title="Ku-habbee Shaashadda (100%)"
+              onClick={() => panZoomRef.current?.resetView()}
+              className="h-8 px-1.5 text-[11px] font-bold text-[#e8eef7] hover:text-[#22c55e] tabular-nums cursor-pointer"
+              title="Ku-habbee Shaashadda & Dhexda (100%)"
             >
               {Math.round(previewZoom * 100)}%
             </button>
             <button
               type="button"
-              onClick={() => setPreviewZoom((z) => Math.min(2.6, +(z + 0.2).toFixed(2)))}
-              className="min-h-[32px] min-w-[30px] flex items-center justify-center text-slate-300 hover:text-white cursor-pointer"
-              title="Weynee Preview-ga"
-              aria-label="Weynee Preview-ga"
+              onClick={() => panZoomRef.current?.zoomIn()}
+              className="h-8 w-8 flex items-center justify-center text-[#a9b8d0] hover:text-[#e8eef7] cursor-pointer"
+              title="Soo dhawee Preview-ga (Zoom In)"
+              aria-label="Soo dhawee Preview-ga"
             >
               <ZoomIn className="h-3.5 w-3.5" />
             </button>
-            {previewZoom !== 1 && (
+            {Math.abs(previewZoom - 1) > 0.01 && (
               <button
                 type="button"
-                onClick={() => setPreviewZoom(1)}
-                className="min-h-[32px] min-w-[28px] flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"
+                onClick={() => panZoomRef.current?.resetView()}
+                className="h-8 w-7 flex items-center justify-center text-[#a9b8d0] hover:text-[#e8eef7] cursor-pointer"
                 title="Ku celi 100%"
               >
                 <RotateCcw className="h-3 w-3" />
@@ -433,27 +490,39 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
 
           <button
             type="button"
+            onClick={handleToggleFullscreen}
+            className="h-9 w-9 flex items-center justify-center rounded-xl border border-[#223250] bg-[#111b2e] text-[#a9b8d0] hover:text-[#e8eef7] hover:border-[#22c55e]/60 transition cursor-pointer"
+            title={isFullscreen ? 'Ka bax Shaashad Buuxda' : 'Shaashad Buuxda (Fullscreen)'}
+            aria-label="Shaashad Buuxda"
+          >
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+
+          <button
+            type="button"
             onClick={handleDownloadSvg}
-            className="min-h-[36px] inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800 transition cursor-pointer whitespace-nowrap"
+            className="h-9 w-9 flex items-center justify-center rounded-xl border border-[#223250] bg-[#111b2e] text-[#e8eef7] hover:bg-[#16243d] transition cursor-pointer"
             title="Soo dejiso Vector SVG"
+            aria-label="Soo dejiso Vector SVG"
           >
             <Download className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">SVG</span>
           </button>
 
           <button
             type="button"
             onClick={handlePrintPdf}
-            className="min-h-[36px] inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition shadow-xs cursor-pointer whitespace-nowrap"
+            className="h-9 inline-flex items-center gap-1.5 rounded-xl bg-[#22c55e] px-2.5 text-xs font-extrabold text-[#060d18] hover:bg-[#16a34a] transition shadow-xs cursor-pointer whitespace-nowrap"
+            title="Daabac / PDF"
+            aria-label="Daabac / PDF"
           >
             <Printer className="h-3.5 w-3.5 shrink-0" />
-            <span>Daabac / PDF</span>
+            <span className="hidden sm:inline">PDF</span>
           </button>
 
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white transition cursor-pointer"
+            className="h-9 w-9 flex items-center justify-center rounded-xl border border-[#223250] bg-[#111b2e] text-[#a9b8d0] hover:text-[#e8eef7] transition cursor-pointer"
             title="Xidh"
             aria-label="Xidh"
           >
@@ -462,29 +531,37 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
         </div>
       </div>
 
-      {/* Scrollable Print/Preview Canvas */}
-      {docMode === 'inheritance_map' ? (
-        <InheritanceMapPdfComposer
-          subdivisionResult={subdivisionResult}
-          subdivisionState={subdivisionState}
-          fairAllocation={fairAllocation}
-          prebuiltSubdivision={prebuiltSubdivision}
-          activeCaseMeta={activeCaseMeta}
-          deceasedName={deceasedName}
-          report={report}
-          previewZoom={previewZoom}
-          svgRef={inheritanceSvgRef}
-        />
-      ) : (
-      <div className="flex-1 overflow-auto bg-slate-200/90 p-4 sm:p-8 print:overflow-visible print:bg-white print:p-0">
-        {docMode === 'layout11' ? (
-          /* =====================================================================
-           * DOCUMENT 1: AUTOMATIC_LAYOUT11 (A4 PORTRAIT 100% QGIS REPLICA)
-           * ===================================================================== */
-          <div className="mx-auto flex justify-center print:block">
+      {/* Interactive 360° Hand-Pan & Focal-Point Zoom Preview Canvas */}
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden print:block print:overflow-visible">
+        {docMode === 'inheritance_map' ? (
+          <InheritanceMapPdfComposer
+            subdivisionResult={subdivisionResult}
+            subdivisionState={subdivisionState}
+            fairAllocation={fairAllocation}
+            prebuiltSubdivision={prebuiltSubdivision}
+            activeCaseMeta={activeCaseMeta}
+            deceasedName={deceasedName}
+            report={report}
+            previewZoom={previewZoom}
+            onPreviewZoomChange={setPreviewZoom}
+            panZoomRef={panZoomRef}
+            svgRef={inheritanceSvgRef}
+          />
+        ) : (
+        <InteractivePanZoomViewport
+          ref={panZoomRef}
+          zoom={previewZoom}
+          onZoomChange={setPreviewZoom}
+          initialAlign={docMode === 'layout11' ? 'center' : 'top'}
+          resetKey={docMode}
+          onViewportResize={setSheetViewportDims}
+          className="flex-1 min-h-0 bg-slate-200/90 print:overflow-visible print:bg-white"
+        >
+          {docMode === 'layout11' ? (
+            <div className="print:block">
             <div
               style={{
-                width: `${Math.round(L11_W * previewZoom)}px`,
+                width: `${layout11FitWidthPx}px`,
               }}
               className="bg-white shadow-xl ring-1 ring-slate-300 print:!w-full print:shadow-none print:ring-0"
             >
@@ -791,9 +868,13 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
            * ===================================================================== */
           <div
             style={{
-              width: `${Math.round(794 * previewZoom)}px`,
+              width: `${Math.round(
+                sheetViewportDims.w < 820
+                  ? Math.max(320, sheetViewportDims.w - 24)
+                  : 794
+              )}px`,
             }}
-            className="mx-auto space-y-8 print:!w-full print:space-y-0"
+            className="space-y-8 print:!w-full print:space-y-0"
           >
             {/* ------------------------- PAGE 1 ------------------------- */}
             <section className="pdf-report-page flex flex-col justify-between min-h-[1080px] bg-white p-8 sm:p-12 shadow-xl ring-1 ring-slate-300 text-slate-900 print:min-h-0 print:shadow-none print:ring-0 print:p-6">
@@ -1552,8 +1633,9 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
             </section>
           </div>
         )}
+        </InteractivePanZoomViewport>
+        )}
       </div>
-      )}
     </div>
   );
 };

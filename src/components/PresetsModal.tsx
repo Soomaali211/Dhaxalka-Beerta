@@ -37,50 +37,52 @@ export function PresetsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-xs overflow-y-auto no-print"
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-xs no-print"
       role="dialog"
       aria-modal="true"
       aria-label="Tusaalooyin iyo Xaalado Dhaxal oo Diyaarsan"
+      onClick={handleClose}
     >
-      <div className="bg-[#0B1220] border border-[#243449] text-[#F8FAFC] rounded-t-3xl sm:rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
-        <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto mt-3 sm:hidden shrink-0" />
-
-        {/* Header */}
-        <div className="px-5 sm:px-6 py-4 border-b border-[#243449] flex items-center justify-between gap-3 bg-[#0F1B2D]">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center shrink-0">
-              <FolderDown className="w-5 h-5" />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#0B1220] border border-[#243449] text-[#F8FAFC] rounded-2xl w-full max-w-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden"
+      >
+        {/* Sticky Compact Header */}
+        <div className="px-4 py-2.5 border-b border-[#243449] flex items-center justify-between gap-2.5 bg-[#0F1B2D] shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center shrink-0">
+              <FolderDown className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-bold text-[#F8FAFC] truncate">
-                Tusaalooyin &amp; Xaalado Dhaxal oo Diyaarsan
+              <h2 className="text-sm font-bold text-[#F8FAFC] truncate">
+                Tusaalooyin Dhaxal oo Diyaarsan
               </h2>
-              <p className="text-xs text-[#94A3B8] truncate">
-                Dooro kiis fiqhi ah ama xaalad qoys si aad u hubiso xisaabinta saamiyada
+              <p className="text-[11px] text-[#94A3B8] truncate">
+                Dooro kiis fiqhi ah si aad u hubiso xisaabinta saamiyada
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] rounded-xl hover:bg-[#0B1220] transition-colors cursor-pointer"
+            className="h-9 w-9 flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] rounded-xl hover:bg-[#0B1220] transition-colors cursor-pointer shrink-0"
             aria-label="Xir daaqadda"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Overwrite Confirmation Strip */}
         {pendingPreset && (
-          <div className="px-5 sm:px-6 py-3.5 bg-amber-950/60 border-b border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-start gap-2.5 text-amber-100">
+          <div className="px-4 py-2.5 bg-amber-950/60 border-b border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shrink-0">
+            <div className="flex items-start gap-2 text-amber-100">
               <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold block">
                   Ma lagu raraa kiiska hadda furan: &ldquo;{pendingPreset.titleSomali}&rdquo;?
                 </span>
                 <span className="text-[11px] text-amber-200/85">
-                  Xogta ehelka iyo hantida kiiska hadda furan ayaa lagu beddelayaa tusaalahan (Undo waad ku soo celin kartaa).
+                  Xogta ehelka iyo hantida kiiska hadda furan ayaa lagu beddelayaa.
                 </span>
               </div>
             </div>
@@ -88,7 +90,7 @@ export function PresetsModal({
               <button
                 type="button"
                 onClick={() => setPendingPreset(null)}
-                className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[#0F1B2D] border border-[#243449] text-[#F8FAFC] font-bold whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[34px] px-2.5 py-1 rounded-lg bg-[#0F1B2D] border border-[#243449] text-[#F8FAFC] font-bold whitespace-nowrap shrink-0 cursor-pointer"
               >
                 Jooji
               </button>
@@ -99,7 +101,7 @@ export function PresetsModal({
                   setPendingPreset(null);
                   onClose();
                 }}
-                className="min-h-[38px] px-3.5 py-1.5 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#030712] font-bold whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[34px] px-3 py-1 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#030712] font-bold whitespace-nowrap shrink-0 cursor-pointer"
               >
                 Xaqiiji &amp; Daji
               </button>
@@ -108,7 +110,7 @@ export function PresetsModal({
         )}
 
         {/* Preset List */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-3">
+        <div className="p-3.5 overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-2.5">
           {PRESET_SCENARIOS.map((preset) => {
             const totalValue = preset.assets.reduce((s, a) => s + a.estimatedValueUSD, 0);
             const isSelectedPending = pendingPreset?.id === preset.id;

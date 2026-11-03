@@ -70,25 +70,31 @@ export function SavedCasesModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-xs overflow-y-auto no-print">
-      <div className="bg-[#0B1220] border border-[#243449] text-[#F8FAFC] rounded-t-3xl sm:rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="px-5 sm:px-6 py-4 border-b border-[#243449] flex items-center justify-between bg-[#0F1B2D]">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="p-2 rounded-xl bg-[#10B981]/15 text-[#10B981] shrink-0">
-              <FolderClock className="w-5 h-5" />
+    <div
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-xs no-print"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#0B1220] border border-[#243449] text-[#F8FAFC] rounded-2xl w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden"
+      >
+        {/* Sticky Compact Header */}
+        <div className="px-4 py-2.5 border-b border-[#243449] flex items-center justify-between gap-2 bg-[#0F1B2D] shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center shrink-0">
+              <FolderClock className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-bold text-[#F8FAFC] truncate">
+              <h2 className="text-sm font-bold text-[#F8FAFC] truncate">
                 Diiwaanka Kiisaska ({savedCases.length})
               </h2>
-              <p className="text-xs text-[#94A3B8] truncate">
-                Kiis kasta wuxuu leeyahay Reference Number iyo kayd u gaar ah
+              <p className="text-[11px] text-[#94A3B8] truncate">
+                Reference Number iyo kayd u gaar ah kiis kasta
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {onOpenCloudBackup && (
               <button
                 type="button"
@@ -96,10 +102,11 @@ export function SavedCasesModal({
                   onClose();
                   onOpenCloudBackup();
                 }}
-                className="min-h-[40px] inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#F8FAFC] bg-[#0B1220] hover:bg-[#16263D] border border-[#243449] hover:border-[#22C55E]/70 rounded-xl transition-colors cursor-pointer"
+                title="Google Drive Backup"
+                className="min-h-[34px] inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold text-[#F8FAFC] bg-[#0B1220] hover:bg-[#16263D] border border-[#243449] hover:border-[#22C55E]/70 rounded-xl transition-colors cursor-pointer"
               >
-                <Cloud className="w-4 h-4 text-[#22C55E]" />
-                <span>Google Drive</span>
+                <Cloud className="w-3.5 h-3.5 text-[#22C55E]" />
+                <span className="hidden sm:inline">Drive</span>
               </button>
             )}
             {onOpenCaseManager && (
@@ -109,26 +116,26 @@ export function SavedCasesModal({
                   onClose();
                   onOpenCaseManager();
                 }}
-                className="min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#030712] bg-[#10B981] hover:bg-[#059669] rounded-xl transition-colors cursor-pointer"
+                className="min-h-[34px] inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-[#030712] bg-[#10B981] hover:bg-[#059669] rounded-xl transition-colors cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
-                <span>List Data</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">List Data</span>
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] rounded-xl hover:bg-[#0B1220] transition-colors cursor-pointer"
+              className="h-9 w-9 flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] rounded-xl hover:bg-[#0B1220] transition-colors cursor-pointer"
               aria-label="Xir"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Search & Filter Toolbar */}
-        <div className="px-5 sm:px-6 py-3 border-b border-[#243449] flex flex-wrap items-center justify-between gap-2.5 bg-[#0B1220]">
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-[#0F1B2D] border border-[#243449] rounded-xl">
+        <div className="px-4 py-2 border-b border-[#243449] flex flex-wrap items-center justify-between gap-2 bg-[#0B1220] shrink-0">
+          <div className="flex flex-wrap items-center gap-1 p-0.5 bg-[#0F1B2D] border border-[#243449] rounded-xl">
             {(
               [
                 { id: 'all', label: 'Dhammaan' },
@@ -142,7 +149,7 @@ export function SavedCasesModal({
                 key={t.id}
                 type="button"
                 onClick={() => setStatusFilter(t.id)}
-                className={`px-2.5 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                className={`px-2 py-1 text-[11px] font-bold rounded-lg transition-colors cursor-pointer ${
                   statusFilter === t.id
                     ? 'bg-[#10B981] text-[#030712]'
                     : 'text-[#94A3B8] hover:text-[#F8FAFC]'
@@ -153,22 +160,22 @@ export function SavedCasesModal({
             ))}
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-3 top-3" />
+          <div className="relative w-full sm:w-56">
+            <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-2.5 top-2.5" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Raadi magaca kiiska ama Ref No..."
-              className="w-full min-h-[40px] bg-[#0F1B2D] border border-[#243449] focus:border-[#10B981] rounded-xl pl-8 pr-3 py-1.5 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8]/60 focus:outline-none"
+              placeholder="Raadi magaca ama Ref No..."
+              className="w-full min-h-[34px] bg-[#0F1B2D] border border-[#243449] focus:border-[#10B981] rounded-xl pl-8 pr-3 py-1 text-xs text-[#F8FAFC] placeholder:text-[#94A3B8]/60 focus:outline-none"
             />
           </div>
         </div>
 
         {/* Safe Delete Warning Banner */}
         {confirmDeleteCase && (
-          <div className="px-5 sm:px-6 py-3.5 bg-red-950/60 border-b border-red-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-            <div className="flex items-start gap-2.5 text-red-200">
+          <div className="px-4 py-2.5 bg-red-950/60 border-b border-red-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs shrink-0">
+            <div className="flex items-start gap-2 text-red-200">
               <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-bold">
@@ -183,7 +190,7 @@ export function SavedCasesModal({
                           confirmDeleteCase.fullPlotsCount || 0
                         } Plot)`
                       : ''}
-                    . Tirtiriddu waxba kama beddelayso kiisaska kale.
+                    .
                   </p>
                 )}
               </div>
@@ -192,7 +199,7 @@ export function SavedCasesModal({
               <button
                 type="button"
                 onClick={() => setConfirmDeleteCase(null)}
-                className="min-h-[38px] px-3 py-1.5 rounded-lg border border-[#243449] bg-[#0F1B2D] text-[#F8FAFC] font-bold cursor-pointer"
+                className="min-h-[34px] px-2.5 py-1 rounded-lg border border-[#243449] bg-[#0F1B2D] text-[#F8FAFC] font-bold cursor-pointer"
               >
                 Jooji
               </button>
@@ -202,16 +209,16 @@ export function SavedCasesModal({
                   onDeleteCase(confirmDeleteCase.id);
                   setConfirmDeleteCase(null);
                 }}
-                className="min-h-[38px] px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold cursor-pointer"
+                className="min-h-[34px] px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold cursor-pointer"
               >
-                Xaqiiji Tirtiridda
+                Xaqiiji
               </button>
             </div>
           </div>
         )}
 
         {/* Content */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-2.5">
+        <div className="p-3.5 sm:p-4 overflow-y-auto overscroll-contain flex-1 min-h-0 space-y-2">
           {filtered.length === 0 ? (
             <div className="text-center py-12 text-[#94A3B8] text-xs">
               <FolderClock className="w-9 h-9 mx-auto mb-2 text-[#94A3B8]/50" />

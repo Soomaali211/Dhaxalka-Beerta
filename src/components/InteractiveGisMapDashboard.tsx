@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import {
+  ArrowLeftRight,
   Check,
   CircleDot,
+  Compass,
   FileText,
   Globe,
+  Grid,
   Layers,
   Lasso,
   Loader2,
@@ -70,8 +73,23 @@ import {
 } from '../utils/pdfCartographyEngine';
 import { CartographicPdfDocMode } from './FarmCartographicPdfModal';
 import { NashqadFabAndModals, NashqadSummaryCard } from './NashqadFabAndModals';
+import {
+  SampleBlockAxisAlignOptions,
+  alignAllBlocksToSampleBlock,
+} from '../utils/nashqadWorkflowEngine';
+import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
+import { computeUnifiedFarmMetrics } from '../utils/unifiedMetrics';
+import {
+  GoogleSatelliteUnderlay,
+  GoogleUnderlayStatus,
+} from './GoogleSatelliteUnderlay';
 
-export type BasemapMode = 'paper_pdf' | 'satellite' | 'osm' | 'offline_vector';
+export type BasemapMode =
+  | 'google_satellite'
+  | 'satellite'
+  | 'osm'
+  | 'paper_pdf'
+  | 'offline_vector';
 export type MapCartographicStyle = 'nashqad' | 'layout11' | 'heerarka' | 'inheritance';
 export type MapQuickPlotFilter =
   | 'all'
@@ -118,6 +136,7 @@ interface InteractiveGisMapDashboardProps {
     totalCount: number,
     visibleIds: Set<string>
   ) => void;
+  hasExternalOverlayOpen?: boolean;
   onNotify: (title: string, message: string) => void;
 }
 
@@ -302,6 +321,15 @@ function makeSafeBlockBadgeEl(
   return el;
 }
 
+function makeSafePlotBadgeEl(text: string, isPaper: boolean): HTMLElement {
+  const el = document.createElement('div');
+  el.className = isPaper
+    ? '-translate-x-1/2 -translate-y-1/2 text-[8.5px] font-bold text-slate-900 bg-white/80 px-1 rounded pointer-events-none whitespace-nowrap tabular-nums'
+    : '-translate-x-1/2 -translate-y-1/2 text-[8.5px] font-bold text-[#e8eef7] bg-[#060d18]/75 px-1 rounded pointer-events-none whitespace-nowrap tabular-nums';
+  el.textContent = text;
+  return el;
+}
+
 export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProps> = ({
   currentHasMap,
   subdivisionState,
@@ -316,9 +344,12 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   onOpenPlotInListData,
   onProceedToCalculateWithSelection,
   onVisiblePlotsChange,
+  hasExternalOverlayOpen = false,
   onNotify,
 }) => {
   const isOnline = useOnlineStatus();
+
+  const googleApiKey = ((import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || '').trim();
 
   const [basemapMode, setBasemapMode] = useState<BasemapMode>(() => {
     if (subdivisionResult?.isPrebuiltGeometry && !subdivisionState.nashqadSummary) {
@@ -326,8 +357,26 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     }
     return typeof navigator !== 'undefined' && !navigator.onLine
       ? 'offline_vector'
-      : 'satellite';
+      : 'google_satellite';
   });
+
+  const [googleUnderlayStatus, setGoogleUnderlayStatus] = useState<GoogleUnderlayStatus>(() =>
+    googleApiKey ? 'loading' : 'fallback'
+  );
+  const [googleMapCam, setGoogleMapCam] = useState<{
+    center: { lat: number; lng: number };
+    zoom: number;
+  }>({
+    center: { lat: 9.621, lng: 44.0585 },
+    zoom: 17,
+  });
+
+  const isGoogleUnderlayMounted =
+    basemapMode === 'google_satellite' &&
+    Boolean(googleApiKey) &&
+    googleUnderlayStatus !== 'fallback';
+  const isGoogleUnderlayLive =
+    isGoogleUnderlayMounted && googleUnderlayStatus === 'ready';
 
   const [cartoStyle, setCartoStyle] = useState<MapCartographicStyle>(() =>
     subdivisionState.nashqadSummary
@@ -341,8 +390,15 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
 
   const [showHybridLabels, setShowHybridLabels] = useState<boolean>(true);
   const [tileOfflineFallbackNotice, setTileOfflineFallbackNotice] = useState<boolean>(false);
+  const [isLoadingTiles, setIsLoadingTiles] = useState<boolean>(false);
+  const [currentZoom, setCurrentZoom] = useState<number>(17);
 
-  // Individual Right-Side Controls Below Zoom Buttons: Lakabyada | Heerarka | Sumadaha (one active popover at a time)
+  const unifiedMetrics = useMemo(
+    () => computeUnifiedFarmMetrics(subdivisionState, subdivisionResult, currentHasMap),
+    [subdivisionState, subdivisionResult, currentHasMap]
+  );
+
+  // Individual Right-Side Controls Below Zoom Buttons: Xulo | Lakabyo | Heerar | Furaha (one active bottom-sheet / popover at a time)
   const [openRightPanel, setOpenRightPanel] = useState<RightRailPanelId>(null);
   const [isNashqadReportOpen, setIsNashqadReportOpen] = useState<boolean>(false);
 
@@ -451,6 +507,30 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     subdivisionResult,
     onUpdateSubdivisionState,
   };
+
+  const activeSampleAlignment = useMemo(
+    () =>
+      subdivisionResult?.sampleBlockAlignment ||
+      subdivisionState.prebuiltSubdivision?.sampleBlockAlignment ||
+      subdivisionState.nashqadSummary?.sampleBlockAlignment ||
+      null,
+    [
+      subdivisionResult?.sampleBlockAlignment,
+      subdivisionState.prebuiltSubdivision?.sampleBlockAlignment,
+      subdivisionState.nashqadSummary?.sampleBlockAlignment,
+    ]
+  );
+
+  const currentMismatchSig = activeSampleAlignment
+    ? `${activeSampleAlignment.sampleFileName || 'sample'}::L${activeSampleAlignment.appliedLengthM}@${activeSampleAlignment.appliedLengthBearingDeg}::W${activeSampleAlignment.appliedWidthM}@${activeSampleAlignment.appliedWidthBearingDeg}`
+    : '';
+  const [dismissedMismatchSig, setDismissedMismatchSig] = useState<string>('');
+  const [keepAlignmentBannerPinned, setKeepAlignmentBannerPinned] = useState<boolean>(false);
+
+  // Reset manual banner pin when sample block file changes
+  useEffect(() => {
+    setKeepAlignmentBannerPinned(false);
+  }, [activeSampleAlignment?.sampleFileName]);
 
   // When a prebuilt GeoJSON is newly uploaded, select appropriate cartography style
   useEffect(() => {
@@ -1219,16 +1299,42 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       }
     };
 
+    const handleZoomEnd = () => {
+      try {
+        setCurrentZoom(map.getZoom());
+      } catch {
+        // Ignore transient zoom read
+      }
+    };
+
+    const syncGoogleCamera = () => {
+      try {
+        const c = map.getCenter();
+        setGoogleMapCam({
+          center: { lat: c.lat, lng: c.lng },
+          zoom: map.getZoom(),
+        });
+      } catch {
+        // Ignore transient camera read
+      }
+    };
+
     map.on('zoomend moveend resize', updateScaleBar);
+    map.on('zoomend', handleZoomEnd);
+    map.on('move zoom zoomend moveend resize', syncGoogleCamera);
 
     const resizeTimer = window.setTimeout(() => {
       map.invalidateSize();
       updateScaleBar();
+      handleZoomEnd();
+      syncGoogleCamera();
     }, 120);
 
     return () => {
       window.clearTimeout(resizeTimer);
       map.off('zoomend moveend resize', updateScaleBar);
+      map.off('zoomend', handleZoomEnd);
+      map.off('move zoom zoomend moveend resize', syncGoogleCamera);
       map.remove();
       leafletMapRef.current = null;
       tileLayerGroupRef.current = null;
@@ -1237,7 +1343,25 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     };
   }, []);
 
-  // Synchronize Basemap Tile Layers (Paper PDF White | Free Satellite | Free OpenStreetMap | Offline Vector)
+  // Lock integer zoom levels when live Google Satellite raster underlay is active for pixel-exact Web Mercator sync
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+    if (isGoogleUnderlayMounted) {
+      map.options.zoomSnap = 1;
+      map.options.zoomDelta = 1;
+      const z = map.getZoom();
+      const rounded = Math.round(z);
+      if (Math.abs(z - rounded) > 0.01) {
+        map.setZoom(rounded, { animate: false });
+      }
+    } else {
+      map.options.zoomSnap = 0.25;
+      map.options.zoomDelta = 0.5;
+    }
+  }, [isGoogleUnderlayMounted]);
+
+  // Synchronize Basemap Tile Layers (Google Satellite | Esri Satellite | OpenStreetMap | Paper PDF | Offline Vector)
   useEffect(() => {
     const map = leafletMapRef.current;
     const tileGroup = tileLayerGroupRef.current;
@@ -1245,7 +1369,12 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
 
     tileGroup.clearLayers();
 
-    if (basemapMode === 'offline_vector' || basemapMode === 'paper_pdf') {
+    if (
+      basemapMode === 'offline_vector' ||
+      basemapMode === 'paper_pdf' ||
+      (basemapMode === 'google_satellite' && isGoogleUnderlayLive)
+    ) {
+      setIsLoadingTiles(false);
       return;
     }
 
@@ -1253,6 +1382,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       if (e.tile) {
         e.tile.style.opacity = '0';
       }
+      setIsLoadingTiles(false);
       if (!navigator.onLine) {
         setTileOfflineFallbackNotice(true);
       }
@@ -1265,10 +1395,12 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         crossOrigin: true,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       });
+      osmLayer.on('loading', () => setIsLoadingTiles(true));
+      osmLayer.on('load', () => setIsLoadingTiles(false));
       osmLayer.on('tileerror', handleTileError);
       tileGroup.addLayer(osmLayer);
-    } else if (basemapMode === 'satellite') {
-      const esriSat = L.tileLayer(
+    } else if (basemapMode === 'satellite' || basemapMode === 'google_satellite') {
+      const satLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         {
           maxNativeZoom: 19,
@@ -1277,8 +1409,10 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics',
         }
       );
-      esriSat.on('tileerror', handleTileError);
-      tileGroup.addLayer(esriSat);
+      satLayer.on('loading', () => setIsLoadingTiles(true));
+      satLayer.on('load', () => setIsLoadingTiles(false));
+      satLayer.on('tileerror', handleTileError);
+      tileGroup.addLayer(satLayer);
 
       if (showHybridLabels) {
         const labelsLayer = L.tileLayer(
@@ -1294,7 +1428,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         tileGroup.addLayer(labelsLayer);
       }
     }
-  }, [basemapMode, showHybridLabels]);
+  }, [basemapMode, showHybridLabels, isGoogleUnderlayLive]);
 
   // Render GIS Vector Layers (Plots, Blocks, Wadis/Dooxyada, City Road Connection, Special Areas, Boundary)
   useEffect(() => {
@@ -1308,6 +1442,22 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
 
     const allBoundsLatLngs: [number, number][] = [];
     const isPaper = basemapMode === 'paper_pdf';
+    const placedBadgePts: L.Point[] = [];
+
+    const canPlaceBadgeAt = (lat: number, lon: number, minDistPx: number): boolean => {
+      try {
+        const pt = map.latLngToContainerPoint([lat, lon]);
+        for (let i = 0; i < placedBadgePts.length; i++) {
+          if (pt.distanceTo(placedBadgePts[i]) < minDistPx) {
+            return false;
+          }
+        }
+        placedBadgePts.push(pt);
+        return true;
+      } catch {
+        return true;
+      }
+    };
 
     // 1. PLOTS LAYER
     if (layersVisible.plots) {
@@ -1416,6 +1566,22 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             fillOpacity: 1,
             interactive: false,
           }).addTo(overlayGroup);
+        }
+
+        // E5: Zoom Level-of-Detail — show non-overlapping Plot numbers only at zoom >= 17.5
+        if (currentZoom >= 17.5 && item.centerLatLng) {
+          const [pLat, pLon] = item.centerLatLng;
+          if (Number.isFinite(pLat) && Number.isFinite(pLon) && canPlaceBadgeAt(pLat, pLon, 28)) {
+            const pTag = item.id.includes('-P')
+              ? `P${item.id.split('-P')[1]}`
+              : `P${String(item.plot.no || '').padStart(2, '0')}`;
+            const plotIcon = L.divIcon({
+              className: 'gis-block-label-icon',
+              html: makeSafePlotBadgeEl(pTag, isPaper),
+              iconSize: [0, 0],
+            });
+            L.marker([pLat, pLon], { icon: plotIcon, interactive: false }).addTo(overlayGroup);
+          }
         }
       });
 
@@ -1539,23 +1705,57 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         }
         bPoly.addTo(overlayGroup);
 
-        const [bLon, bLat] = subdivisionResult.inv(b.centerUtm);
-        if (Number.isFinite(bLat) && Number.isFinite(bLon)) {
-          const m = /^(R\d+)[-_](C\d+)$/i.exec(b.id.trim());
-          const badgeEl = isHeerarka
-            ? m
-              ? makeSafeBlockBadgeEl([m[1].toUpperCase(), m[2].toUpperCase()], 'heerarka')
-              : makeSafeBlockBadgeEl([b.id], 'heerarka')
-            : makeSafeBlockBadgeEl([b.id], 'dark');
+        // E5: Zoom Level-of-Detail + Collision Avoidance for Block Badges (R01-C02)
+        if (currentZoom >= 15) {
+          const [bLon, bLat] = subdivisionResult.inv(b.centerUtm);
+          if (
+            Number.isFinite(bLat) &&
+            Number.isFinite(bLon) &&
+            canPlaceBadgeAt(bLat, bLon, 38)
+          ) {
+            const m = /^(R\d+)[-_](C\d+)$/i.exec(b.id.trim());
+            const badgeEl = isHeerarka
+              ? m
+                ? makeSafeBlockBadgeEl([m[1].toUpperCase(), m[2].toUpperCase()], 'heerarka')
+                : makeSafeBlockBadgeEl([b.id], 'heerarka')
+              : makeSafeBlockBadgeEl([b.id], 'dark');
 
-          const blockLabel = L.divIcon({
-            className: 'gis-block-label-icon',
-            html: badgeEl,
-            iconSize: [0, 0],
-          });
-          L.marker([bLat, bLon], { icon: blockLabel, interactive: false }).addTo(overlayGroup);
+            const blockLabel = L.divIcon({
+              className: 'gis-block-label-icon',
+              html: badgeEl,
+              iconSize: [0, 0],
+            });
+            L.marker([bLat, bLon], { icon: blockLabel, interactive: false }).addTo(overlayGroup);
+          }
         }
       });
+
+      // Uploaded Sample Block Reference Outline (`Block Tusaale`) for instant visual comparison
+      if (
+        activeSampleAlignment?.sampleRingLonLat &&
+        activeSampleAlignment.sampleRingLonLat.length >= 3
+      ) {
+        const sampleLatLngs: [number, number][] = activeSampleAlignment.sampleRingLonLat
+          .filter(
+            (pt: Point2D) =>
+              Number.isFinite(pt[0]) &&
+              Number.isFinite(pt[1]) &&
+              Math.abs(pt[1]) <= 90 &&
+              Math.abs(pt[0]) <= 180
+          )
+          .map((pt: Point2D) => [pt[1], pt[0]]);
+        if (sampleLatLngs.length >= 3) {
+          L.polygon(sampleLatLngs, {
+            color: activeSampleAlignment.hasMismatch ? '#F59E0B' : '#38BDF8',
+            weight: activeSampleAlignment.hasMismatch ? 2.8 : 2.1,
+            opacity: 0.95,
+            dashArray: '6 4',
+            fillColor: activeSampleAlignment.hasMismatch ? '#F59E0B' : '#38BDF8',
+            fillOpacity: activeSampleAlignment.hasMismatch ? 0.1 : 0.05,
+            interactive: false,
+          }).addTo(overlayGroup);
+        }
+      }
     }
 
     // 3. DOOXYADA & INTERNAL SUBDIVISION ROADS LAYER
@@ -1936,6 +2136,8 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     activeMapTool,
     cartoReport,
     hiddenHeirKeys,
+    currentZoom,
+    activeSampleAlignment,
   ]);
 
   const clearGpsWatchers = useCallback(() => {
@@ -2580,6 +2782,51 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     [onUpdateSubdivisionState]
   );
 
+  const handleAlignToSampleBlock = useCallback(
+    (options?: SampleBlockAxisAlignOptions) => {
+      const mode = options?.mode || 'both';
+      const res = alignAllBlocksToSampleBlock(subdivisionState, {
+        ...options,
+        mode,
+        exactDimensions: options?.exactDimensions ?? true,
+        swapAxes: options?.swapAxes ?? false,
+      });
+      if (!res.ok) {
+        onNotify('Waafajinta Block Tusaale', res.errorSomali);
+        return;
+      }
+      setDismissedMismatchSig('');
+      if (mode === 'manual_bearing' || mode === 'length_only' || mode === 'width_only') {
+        setKeepAlignmentBannerPinned(true);
+      } else {
+        setKeepAlignmentBannerPinned(false);
+      }
+      if (res.nextState.prebuiltSubdivision) {
+        handleApplyNashqadFromFab(res.nextState, res.summary);
+      } else if (onUpdateSubdivisionState) {
+        onUpdateSubdivisionState(res.nextState);
+      }
+      // Skip modal/toast spam during live manual bearing degree nudging so blocks tilt smoothly in real time
+      if (mode === 'manual_bearing') {
+        return;
+      }
+      const align = res.summary.sampleBlockAlignment;
+      const axisLabel =
+        mode === 'length_only'
+          ? 'Dhererka'
+          : mode === 'width_only'
+          ? 'Ballaca'
+          : 'Dhererka & Ballaca';
+      onNotify(
+        `${axisLabel} waa la fadhiisiyay`,
+        align
+          ? `Dhammaan blocks-ka (${res.summary.blocksCount}) waxaa la waafajiyay (${axisLabel}): Dherer ${align.appliedLengthM}m (${align.appliedLengthBearingDeg}°) × Ballac ${align.appliedWidthM}m (${align.appliedWidthBearingDeg}°).`
+          : `Dhammaan blocks-ka (${res.summary.blocksCount}) waxaa lagu waafajiyay Block Tusaale.`
+      );
+    },
+    [subdivisionState, handleApplyNashqadFromFab, onUpdateSubdivisionState, onNotify]
+  );
+
   const toggleLayer = (key: keyof typeof layersVisible) => {
     setLayersVisible((prev) => ({ ...prev, [key]: !prev[key] }));
   };
@@ -2994,25 +3241,25 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   const autoSummary = subdivisionState.autoTierSummary;
 
   return (
-    <div className="relative flex flex-col gap-2 text-[#F8FAFC]">
-      {/* 1. SINGLE UNIFIED TOP BAR (Search + Quick Filter + Map Color Mode + Single PDF & Habaynta Actions — ZERO UPLOAD INPUTS) */}
-      <div className="relative z-20 flex flex-wrap items-center gap-2">
+    <div className="relative flex flex-col gap-1.5 text-[#e8eef7]">
+      {/* 1. COMPACT 1-ROW UNIFIED TOP BAR (E4: maximizes map canvas height to >=68-72% of viewport) */}
+      <div className="relative z-20 flex items-center gap-1.5 sm:gap-2">
         {/* Search Input */}
-        <div className="relative flex-1 min-w-[190px]">
-          <Search className="w-4 h-4 text-[#94A3B8] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <div className="relative flex-1 min-w-[140px]">
+          <Search className="w-4 h-4 text-[#a9b8d0] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Raadi plot, block (R01-C04), Heer 1–3..."
-            className="w-full min-h-[42px] rounded-xl bg-[#0F1B2D] border border-[#243449] focus:border-[#22C55E] pl-9 pr-8 py-1.5 text-xs sm:text-sm text-[#F8FAFC] placeholder:text-[#94A3B8]/70 focus:outline-none transition-colors"
+            className="w-full min-h-[42px] rounded-xl bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] pl-9 pr-8 py-1.5 text-xs sm:text-sm text-[#e8eef7] placeholder:text-[#a9b8d0]/70 focus:outline-none transition-colors"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="Nadiifi raadinta"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 min-h-[32px] min-w-[32px] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 min-h-[34px] min-w-[34px] flex items-center justify-center text-[#a9b8d0] hover:text-[#e8eef7] cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -3021,7 +3268,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           {/* Quick Live Search Results Dropdown */}
           {searchQuery.trim().length > 0 &&
             (visiblePlots.length > 0 || matchingCases.length > 0) && (
-              <div className="absolute left-0 right-0 top-[calc(100%+6px)] rounded-xl bg-[#0B1220] border border-[#243449] shadow-2xl overflow-hidden max-h-64 overflow-y-auto z-40 divide-y divide-[#243449]/70">
+              <div className="absolute left-0 right-0 top-[calc(100%+6px)] rounded-xl bg-[#0a1220] border border-[#223250] shadow-2xl overflow-hidden max-h-64 overflow-y-auto z-40 divide-y divide-[#223250]/70">
                 {matchingCases.map((sc) => (
                   <button
                     key={sc.id}
@@ -3030,17 +3277,17 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                       setSearchQuery('');
                       onSelectSavedCase(sc);
                     }}
-                    className="w-full px-4 py-2.5 text-left hover:bg-[#0F1B2D] flex items-center justify-between gap-2 cursor-pointer"
+                    className="w-full px-4 py-2.5 text-left hover:bg-[#111b2e] flex items-center justify-between gap-2 cursor-pointer"
                   >
                     <div className="min-w-0">
-                      <div className="text-xs font-bold text-[#F8FAFC] truncate">
+                      <div className="text-xs font-bold text-[#e8eef7] truncate">
                         {sc.caseName}
                       </div>
-                      <div className="text-[11px] text-[#94A3B8] tabular-nums">
-                        {sc.referenceNumber} · {sc.heirCount} dhaxale
+                      <div className="text-[11px] text-[#a9b8d0] tabular-nums">
+                        {sc.referenceNumber} · {sc.heirCount} dhaxle
                       </div>
                     </div>
-                    <span className="text-[11px] font-bold text-[#22C55E] shrink-0">Kiis</span>
+                    <span className="text-[11px] font-bold text-[#22c55e] shrink-0">Kiis</span>
                   </button>
                 ))}
 
@@ -3049,21 +3296,21 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                     key={p.id}
                     type="button"
                     onClick={() => handleFocusPlotFromSearch(p)}
-                    className="w-full px-4 py-2.5 text-left hover:bg-[#0F1B2D] flex items-center justify-between gap-2 cursor-pointer"
+                    className="w-full px-4 py-2.5 text-left hover:bg-[#111b2e] flex items-center justify-between gap-2 cursor-pointer"
                   >
                     <div className="min-w-0">
-                      <div className="text-xs font-bold text-[#F8FAFC] truncate">
+                      <div className="text-xs font-bold text-[#e8eef7] truncate">
                         {p.id}{' '}
-                        <span className="text-[#94A3B8] font-normal">
+                        <span className="text-[#a9b8d0] font-normal">
                           · Block {p.blockDisplayName} · Heer {p.blockHeer}
                         </span>
                       </div>
-                      <div className="text-[11px] text-[#94A3B8] tabular-nums truncate">
+                      <div className="text-[11px] text-[#a9b8d0] tabular-nums truncate">
                         {p.areaSqM} m² · {p.statusText}
                       </div>
                     </div>
-                    <span className="text-[11px] font-bold text-[#22C55E] shrink-0">
-                      {p.isPartialQayb ? 'Qayb' : 'Buuxa'}
+                    <span className="text-[11px] font-bold text-[#22c55e] shrink-0">
+                      {p.isPartialQayb ? 'Half' : 'Buuxa'}
                     </span>
                   </button>
                 ))}
@@ -3077,73 +3324,81 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             value={quickPlotFilter}
             onChange={(e) => setQuickPlotFilter(e.target.value as MapQuickPlotFilter)}
             aria-label="Sifee Plots-ka"
-            className="min-h-[42px] rounded-xl bg-[#0F1B2D] border border-[#243449] focus:border-[#22C55E] px-2.5 text-xs font-semibold text-[#F8FAFC] focus:outline-none cursor-pointer tabular-nums"
+            className="min-h-[42px] max-w-[148px] sm:max-w-none rounded-xl bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] px-2 text-xs font-semibold text-[#e8eef7] focus:outline-none cursor-pointer tabular-nums shrink-0"
           >
             <option value="all">Dhammaan ({enrichedPlots.length})</option>
             <option value="buuxa">
-              Plots dhammaystiran ({enrichedPlots.filter((p) => p.isFullBuuxa).length})
+              Buuxa ({enrichedPlots.filter((p) => p.isFullBuuxa).length})
             </option>
             <option value="partial_qayb">
-              Half plots ({enrichedPlots.filter((p) => p.isPartialQayb).length})
+              Half ({enrichedPlots.filter((p) => p.isPartialQayb).length})
             </option>
             <option value="doox">
-              Doox / Jeexjeex ({enrichedPlots.filter((p) => p.isDoox).length})
+              Doox ({enrichedPlots.filter((p) => p.isDoox).length})
             </option>
             <option value="assigned">La Siiyey Dhaxal</option>
           </select>
         )}
 
-        {/* Map Color Style Switcher (Nashqad | Heerarka | Dhaxalka | PDF) */}
+        {/* Icon-Only Map Color Style Switcher (Nashqad | Heerarka | Dhaxalka | PDF) */}
         {currentHasMap && (
-          <div className="inline-flex items-center p-1 rounded-xl bg-[#0F1B2D] border border-[#243449] text-xs font-bold">
+          <div className="inline-flex items-center gap-0.5 p-1 rounded-xl bg-[#111b2e] border border-[#223250] shrink-0">
             <button
               type="button"
               onClick={() => setCartoStyle('nashqad')}
-              className={`min-h-[32px] px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              title="Qaabka Midabka: Nashqad"
+              aria-label="Qaabka Midabka: Nashqad"
+              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
                 cartoStyle === 'nashqad'
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
               }`}
             >
-              Nashqad
+              <Grid className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setCartoStyle('heerarka')}
-              className={`min-h-[32px] px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              title="Qaabka Midabka: Heerarka Dhulka"
+              aria-label="Qaabka Midabka: Heerarka Dhulka"
+              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
                 cartoStyle === 'heerarka'
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
               }`}
             >
-              Heerarka (1–3)
+              <Mountain className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setCartoStyle('inheritance')}
-              className={`min-h-[32px] px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              title="Qaabka Midabka: Saamiyada Dhaxalka"
+              aria-label="Qaabka Midabka: Saamiyada Dhaxalka"
+              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
                 cartoStyle === 'inheritance'
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
               }`}
             >
-              Dhaxalka
+              <Users className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setCartoStyle('layout11')}
-              className={`min-h-[32px] px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              title="Qaabka Midabka: PDF Layout"
+              aria-label="Qaabka Midabka: PDF Layout"
+              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
                 cartoStyle === 'layout11'
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
               }`}
             >
-              Khariidad PDF
+              <FileText className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
 
-        {/* Single Printable PDF & Report Button */}
+        {/* Icon-Only PDF & Report Shortcut */}
         {currentHasMap && subdivisionResult && onOpenCartographicPdfModal && (
           <button
             type="button"
@@ -3156,123 +3411,95 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                   : 'layout11'
               )
             }
-            className="min-h-[42px] inline-flex items-center gap-1.5 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#22C55E] px-3 text-xs font-bold text-[#F8FAFC] transition-colors shrink-0 cursor-pointer"
-            title="Daabac Khariidadda Dhaxalka PDF, Automatic_Layout11 ama Warbixinta Heerarka"
+            className="hidden sm:inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e] text-[#e8eef7] transition-colors shrink-0 cursor-pointer"
+            title="PDF & Warbixin"
+            aria-label="PDF & Warbixin"
           >
-            <Printer className="w-4 h-4 text-[#22C55E]" />
-            <span className="hidden sm:inline">PDF &amp; Warbixin</span>
+            <Printer className="w-4 h-4 text-[#22c55e]" />
           </button>
         )}
 
-        {/* Mobile Subdivision Designer Shortcut (hidden on lg where workspace tab bar already shows Naqshadeeyaha) */}
+        {/* Icon-Only Subdivision CAD Designer Shortcut */}
         <button
           type="button"
           onClick={onOpenAdvancedCadStudio}
-          className="lg:hidden min-h-[42px] inline-flex items-center gap-1.5 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#22C55E]/70 px-3 text-xs font-bold text-[#F8FAFC] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          title="Naqshadeeyaha"
+          className="lg:hidden h-10 w-10 inline-flex items-center justify-center rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e]/70 text-[#e8eef7] transition-colors shrink-0 cursor-pointer"
+          title="Naqshadeeyaha CAD"
+          aria-label="Naqshadeeyaha CAD"
         >
-          <Wrench className="w-4 h-4 text-[#22C55E]" />
-          <span className="hidden sm:inline">Naqshadeeyaha</span>
+          <Wrench className="w-4 h-4 text-[#22c55e]" />
         </button>
       </div>
 
-      {((currentHasMap &&
-        (subdivisionState.nashqadSummary ||
-          cartoReport ||
-          totalSelectedFeaturesCount > 0 ||
-          activeMapTool !== 'inspect')) ||
-        userGpsInfo !== null) && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-[#94A3B8] tabular-nums">
-          {subdivisionState.nashqadSummary ? (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      {/* COMPACT 1-ROW UNIFIED METRICS STRIP (E10, E11, E9 — zero conflicting numbers) */}
+      {(currentHasMap || userGpsInfo !== null) && (
+        <div className="scroll-fade-right flex items-center justify-between gap-2 px-1 py-0.5 text-[11.5px] text-[#a9b8d0] tabular-nums overflow-x-auto no-scrollbar whitespace-nowrap">
+          {currentHasMap && (
+            <div className="flex items-center gap-2 shrink-0">
               <span>
                 Blocks:{' '}
-                <strong className="text-[#38BDF8]">
-                  {subdivisionState.nashqadSummary.blocksCount.toLocaleString()}
+                <strong className="text-[#38bdf8]">
+                  {unifiedMetrics.blocksCount.toLocaleString()}
                 </strong>
               </span>
               <span aria-hidden="true">·</span>
               <span>
-                Dhammaystiran:{' '}
-                <strong className="text-[#10B981]">
-                  {subdivisionState.nashqadSummary.fullPlotsCount.toLocaleString()}
+                Buuxa:{' '}
+                <strong className="text-[#22c55e]">
+                  {unifiedMetrics.fullPlotsCount.toLocaleString()}
                 </strong>
               </span>
               <span aria-hidden="true">·</span>
               <span>
                 Half:{' '}
-                <strong className="text-[#F59E0B]">
-                  {subdivisionState.nashqadSummary.halfPlotsCount.toLocaleString()}
+                <strong className="text-[#facc15]">
+                  {unifiedMetrics.halfPlotsCount.toLocaleString()}
                 </strong>
               </span>
               <span aria-hidden="true">·</span>
-              <span>
-                Wadarta:{' '}
-                <strong className="text-[#F8FAFC]">
-                  {Math.round(subdivisionState.nashqadSummary.totalPlotsAreaSqM).toLocaleString()} m²
-                </strong>
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsNashqadReportOpen(true)}
-                className="ml-1 inline-flex items-center gap-1 rounded-lg bg-[#0F1B2D] hover:bg-[#16263D] border border-[#243449] hover:border-[#22C55E] px-2 py-0.5 text-[11px] font-bold text-[#22C55E] transition-colors cursor-pointer"
-              >
-                <FileText className="w-3 h-3 shrink-0" />
-                <span>Warbixin</span>
-              </button>
-            </div>
-          ) : cartoReport ? (
-            <div className="flex flex-wrap items-center gap-2">
               <span>
                 Plots:{' '}
-                <strong className="text-[#F8FAFC]">
-                  {subdivisionResult?.plots.length ?? cartoReport.totalPlots}
+                <strong className="text-[#e8eef7]">
+                  {Math.round(unifiedMetrics.allPlotsAreaSqM).toLocaleString()} m²
                 </strong>
               </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                Blocks: <strong className="text-[#F8FAFC]">{cartoReport.totalBlocks}</strong>
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                Bedka:{' '}
-                <strong className="text-[#F8FAFC]">
-                  {cartoReport.boundaryAreaDisplayHa.toFixed(2)} ha
-                </strong>
-              </span>
-              {!subdivisionResult?.isPrebuiltGeometry &&
-                (subdivisionResult?.htmlHalvesCounted?.length ?? 0) > 0 && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>
-                      Half:{' '}
-                      <strong className="text-teal-300">
-                        {subdivisionResult?.htmlHalvesCounted?.length}
-                      </strong>
-                    </span>
-                  </>
-                )}
+              {unifiedMetrics.boundaryAreaHa > 0 && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    Xuduud:{' '}
+                    <strong className="text-[#e8eef7]">
+                      {unifiedMetrics.boundaryAreaHa.toFixed(2)} ha
+                    </strong>
+                  </span>
+                </>
+              )}
+              {subdivisionState.nashqadSummary && (
+                <button
+                  type="button"
+                  onClick={() => setIsNashqadReportOpen(true)}
+                  className="ml-1 inline-flex items-center gap-1 rounded-lg bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e] px-2 py-0.5 text-[11px] font-bold text-[#22c55e] transition-colors cursor-pointer"
+                >
+                  <FileText className="w-3 h-3 shrink-0" />
+                  <span>Warbixin</span>
+                </button>
+              )}
             </div>
-          ) : null}
+          )}
 
-          <div className="flex flex-wrap items-center gap-2.5 ml-auto">
+          <div className="flex items-center gap-2 ml-auto shrink-0">
             {userGpsInfo && (
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 border border-sky-400/50 px-2.5 py-0.5 text-sky-200 font-semibold max-w-full">
+              <div className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 border border-sky-400/50 px-2 py-0.5 text-sky-200 font-semibold">
                 <LocateFixed className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="truncate max-w-[240px] sm:max-w-[360px]">
-                  <strong className="text-[#F8FAFC]">{userGpsInfo.placeLabel}</strong>
+                <span className="truncate max-w-[210px] sm:max-w-[340px]">
+                  <strong className="text-[#e8eef7]">{userGpsInfo.placeLabel}</strong>
                   {' · '}
-                  {userGpsInfo.lat.toFixed(5)}°, {userGpsInfo.lng.toFixed(5)}° (±
-                  {userGpsInfo.accuracyM}m)
-                  {userGpsInfo.farmRelationLabel
-                    ? ` · ${userGpsInfo.farmRelationLabel}`
-                    : ''}
+                  {userGpsInfo.lat.toFixed(5)}°, {userGpsInfo.lng.toFixed(5)}°
                 </span>
                 <button
                   type="button"
                   onClick={handleClearUserGps}
-                  aria-label="Xir calaamadda GPS"
-                  title="Qari calaamadda GPS"
+                  aria-label="Xidh calaamadda GPS"
                   className="ml-0.5 rounded hover:bg-sky-400/20 p-0.5 text-sky-300 hover:text-white cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -3281,15 +3508,10 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             )}
 
             {totalSelectedFeaturesCount > 0 && openRightPanel !== 'selection' && (
-              <div className="inline-flex items-center gap-2 rounded-lg bg-amber-400/15 border border-amber-400/50 px-2.5 py-0.5 text-amber-300 font-bold">
+              <div className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400/15 border border-amber-400/50 px-2 py-0.5 text-amber-300 font-bold">
                 <span>
-                  Features la doortay:{' '}
-                  <strong className="text-[#FACC15]">{totalSelectedFeaturesCount}</strong>
-                  {selectedPlotIds.size > 0 && selectedBlockIds.size === 0
-                    ? ' plots'
-                    : selectedBlockIds.size > 0 && selectedPlotIds.size === 0
-                    ? ' blocks'
-                    : ` (${selectedPlotIds.size}p, ${selectedBlockIds.size}b)`}
+                  La xushay:{' '}
+                  <strong className="text-[#facc15]">{totalSelectedFeaturesCount}</strong>
                 </span>
                 <button
                   type="button"
@@ -3297,31 +3519,31 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                   className="inline-flex items-center gap-1 rounded bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 px-1.5 py-0.5 text-[10.5px] font-extrabold text-rose-200 cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-3 h-3" />
-                  <span>Clear Selection</span>
+                  <span>Nadiifi</span>
                 </button>
               </div>
             )}
 
             {activeMapTool !== 'inspect' && (
-              <div className="flex flex-wrap items-center gap-2 text-[#22C55E] font-semibold">
+              <div className="flex items-center gap-2 text-[#22c55e] font-semibold">
                 <span>
                   {activeMapTool === 'map_select_polygon'
-                    ? `Polygon (${selectionTarget === 'blocks' ? 'Blocks' : 'Plots'}): Taabo geesaha aagga (${polyScreenPts.length} gees)`
+                    ? `Geesoole (${polyScreenPts.length} gees)`
                     : activeMapTool === 'map_select_freehand'
-                    ? `Freehand (${selectionTarget === 'blocks' ? 'Blocks' : 'Plots'}): Gacanta ku wareeji aagga`
+                    ? 'Gacan-ku-sawir: wareeji aagga'
                     : activeMapTool === 'map_select_radius'
-                    ? `Radius (${selectionTarget === 'blocks' ? 'Blocks' : 'Plots'}): Jiid aag wareegsan ama taabo (${defaultRadiusM}m)`
+                    ? `Wareeg (${defaultRadiusM}m)`
                     : activeMapTool === 'select_plot'
-                    ? `Xulo Plot (${TIER_METADATA[targetManualTier].code}): Taabo plot kasta`
+                    ? `Xulo Plot (${TIER_METADATA[targetManualTier].code})`
                     : activeMapTool === 'select_block'
-                    ? `Xulo Block (${TIER_METADATA[targetManualTier].code}): Taabo block kasta`
-                    : 'Calaamadee Waddada: Taabo barta ay waddadu ka marayso khariidadda'}
+                    ? `Xulo Block (${TIER_METADATA[targetManualTier].code})`
+                    : 'Taabo barta waddada'}
                 </span>
                 {activeMapTool === 'map_select_polygon' && polyScreenPts.length >= 3 && (
                   <button
                     type="button"
                     onClick={() => finishPolygonSelection(false)}
-                    className="rounded-md bg-[#FACC15] text-[#05130B] px-2 py-0.5 text-[10.5px] font-extrabold hover:bg-amber-300 cursor-pointer"
+                    className="rounded-md bg-[#facc15] text-[#060d18] px-2 py-0.5 text-[10.5px] font-extrabold hover:bg-amber-300 cursor-pointer"
                   >
                     Dhammaystir ({polyScreenPts.length})
                   </button>
@@ -3332,7 +3554,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                     resetActiveDrawingShapes();
                     setActiveMapTool('inspect');
                   }}
-                  className="underline text-[#F8FAFC] hover:text-[#22C55E] cursor-pointer"
+                  className="underline text-[#e8eef7] hover:text-[#22c55e] cursor-pointer"
                 >
                   Jooji
                 </button>
@@ -3342,22 +3564,47 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         </div>
       )}
 
-      {/* 2. INTERACTIVE FULL-BLEED MAP CANVAS (NO DROPZONE — "+" FAB IS THE SOLE UPLOAD ENTRY POINT) */}
+      {/* 2. INTERACTIVE FULL-BLEED MAP CANVAS (E4: >=68-72% of mobile viewport height) */}
       <div
         ref={mapWrapperRef}
-        className={`relative w-full h-[calc(100dvh-230px)] min-h-[460px] lg:h-[calc(100dvh-195px)] rounded-2xl overflow-hidden shadow-2xl transition-colors ${
+        className={`relative w-full h-[calc(100dvh-168px)] min-h-[430px] lg:h-[calc(100dvh-185px)] rounded-2xl overflow-hidden shadow-2xl transition-colors ${
           isPaperMode
             ? 'border-2 border-[#111827] bg-white'
-            : 'border border-[#243449] bg-[#07101E]'
+            : 'border border-[#223250] bg-[#060d18]'
         }`}
       >
-        {/* Leaflet Container */}
+        {/* Official Google Satellite & Hybrid Underlay (@vis.gl/react-google-maps) */}
+        {isGoogleUnderlayMounted && (
+          <GoogleSatelliteUnderlay
+            apiKey={googleApiKey}
+            center={googleMapCam.center}
+            zoom={googleMapCam.zoom}
+            showHybridLabels={showHybridLabels}
+            onStatusChange={setGoogleUnderlayStatus}
+          />
+        )}
+
+        {/* Leaflet Container (transparent over live Google Satellite; warm terrain fallback for online tiles; dark grid isolated to offline_vector) */}
         <div
           ref={mapContainerRef}
           className={`${
-            isPaperMode ? 'paper-pdf-leaflet-map' : 'gis-leaflet-map'
-          } w-full h-full z-0`}
+            isPaperMode
+              ? 'paper-pdf-leaflet-map'
+              : basemapMode === 'offline_vector'
+              ? 'offline-vector-leaflet-map'
+              : isGoogleUnderlayLive
+              ? 'gis-leaflet-map google-underlay-leaflet-map'
+              : 'gis-leaflet-map'
+          } relative w-full h-full z-[1]`}
         />
+
+        {/* E3: Subtle Basemap Tile Loading Indicator */}
+        {isLoadingTiles && basemapMode !== 'paper_pdf' && basemapMode !== 'offline_vector' && (
+          <div className="pointer-events-none absolute top-3 left-3 z-20 inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 border border-[#223250] px-2.5 py-1 text-[11px] font-semibold text-[#e8eef7] shadow-md">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-[#22c55e]" />
+            <span>Sawirka khariidadda waa la soo rarayaa...</span>
+          </div>
+        )}
 
         {/* DEDICATED TRANSPARENT POINTER CANVAS FOR MAP SELECTION TOOLS (POLYGON, FREEHAND, RADIUS) & ROAD ANCHOR */}
         {(activeMapTool === 'map_select_polygon' ||
@@ -3487,18 +3734,37 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             </div>
           )}
 
-        {/* RIGHT-SIDE FLOATING MAP NAVIGATION (+, −, Fit Farm, GPS) + INDIVIDUAL SELECTION, LAKABYADA, HEERARKA & SUMADAHA BELOW */}
-        <div className="absolute right-3 top-3 z-30 flex flex-col items-end gap-1.5">
+        {/* COMPACT SAMPLE BLOCK INDEPENDENT AXIS & MANUAL BEARING BANNER (Dherer / Ballac / Bearing °) */}
+        {currentHasMap &&
+          activeSampleAlignment &&
+          (activeSampleAlignment.hasMismatch || keepAlignmentBannerPinned) &&
+          dismissedMismatchSig !== currentMismatchSig && (
+            <div className="absolute left-2.5 top-2.5 z-25 w-[min(292px,calc(100vw-4.5rem))] max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain">
+              <SampleBlockAxisControlCard
+                alignment={activeSampleAlignment}
+                onAlign={handleAlignToSampleBlock}
+                onDismiss={() => {
+                  setKeepAlignmentBannerPinned(false);
+                  setDismissedMismatchSig(currentMismatchSig);
+                }}
+                isPaperMode={isPaperMode}
+                compactBanner
+              />
+            </div>
+          )}
+
+        {/* RIGHT-SIDE FLOATING ICON-ONLY GIS TOOLS (+, −, Fit, GPS | Xulo, Lakabyo, Heerar, Furaha) */}
+        <div className="absolute right-2.5 top-2.5 z-30 flex flex-col items-end gap-1">
           {/* Zoom In (+) */}
           <button
             type="button"
             onClick={() => leafletMapRef.current?.zoomIn()}
             aria-label="Soo dhowee (+)"
             title="Soo dhowee (+)"
-            className={`w-10 h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
               isPaperMode
                 ? 'bg-white/95 border-slate-300 text-slate-900 hover:bg-slate-100'
-                : 'bg-[#0B1220]/90 hover:bg-[#0F1B2D] border-[#243449] text-[#F8FAFC]'
+                : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7]'
             }`}
           >
             <Plus className="w-4 h-4" />
@@ -3510,44 +3776,44 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             onClick={() => leafletMapRef.current?.zoomOut()}
             aria-label="Fogee (−)"
             title="Fogee (−)"
-            className={`w-10 h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
               isPaperMode
                 ? 'bg-white/95 border-slate-300 text-slate-900 hover:bg-slate-100'
-                : 'bg-[#0B1220]/90 hover:bg-[#0F1B2D] border-[#243449] text-[#F8FAFC]'
+                : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7]'
             }`}
           >
             <Minus className="w-4 h-4" />
           </button>
 
-          {/* Zoom Active Layer (Dedicated GIS Extent Button — separate from GPS!) */}
+          {/* Zoom Active Layer */}
           {(currentHasMap || userGpsInfo !== null) && (
             <button
               type="button"
               onClick={handleZoomToActiveLayer}
-              aria-label={`Zoom Active Layer (${activeLayerDisplayLabel})`}
-              title={`Zoom Active Layer: ${activeLayerDisplayLabel}`}
-              className={`w-10 h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
+              aria-label={`Ku cabbir khariidadda (${activeLayerDisplayLabel})`}
+              title={`Ku cabbir khariidadda: ${activeLayerDisplayLabel}`}
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
                 isPaperMode
                   ? 'bg-white/95 border-slate-300 text-emerald-700 hover:bg-slate-100'
-                  : 'bg-[#0B1220]/90 hover:bg-[#0F1B2D] border-[#243449] text-[#22C55E] hover:border-[#22C55E]'
+                  : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#22c55e] hover:border-[#22c55e]'
               }`}
             >
               <Maximize2 className="w-4 h-4" />
             </button>
           )}
 
-          {/* GPS Current Location (True Crosshair Icon — finds & tells exact user location) */}
+          {/* GPS Current Location */}
           <button
             type="button"
             onClick={handleLocateMeGps}
             aria-label="Goobtaada saxda ah ee GPS"
-            title="Goobtaada saxda ah ee GPS (Current Location)"
-            className={`w-10 h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
+            title="Goobtaada saxda ah ee GPS"
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border flex items-center justify-center shadow-md active:scale-95 transition-all cursor-pointer ${
               isLocatingGps || userGpsInfo
                 ? 'bg-sky-500 border-sky-400 text-[#04111D]'
                 : isPaperMode
                 ? 'bg-white/95 border-slate-300 text-sky-600 hover:bg-slate-100'
-                : 'bg-[#0B1220]/90 hover:bg-[#0F1B2D] border-[#243449] text-sky-400 hover:border-sky-400'
+                : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#38bdf8] hover:border-[#38bdf8]'
             }`}
           >
             {isLocatingGps ? (
@@ -3557,14 +3823,14 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             )}
           </button>
 
-          {/* Divider separating Zoom/Nav buttons and Individual GIS Tools */}
+          {/* Divider separating Zoom/Nav icons and GIS Tool icons */}
           <div
-            className={`w-9 h-px my-0.5 ${
-              isPaperMode ? 'bg-slate-300' : 'bg-[#243449]'
+            className={`w-8 h-px my-0.5 ${
+              isPaperMode ? 'bg-slate-300' : 'bg-[#223250]'
             }`}
           />
 
-          {/* 0. SELECTION (Map Selection Tools: Polygon, Freehand, Radius + Clear Selection) */}
+          {/* 0. XULO (Icon-Only Selection Tool + Corner Badge) */}
           {currentHasMap && (
             <button
               type="button"
@@ -3574,155 +3840,159 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                 )
               }
               aria-expanded={openRightPanel === 'selection'}
-              title="Map Selection Tools (Polygon, Freehand, Radius)"
-              className={`min-h-[38px] px-2.5 py-1.5 rounded-xl border shadow-md inline-flex items-center gap-1.5 text-[11px] font-extrabold active:scale-95 transition-all cursor-pointer ${
+              aria-label="Qalabka Xulashada Khariidadda"
+              title="Qalabka Xulashada Khariidadda"
+              className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border shadow-md flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
                 openRightPanel === 'selection' ||
                 activeMapTool === 'map_select_polygon' ||
                 activeMapTool === 'map_select_freehand' ||
                 activeMapTool === 'map_select_radius'
-                  ? 'bg-[#FACC15] border-[#FACC15] text-[#05130B]'
+                  ? 'bg-[#facc15] border-[#facc15] text-[#060d18]'
                   : totalSelectedFeaturesCount > 0
-                  ? 'bg-[#0B1220]/95 border-[#FACC15] text-[#FACC15]'
+                  ? 'bg-[#0a1220]/95 border-[#facc15] text-[#facc15]'
                   : isPaperMode
                   ? 'bg-white/95 border-slate-300 text-slate-900 hover:border-amber-500'
-                  : 'bg-[#0B1220]/92 hover:bg-[#0F1B2D] border-[#243449] text-[#F8FAFC] hover:border-[#FACC15]'
+                  : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#facc15]'
               }`}
             >
-              <MousePointerClick className="w-3.5 h-3.5 shrink-0" />
-              <span>Selection</span>
+              <MousePointerClick className="w-4 h-4 shrink-0" />
               {totalSelectedFeaturesCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-md bg-[#05130B]/85 text-[#FACC15] text-[10px] font-black">
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-md bg-[#facc15] text-[#060d18] text-[9px] font-black leading-4 text-center tabular-nums shadow">
                   {totalSelectedFeaturesCount}
                 </span>
               )}
             </button>
           )}
 
-          {/* 1. LAKABYADA (Individual Button Below Selection) */}
+          {/* 1. LAKABYO (Icon-Only Layers & Basemaps) */}
           <button
             type="button"
             onClick={() =>
               setOpenRightPanel((prev) => (prev === 'layers' ? null : 'layers'))
             }
             aria-expanded={openRightPanel === 'layers'}
+            aria-label="Lakabyada Khariidadda"
             title="Lakabyada Khariidadda"
-            className={`min-h-[38px] px-2.5 py-1.5 rounded-xl border shadow-md inline-flex items-center gap-1.5 text-[11px] font-extrabold active:scale-95 transition-all cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border shadow-md flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
               openRightPanel === 'layers'
-                ? 'bg-[#22C55E] border-[#22C55E] text-[#05130B]'
+                ? 'bg-[#22c55e] border-[#22c55e] text-[#060d18]'
                 : isPaperMode
                 ? 'bg-white/95 border-slate-300 text-slate-900 hover:border-emerald-600'
-                : 'bg-[#0B1220]/92 hover:bg-[#0F1B2D] border-[#243449] text-[#F8FAFC] hover:border-[#22C55E]'
+                : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#22c55e]'
             }`}
           >
-            <Layers className="w-3.5 h-3.5 shrink-0" />
-            <span>Lakabyada</span>
+            <Layers className="w-4 h-4 shrink-0" />
           </button>
 
-          {/* 2. HEERARKA (Individual Button Below Lakabyada) */}
+          {/* 2. HEERAR (Icon-Only Land Quality Tiers) */}
           <button
             type="button"
             onClick={() =>
               setOpenRightPanel((prev) => (prev === 'tiers' ? null : 'tiers'))
             }
             aria-expanded={openRightPanel === 'tiers'}
+            aria-label="Heerarka Dhulka (DEM & Gacanta)"
             title="Heerarka Dhulka (DEM & Gacanta)"
-            className={`min-h-[38px] px-2.5 py-1.5 rounded-xl border shadow-md inline-flex items-center gap-1.5 text-[11px] font-extrabold active:scale-95 transition-all cursor-pointer ${
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border shadow-md flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
               openRightPanel === 'tiers'
-                ? 'bg-[#22C55E] border-[#22C55E] text-[#05130B]'
+                ? 'bg-[#22c55e] border-[#22c55e] text-[#060d18]'
                 : isPaperMode
                 ? 'bg-white/95 border-slate-300 text-slate-900 hover:border-emerald-600'
-                : 'bg-[#0B1220]/92 hover:bg-[#0F1B2D] border-[#243449] text-[#F8FAFC] hover:border-[#22C55E]'
+                : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#22c55e]'
             }`}
           >
-            <Mountain className="w-3.5 h-3.5 shrink-0" />
-            <span>Heerarka</span>
+            <Mountain className="w-4 h-4 shrink-0" />
           </button>
 
-          {/* 3. SUMADAHA (Individual Button Below Heerarka) */}
+          {/* 3. FURAHA (Icon-Only Legends) */}
           <button
             type="button"
             onClick={() =>
               setOpenRightPanel((prev) => (prev === 'legends' ? null : 'legends'))
             }
             aria-expanded={openRightPanel === 'legends'}
-            title="Sumadaha Khariidadda (Legends)"
-            className={`min-h-[38px] px-2.5 py-1.5 rounded-xl border shadow-md inline-flex items-center gap-1.5 text-[11px] font-extrabold active:scale-95 transition-all cursor-pointer ${
+            aria-label="Furaha Sumadaha Khariidadda"
+            title="Furaha Sumadaha Khariidadda"
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border shadow-md flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
               openRightPanel === 'legends'
-                ? 'bg-[#22C55E] border-[#22C55E] text-[#05130B]'
+                ? 'bg-[#22c55e] border-[#22c55e] text-[#060d18]'
                 : isPaperMode
                 ? 'bg-white/95 border-slate-300 text-slate-900 hover:border-emerald-600'
-                : 'bg-[#0B1220]/92 hover:bg-[#0F1B2D] border-[#243449] text-[#F8FAFC] hover:border-[#22C55E]'
+                : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#22c55e]'
             }`}
           >
-            <Users className="w-3.5 h-3.5 shrink-0" />
-            <span>Sumadaha</span>
+            <Users className="w-4 h-4 shrink-0" />
           </button>
 
-          {/* DEDICATED FLOATING PANEL FOR THE SELECTED INDIVIDUAL RIGHT-RAIL BUTTON */}
+          {/* COMPACT VIEWPORT-SAFE FLOATING POPOVER WINDOW (Never clips or obscures map/app layout) */}
           {openRightPanel !== null && (
-            <div
-              className={`absolute right-[calc(100%+10px)] top-0 w-[288px] sm:w-[324px] max-h-[calc(100dvh-235px)] overflow-y-auto rounded-2xl border shadow-2xl p-3.5 space-y-3 ${
-                isPaperMode
-                  ? 'bg-white/98 border-slate-300 text-slate-900'
-                  : 'bg-[#0B1220]/96 backdrop-blur-md border-[#243449] text-[#F8FAFC]'
-              }`}
-            >
-              {/* Panel Header + Close Button */}
-              <div className="flex items-center justify-between gap-2 pb-2 border-b border-current/10">
-                <div className="inline-flex items-center gap-2 text-xs font-extrabold">
-                  {openRightPanel === 'selection' && (
-                    <>
-                      <MousePointerClick className="w-3.5 h-3.5 text-[#FACC15]" />
-                      <span>Map Selection Tools</span>
-                    </>
-                  )}
-                  {openRightPanel === 'layers' && (
-                    <>
-                      <Layers className="w-3.5 h-3.5 text-[#22C55E]" />
-                      <span>Lakabyada Khariidadda</span>
-                    </>
-                  )}
-                  {openRightPanel === 'tiers' && (
-                    <>
-                      <Mountain className="w-3.5 h-3.5 text-[#22C55E]" />
-                      <span>Heerarka Dhulka</span>
-                    </>
-                  )}
-                  {openRightPanel === 'legends' && (
-                    <>
-                      <Users className="w-3.5 h-3.5 text-[#22C55E]" />
-                      <span>Sumadaha (Legends)</span>
-                    </>
-                  )}
+            <>
+              <div
+                onClick={() => setOpenRightPanel(null)}
+                className="fixed inset-0 z-[85] bg-black/25 lg:bg-transparent"
+                aria-hidden="true"
+              />
+              <div
+                className={`fixed right-2.5 top-[106px] lg:right-14 lg:top-[132px] z-[90] w-[min(296px,calc(100vw-1.25rem))] max-h-[calc(100dvh-11.25rem)] lg:max-h-[calc(100dvh-9.5rem)] flex flex-col overflow-hidden rounded-2xl border shadow-2xl ${
+                  isPaperMode
+                    ? 'bg-white/98 border-slate-300 text-slate-900'
+                    : 'bg-[#0a1220]/97 backdrop-blur-md border-[#223250] text-[#e8eef7]'
+                }`}
+              >
+                {/* Sticky Compact Panel Header */}
+                <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-current/10 shrink-0">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-extrabold truncate">
+                    {openRightPanel === 'selection' && (
+                      <>
+                        <MousePointerClick className="w-3.5 h-3.5 text-[#facc15] shrink-0" />
+                        <span className="truncate">Qalabka Xulashada</span>
+                      </>
+                    )}
+                    {openRightPanel === 'layers' && (
+                      <>
+                        <Layers className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />
+                        <span className="truncate">Lakabyada Khariidadda</span>
+                      </>
+                    )}
+                    {openRightPanel === 'tiers' && (
+                      <>
+                        <Mountain className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />
+                        <span className="truncate">Heerarka Dhulka (1–3)</span>
+                      </>
+                    )}
+                    {openRightPanel === 'legends' && (
+                      <>
+                        <Users className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />
+                        <span className="truncate">Furaha Sumadaha</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenRightPanel(null)}
+                    aria-label="Xidh daaqadda"
+                    className="h-7 w-7 rounded-lg flex items-center justify-center opacity-80 hover:opacity-100 hover:bg-current/10 cursor-pointer shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setOpenRightPanel(null)}
-                  aria-label="Xir daaqadda"
-                  className="w-7 h-7 rounded-lg flex items-center justify-center opacity-75 hover:opacity-100 hover:bg-current/10 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* ==================== PANEL 0: MAP SELECTION TOOLS ==================== */}
-              {openRightPanel === 'selection' && (
-                <div className="space-y-3 text-xs">
-                  {/* Target Layer Selector: Plots vs Blocks */}
-                  <div className="space-y-1.5">
-                    <span className="block text-[10.5px] font-bold opacity-75">
-                      Nooca la xulayo:
-                    </span>
+                {/* Scrollable Compact Panel Body */}
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-2.5 space-y-2.5">
+                {/* ==================== PANEL 0: QALABKA XULASHADA (COMPACT ICON TOOLS) ==================== */}
+                {openRightPanel === 'selection' && (
+                  <div className="space-y-2.5 text-xs">
+                    {/* Target Layer Selector: Plots vs Blocks */}
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
                         onClick={() => setSelectionTarget('plots')}
-                        className={`min-h-[34px] rounded-xl border px-2.5 py-1 text-[11px] font-extrabold transition-colors cursor-pointer ${
+                        className={`min-h-[34px] rounded-xl border px-2 py-1 text-[11px] font-extrabold transition-colors cursor-pointer ${
                           selectionTarget === 'plots'
-                            ? 'bg-[#FACC15] border-[#FACC15] text-[#05130B]'
+                            ? 'bg-[#facc15] border-[#facc15] text-[#060d18]'
                             : isPaperMode
                             ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
-                            : 'bg-[#0F1B2D] border-[#243449] text-[#94A3B8] hover:text-[#F8FAFC]'
+                            : 'bg-[#111b2e] border-[#223250] text-[#a9b8d0] hover:text-[#e8eef7]'
                         }`}
                       >
                         Plots
@@ -3730,105 +4000,74 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                       <button
                         type="button"
                         onClick={() => setSelectionTarget('blocks')}
-                        className={`min-h-[34px] rounded-xl border px-2.5 py-1 text-[11px] font-extrabold transition-colors cursor-pointer ${
+                        className={`min-h-[34px] rounded-xl border px-2 py-1 text-[11px] font-extrabold transition-colors cursor-pointer ${
                           selectionTarget === 'blocks'
-                            ? 'bg-[#FACC15] border-[#FACC15] text-[#05130B]'
+                            ? 'bg-[#facc15] border-[#facc15] text-[#060d18]'
                             : isPaperMode
                             ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
-                            : 'bg-[#0F1B2D] border-[#243449] text-[#94A3B8] hover:text-[#F8FAFC]'
+                            : 'bg-[#111b2e] border-[#223250] text-[#a9b8d0] hover:text-[#e8eef7]'
                         }`}
                       >
                         Blocks
                       </button>
                     </div>
-                  </div>
 
-                  {/* 3 Selection Tools: Polygon, Freehand, Radius */}
-                  <div className="space-y-1.5">
-                    {/* 1. Polygon */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetActiveDrawingShapes();
-                        setActiveMapTool((prev) =>
-                          prev === 'map_select_polygon'
-                            ? 'inspect'
-                            : 'map_select_polygon'
-                        );
-                        setOpenRightPanel(null);
-                      }}
-                      className={`w-full rounded-xl border p-2.5 text-left transition-colors cursor-pointer ${
-                        activeMapTool === 'map_select_polygon'
-                          ? 'bg-[#FACC15]/20 border-[#FACC15]'
-                          : isPaperMode
-                          ? 'bg-white border-slate-300 hover:border-amber-500'
-                          : 'bg-[#0F1B2D] border-[#243449] hover:border-[#FACC15]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 font-extrabold text-[11.5px]">
-                        <span className="inline-flex items-center gap-2">
-                          <Pentagon className="w-4 h-4 text-[#FACC15] shrink-0" />
-                          <span>Polygon</span>
-                        </span>
-                        {activeMapTool === 'map_select_polygon' && (
-                          <span className="text-[10px] font-black text-[#FACC15]">
-                            Shaqaynaya
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10.5px] opacity-80 mt-1 leading-snug">
-                        Dooro plots ama blocks adigoo sawiraya aag geeso leh.
-                      </p>
-                    </button>
-
-                    {/* 2. Freehand */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetActiveDrawingShapes();
-                        setActiveMapTool((prev) =>
-                          prev === 'map_select_freehand'
-                            ? 'inspect'
-                            : 'map_select_freehand'
-                        );
-                        setOpenRightPanel(null);
-                      }}
-                      className={`w-full rounded-xl border p-2.5 text-left transition-colors cursor-pointer ${
-                        activeMapTool === 'map_select_freehand'
-                          ? 'bg-[#FACC15]/20 border-[#FACC15]'
-                          : isPaperMode
-                          ? 'bg-white border-slate-300 hover:border-amber-500'
-                          : 'bg-[#0F1B2D] border-[#243449] hover:border-[#FACC15]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2 font-extrabold text-[11.5px]">
-                        <span className="inline-flex items-center gap-2">
-                          <Lasso className="w-4 h-4 text-[#FACC15] shrink-0" />
-                          <span>Freehand</span>
-                        </span>
-                        {activeMapTool === 'map_select_freehand' && (
-                          <span className="text-[10px] font-black text-[#FACC15]">
-                            Shaqaynaya
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10.5px] opacity-80 mt-1 leading-snug">
-                        Dooro plots ama blocks adigoo gacanta ku wareejinaya.
-                      </p>
-                    </button>
-
-                    {/* 3. Radius */}
-                    <div
-                      className={`rounded-xl border p-2.5 transition-colors ${
-                        activeMapTool === 'map_select_radius'
-                          ? 'bg-[#FACC15]/20 border-[#FACC15]'
-                          : isPaperMode
-                          ? 'bg-white border-slate-300'
-                          : 'bg-[#0F1B2D] border-[#243449]'
-                      }`}
-                    >
+                    {/* 3 Icon-Only Selection Tools: Geesoole | Gacan-ku-sawir | Wareeg */}
+                    <div className="grid grid-cols-3 gap-1.5">
                       <button
                         type="button"
+                        title="Geesoole (Polygon)"
+                        aria-label="Geesoole (Polygon)"
+                        onClick={() => {
+                          resetActiveDrawingShapes();
+                          setActiveMapTool((prev) =>
+                            prev === 'map_select_polygon'
+                              ? 'inspect'
+                              : 'map_select_polygon'
+                          );
+                          setOpenRightPanel(null);
+                        }}
+                        className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
+                          activeMapTool === 'map_select_polygon'
+                            ? 'bg-[#facc15] border-[#facc15] text-[#060d18]'
+                            : isPaperMode
+                            ? 'bg-white border-slate-300 text-slate-800 hover:border-amber-500'
+                            : 'bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#facc15]'
+                        }`}
+                      >
+                        <Pentagon className="w-4 h-4 shrink-0" />
+                        <span className="text-[9.5px] font-bold">Geesoole</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        title="Gacan-ku-sawir (Lasso)"
+                        aria-label="Gacan-ku-sawir (Lasso)"
+                        onClick={() => {
+                          resetActiveDrawingShapes();
+                          setActiveMapTool((prev) =>
+                            prev === 'map_select_freehand'
+                              ? 'inspect'
+                              : 'map_select_freehand'
+                          );
+                          setOpenRightPanel(null);
+                        }}
+                        className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
+                          activeMapTool === 'map_select_freehand'
+                            ? 'bg-[#facc15] border-[#facc15] text-[#060d18]'
+                            : isPaperMode
+                            ? 'bg-white border-slate-300 text-slate-800 hover:border-amber-500'
+                            : 'bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#facc15]'
+                        }`}
+                      >
+                        <Lasso className="w-4 h-4 shrink-0" />
+                        <span className="text-[9.5px] font-bold">Sawir</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        title="Wareeg (Radius)"
+                        aria-label="Wareeg (Radius)"
                         onClick={() => {
                           resetActiveDrawingShapes();
                           setActiveMapTool((prev) =>
@@ -3838,134 +4077,141 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                           );
                           setOpenRightPanel(null);
                         }}
-                        className="w-full text-left cursor-pointer"
+                        className={`h-11 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-colors cursor-pointer ${
+                          activeMapTool === 'map_select_radius'
+                            ? 'bg-[#facc15] border-[#facc15] text-[#060d18]'
+                            : isPaperMode
+                            ? 'bg-white border-slate-300 text-slate-800 hover:border-amber-500'
+                            : 'bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#facc15]'
+                        }`}
                       >
-                        <div className="flex items-center justify-between gap-2 font-extrabold text-[11.5px]">
-                          <span className="inline-flex items-center gap-2">
-                            <CircleDot className="w-4 h-4 text-[#FACC15] shrink-0" />
-                            <span>Radius</span>
+                        <CircleDot className="w-4 h-4 shrink-0" />
+                        <span className="text-[9.5px] font-bold">Wareeg</span>
+                      </button>
+                    </div>
+
+                    {/* Compact Radius Input */}
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <span className="text-[11px] opacity-80">Wareegga (mitir):</span>
+                      <div className="inline-flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={5}
+                          max={5000}
+                          step={5}
+                          value={defaultRadiusM}
+                          onChange={(ev) => setDefaultRadiusM(ev.target.value)}
+                          aria-label="Wareegga mitir"
+                          className={`w-16 min-h-[30px] rounded-lg border px-2 py-0.5 text-xs font-bold text-right tabular-nums ${
+                            isPaperMode
+                              ? 'bg-slate-50 border-slate-300 text-slate-900'
+                              : 'bg-[#060d18] border-[#223250] text-[#e8eef7]'
+                          }`}
+                        />
+                        <span className="text-[11px] font-bold opacity-80">m</span>
+                      </div>
+                    </div>
+
+                    {/* Selected Features Count Summary + Nadiifi Xulashada */}
+                    <div
+                      className={`rounded-xl border p-2.5 space-y-1.5 ${
+                        isPaperMode
+                          ? 'bg-slate-50 border-slate-200'
+                          : 'bg-[#060d18] border-[#223250]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold opacity-85">
+                          La xushay:
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-[#facc15]/20 border border-[#facc15]/50 text-[#facc15] font-black text-[11px] tabular-nums">
+                          {totalSelectedFeaturesCount}
+                        </span>
+                      </div>
+
+                      {totalSelectedFeaturesCount > 0 && (
+                        <div className="flex items-center justify-between text-[10.5px] opacity-80 tabular-nums">
+                          <span>
+                            {selectedPlotIds.size > 0
+                              ? `Plots: ${selectedPlotIds.size}`
+                              : ''}
+                            {selectedPlotIds.size > 0 && selectedBlockIds.size > 0
+                              ? ' · '
+                              : ''}
+                            {selectedBlockIds.size > 0
+                              ? `Blocks: ${selectedBlockIds.size}`
+                              : ''}
                           </span>
-                          {activeMapTool === 'map_select_radius' && (
-                            <span className="text-[10px] font-black text-[#FACC15]">
-                              Shaqaynaya
+                          {selectedFeaturesAreaSqM > 0 && (
+                            <span className="font-bold">
+                              {Math.round(selectedFeaturesAreaSqM).toLocaleString()} m²
                             </span>
                           )}
                         </div>
-                        <p className="text-[10.5px] opacity-80 mt-1 leading-snug">
-                          Dooro plots ama blocks ku jira aag wareegsan.
-                        </p>
-                      </button>
+                      )}
 
-                      <div className="mt-2 pt-2 border-t border-current/10 flex items-center justify-between gap-2">
-                        <span className="text-[10px] opacity-75">
-                          Cabbirka Radius (jiid ama mitir):
-                        </span>
-                        <div className="inline-flex items-center gap-1">
-                          <input
-                            type="number"
-                            min={5}
-                            max={5000}
-                            step={5}
-                            value={defaultRadiusM}
-                            onChange={(ev) => setDefaultRadiusM(ev.target.value)}
-                            aria-label="Radius mitir"
-                            className={`w-16 rounded-lg border px-2 py-0.5 text-[11px] font-bold text-right ${
-                              isPaperMode
-                                ? 'bg-slate-50 border-slate-300 text-slate-900'
-                                : 'bg-[#0B1220] border-[#243449] text-[#F8FAFC]'
-                            }`}
-                          />
-                          <span className="text-[10.5px] font-bold opacity-80">m</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Selected Features Count Summary + Clear Selection */}
-                  <div
-                    className={`rounded-xl border p-2.5 space-y-2 ${
-                      isPaperMode
-                        ? 'bg-slate-50 border-slate-200'
-                        : 'bg-[#08101D] border-[#243449]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold opacity-85">
-                        Features la doortay:
-                      </span>
-                      <span className="px-2 py-0.5 rounded-lg bg-[#FACC15]/20 border border-[#FACC15]/50 text-[#FACC15] font-black text-xs">
-                        {totalSelectedFeaturesCount}
-                      </span>
-                    </div>
-
-                    {totalSelectedFeaturesCount > 0 && (
-                      <div className="flex items-center justify-between text-[10.5px] opacity-80">
-                        <span>
-                          {selectedPlotIds.size > 0
-                            ? `Plots: ${selectedPlotIds.size}`
-                            : ''}
-                          {selectedPlotIds.size > 0 && selectedBlockIds.size > 0
-                            ? ' • '
-                            : ''}
-                          {selectedBlockIds.size > 0
-                            ? `Blocks: ${selectedBlockIds.size}`
-                            : ''}
-                        </span>
-                        {selectedFeaturesAreaSqM > 0 && (
-                          <span className="font-bold">
-                            {Math.round(selectedFeaturesAreaSqM).toLocaleString()} m²
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      disabled={
-                        totalSelectedFeaturesCount === 0 &&
-                        activeMapTool !== 'map_select_polygon' &&
-                        activeMapTool !== 'map_select_freehand' &&
-                        activeMapTool !== 'map_select_radius'
-                      }
-                      onClick={() => {
-                        handleClearSelection();
-                        if (
+                      <button
+                        type="button"
+                        disabled={
+                          totalSelectedFeaturesCount === 0 &&
+                          activeMapTool !== 'map_select_polygon' &&
+                          activeMapTool !== 'map_select_freehand' &&
+                          activeMapTool !== 'map_select_radius'
+                        }
+                        onClick={() => {
+                          handleClearSelection();
+                          if (
+                            activeMapTool === 'map_select_polygon' ||
+                            activeMapTool === 'map_select_freehand' ||
+                            activeMapTool === 'map_select_radius'
+                          ) {
+                            setActiveMapTool('inspect');
+                          }
+                        }}
+                        className={`w-full min-h-[34px] rounded-xl border px-2.5 py-1 font-extrabold text-[11px] inline-flex items-center justify-center gap-1.5 transition-colors ${
+                          totalSelectedFeaturesCount > 0 ||
                           activeMapTool === 'map_select_polygon' ||
                           activeMapTool === 'map_select_freehand' ||
                           activeMapTool === 'map_select_radius'
-                        ) {
-                          setActiveMapTool('inspect');
-                        }
-                      }}
-                      className={`w-full min-h-[36px] rounded-xl border px-3 py-1.5 font-extrabold text-[11px] inline-flex items-center justify-center gap-1.5 transition-colors ${
-                        totalSelectedFeaturesCount > 0 ||
-                        activeMapTool === 'map_select_polygon' ||
-                        activeMapTool === 'map_select_freehand' ||
-                        activeMapTool === 'map_select_radius'
-                          ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-400/50 text-rose-300 cursor-pointer'
-                          : 'opacity-40 border-current/15 cursor-not-allowed'
-                      }`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                      <span>Clear Selection</span>
-                    </button>
+                            ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-400/50 text-rose-300 cursor-pointer'
+                            : 'opacity-40 border-current/15 cursor-not-allowed'
+                        }`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Nadiifi Xulashada</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* ==================== PANEL 1: LAKABYADA ==================== */}
+              {/* ==================== PANEL 1: LAKABYADA (WITH GOOGLE SATELLITE) ==================== */}
               {openRightPanel === 'layers' && (
-                <div className="space-y-3 text-xs">
-                  {/* Basemap Switcher integrated inside Lakabyada (keeps top of map canvas clean) */}
-                  <div className="pb-2.5 border-b border-current/10 space-y-1.5">
+                <div className="space-y-2.5 text-xs">
+                  {/* Basemap Switcher with Google Satellite */}
+                  <div className="pb-2 border-b border-current/10 space-y-1.5">
                     <span className="block text-[10.5px] font-bold opacity-75">
                       Nooca Khariidadda:
                     </span>
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         type="button"
+                        onClick={() => setBasemapMode('google_satellite')}
+                        className={`col-span-2 min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-extrabold inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                          basemapMode === 'google_satellite'
+                            ? 'bg-[#22C55E] text-[#05130B]'
+                            : isPaperMode
+                            ? 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                            : 'bg-[#0F1B2D] border border-[#243449] text-[#F8FAFC] hover:border-[#22C55E]'
+                        }`}
+                      >
+                        <Satellite className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Google Satellite</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => setBasemapMode('satellite')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                        className={`min-h-[32px] px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                           basemapMode === 'satellite'
                             ? 'bg-[#22C55E] text-[#05130B]'
                             : isPaperMode
@@ -3974,13 +4220,13 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                         }`}
                       >
                         <Satellite className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">Dayax-gacmeed</span>
+                        <span className="truncate">Esri Satellite</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setBasemapMode('osm')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                        className={`min-h-[32px] px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                           basemapMode === 'osm'
                             ? 'bg-[#22C55E] text-[#05130B]'
                             : isPaperMode
@@ -3995,7 +4241,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                       <button
                         type="button"
                         onClick={() => setBasemapMode('paper_pdf')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                        className={`min-h-[32px] px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                           basemapMode === 'paper_pdf'
                             ? 'bg-[#111827] text-white'
                             : isPaperMode
@@ -4010,7 +4256,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                       <button
                         type="button"
                         onClick={() => setBasemapMode('offline_vector')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
+                        className={`min-h-[32px] px-2 py-1 rounded-lg text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer ${
                           basemapMode === 'offline_vector'
                             ? 'bg-[#22C55E] text-[#05130B]'
                             : isPaperMode
@@ -4022,7 +4268,38 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                         <span className="truncate">Bilaa Khad</span>
                       </button>
                     </div>
+
+                    {(basemapMode === 'google_satellite' || basemapMode === 'satellite') && (
+                      <label className="pt-1 flex items-center justify-between gap-2 text-[11px] font-semibold cursor-pointer select-none">
+                        <span>Magacyada Goobaha (Hybrid)</span>
+                        <input
+                          type="checkbox"
+                          checked={showHybridLabels}
+                          onChange={(e) => setShowHybridLabels(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded accent-[#22C55E] cursor-pointer shrink-0"
+                        />
+                      </label>
+                    )}
+
+                    {basemapMode === 'google_satellite' && !isGoogleUnderlayLive && (
+                      <p className="text-[10px] opacity-70 leading-snug">
+                        {googleApiKey && googleUnderlayStatus === 'loading'
+                          ? 'Google Satellite waa la soo rarayaa...'
+                          : 'Sawir dayax-gacmeed toos ah ayaa shaqaynaya (ku dar VITE_GOOGLE_MAPS_API_KEY si Google Maps uga shaqeeyo).'}
+                      </p>
+                    )}
                   </div>
+
+                  {/* Persistent Sample Block Independent Axis & Manual Bearing Control inside Lakabyada */}
+                  {currentHasMap && activeSampleAlignment && (
+                    <div className="pb-2.5 border-b border-current/10">
+                      <SampleBlockAxisControlCard
+                        alignment={activeSampleAlignment}
+                        onAlign={handleAlignToSampleBlock}
+                        isPaperMode={isPaperMode}
+                      />
+                    </div>
+                  )}
 
                   {/* Active Layer Selector for "Zoom Active Layer" */}
                   {currentHasMap && subdivisionResult && (
@@ -4814,7 +5091,9 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                   )}
                 </div>
               )}
-            </div>
+                </div>
+              </div>
+            </>
           )}
         </div>
 
@@ -4824,7 +5103,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             <button
               type="button"
               onClick={() => setIsPlotSheetOpen(true)}
-              className={`pointer-events-auto w-[235px] sm:w-[265px] rounded-xl border p-3 text-left shadow-xl transition-all cursor-pointer ${
+              className={`pointer-events-auto w-[225px] sm:w-[250px] rounded-xl border p-2.5 text-left shadow-xl transition-all cursor-pointer ${
                 isPaperMode
                   ? 'bg-white/96 border-slate-300 text-slate-900 hover:border-emerald-600'
                   : 'bg-[#0B1220]/94 hover:bg-[#0F1B2D] border-[#243449] text-[#F8FAFC]'
@@ -4836,7 +5115,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                   Heer {activeSelectedPlot.blockHeer}
                 </span>
               </div>
-              <div className="mt-1.5 space-y-0.5 text-[11px] opacity-85 tabular-nums">
+              <div className="mt-1 space-y-0.5 text-[10.5px] opacity-85 tabular-nums">
                 <div className="flex items-center justify-between gap-2">
                   <span>Block / Bedka:</span>
                   <strong>
@@ -4845,7 +5124,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <span>Qaybta:</span>
-                  <strong className="truncate max-w-[145px]">
+                  <strong className="truncate max-w-[140px]">
                     {activeSelectedPlot.statusText}
                   </strong>
                 </div>
@@ -4918,65 +5197,65 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           </div>
         </div>
 
-        {/* SLIDE-UP PLOT DETAILS BOTTOM SHEET */}
+        {/* COMPACT VIEWPORT-SAFE PLOT DETAILS CARD (Never obscures navigation or clips off-screen) */}
         {currentHasMap && activeSelectedPlot && isPlotSheetOpen && (
-          <div className="absolute inset-x-0 bottom-0 z-30 rounded-t-3xl bg-[#0B1220]/98 backdrop-blur-md border-t border-[#243449] p-5 shadow-[0_-12px_36px_rgba(0,0,0,0.65)] text-[#F8FAFC]">
-            <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto mb-3" />
-
-            <div className="max-w-lg mx-auto">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-extrabold tracking-tight flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-[#22C55E] shrink-0" />
-                    <span>{activeSelectedPlot.id}</span>
-                  </h3>
-                  <span className="text-xs font-bold text-[#22C55E]">
-                    {activeSelectedPlot.statusText}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsPlotSheetOpen(false)}
-                  aria-label="Xir faahfaahinta plot-ka"
-                  className="min-h-[40px] min-w-[40px] -mr-2 -mt-1 rounded-xl flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D] cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+          <div className="fixed inset-x-2.5 bottom-[74px] sm:inset-x-auto sm:left-4 sm:w-[335px] lg:absolute lg:left-3 lg:bottom-3 z-[88] max-h-[calc(100dvh-11rem)] lg:max-h-[calc(100%-1.5rem)] flex flex-col overflow-hidden rounded-2xl bg-[#0B1220]/98 backdrop-blur-md border border-[#243449] shadow-2xl text-[#F8FAFC]">
+            <div className="px-3.5 py-2.5 border-b border-[#243449] flex items-center justify-between gap-2 shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-sm font-extrabold tracking-tight flex items-center gap-1.5 truncate">
+                  <MapPin className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
+                  <span className="truncate">{activeSelectedPlot.id}</span>
+                </h3>
+                <span className="text-[11px] font-bold text-[#22C55E] block truncate">
+                  {activeSelectedPlot.statusText}
+                </span>
               </div>
 
-              <div className="mt-3.5 rounded-2xl bg-[#0F1B2D] border border-[#243449] divide-y divide-[#243449]/70 text-xs">
-                <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setIsPlotSheetOpen(false)}
+                aria-label="Xir faahfaahinta plot-ka"
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D] cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2.5">
+              <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] divide-y divide-[#243449]/70 text-[11px]">
+                <div className="px-3 py-1.5 flex items-center justify-between gap-2">
                   <span className="text-[#94A3B8]">Block &amp; Heerka</span>
                   <span className="font-bold">
                     {activeSelectedPlot.blockDisplayName} · Heer {activeSelectedPlot.blockHeer}
                   </span>
                 </div>
-                <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="px-3 py-1.5 flex items-center justify-between gap-2">
                   <span className="text-[#94A3B8]">Bedka (Area)</span>
                   <span className="tabular-nums font-bold">
                     {activeSelectedPlot.areaSqM.toLocaleString()} m²
                   </span>
                 </div>
-                <div className="px-4 py-2.5 flex items-center justify-between gap-3">
-                  <span className="text-[#94A3B8]">Calaamadda / Mulkiilaha</span>
-                  <span className="font-bold truncate max-w-[210px]">
+                <div className="px-3 py-1.5 flex items-center justify-between gap-2">
+                  <span className="text-[#94A3B8]">Mulkiilaha</span>
+                  <span className="font-bold truncate max-w-[180px]">
                     {activeSelectedPlot.ownerDisplay}
                   </span>
                 </div>
-                <div className="px-4 py-2.5 flex items-center justify-between gap-3">
-                  <span className="text-[#94A3B8]">Xaaladda Xuduudka</span>
-                  <span className="tabular-nums">{activeSelectedPlot.geometryTypeLabel}</span>
+                <div className="px-3 py-1.5 flex items-center justify-between gap-2">
+                  <span className="text-[#94A3B8]">Xuduudka</span>
+                  <span className="tabular-nums truncate max-w-[185px]">
+                    {activeSelectedPlot.geometryTypeLabel}
+                  </span>
                 </div>
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => onOpenPlotInListData(activeSelectedPlot.id)}
-                  className="min-h-[44px] rounded-xl bg-[#0F1B2D] hover:bg-[#16263D] border border-[#243449] text-xs font-bold transition-colors cursor-pointer"
+                  className="min-h-[38px] rounded-xl bg-[#0F1B2D] hover:bg-[#16263D] border border-[#243449] text-[11px] font-bold transition-colors cursor-pointer"
                 >
-                  Faahfaahinta Plot-ka
+                  Faahfaahinta
                 </button>
 
                 <button
@@ -4986,10 +5265,10 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                     onSelectTargetScope(scope);
                     onProceedToCalculateWithSelection(scope);
                   }}
-                  className="min-h-[44px] rounded-xl bg-[#22C55E] hover:bg-[#16A34A] text-[#05130B] text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="min-h-[38px] rounded-xl bg-[#22C55E] hover:bg-[#16A34A] text-[#05130B] text-[11px] font-extrabold flex items-center justify-center gap-1 transition-colors cursor-pointer"
                 >
-                  <Check className="w-4 h-4 stroke-[2.5]" />
-                  <span>Dooro Plot-kan</span>
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>Dooro Plot</span>
                 </button>
               </div>
             </div>
@@ -4998,16 +5277,17 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
 
       </div>
 
-      {/* ON-DEMAND NASHQAD SUMMARY MODAL (opens only when user clicks "Warbixin" — never blocks map automatically) */}
+      {/* ON-DEMAND NASHQAD SUMMARY MODAL (compact & dvh-bounded) */}
       {isNashqadReportOpen && subdivisionState.nashqadSummary && (
         <div
-          className="fixed inset-0 z-[1090] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1100] bg-black/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4"
           onClick={() => setIsNashqadReportOpen(false)}
         >
-          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[380px] flex justify-center">
+          <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[360px] flex justify-center">
             <NashqadSummaryCard
               summary={subdivisionState.nashqadSummary}
               subdivisionState={subdivisionState}
+              onAlignToSampleBlock={handleAlignToSampleBlock}
               onNotify={onNotify}
               onClose={() => setIsNashqadReportOpen(false)}
             />
@@ -5015,11 +5295,17 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         </div>
       )}
 
-      {/* SOLE DATA ENTRY POINT: BOTTOM-CENTER "+" FLOATING ACTION BUTTON & MODALS */}
+      {/* SOLE DATA ENTRY POINT: BOTTOM-CENTER "+" FLOATING ACTION BUTTON & MODALS (E2: auto-hides when any sheet/modal/drawer is open) */}
       <NashqadFabAndModals
         subdivisionState={subdivisionState}
         onApplyNashqadState={handleApplyNashqadFromFab}
         onNotify={onNotify}
+        hidden={Boolean(
+          openRightPanel !== null ||
+            isPlotSheetOpen ||
+            isNashqadReportOpen ||
+            hasExternalOverlayOpen
+        )}
       />
     </div>
   );

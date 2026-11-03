@@ -8,6 +8,8 @@ import {
   ParsedGeoItem,
   Point2D,
   PrebuiltGeoJsonSubdivision,
+  SampleBlockAlignmentInfo,
+  SampleBlockCandidate,
   SubdivisionComputationResult,
   SubdivisionParams,
 } from '../types/landSubdivision';
@@ -19,11 +21,19 @@ import {
 } from './halfPlotGeometryEngine';
 import {
   DEFAULT_SUBDIVISION_PARAMS,
+  buildAutoBlockZones,
+  buildRowBasedBlockTiers,
+  buildSampleBlockAlignmentInfo,
+  computeBearingDiffMod180,
+  computeLandSubdivision,
   createAuditEntry,
   frameFromRing,
+  normalizeCompassBearingMod180,
   pointInPolygon,
+  projectOntoBasisUV,
   segmentsIntersect,
   shoelaceArea,
+  unitVectorFromCompassBearing,
 } from './landSubdivisionEngine';
 import { normalizeGeoJsonCrsToWgs84 } from './pdfCartographyEngine';
 import {
@@ -123,6 +133,22 @@ export interface InspectedNashqadFile {
   recognizedBy: 'filename' | 'geometry' | 'manual';
 }
 
+export interface SampleBlockAxisAlignOptions {
+  /**
+   * - 'both' (default): align both Dherer & Ballac (dimensions + bearings) to sample block
+   * - 'length_only': align ONLY Dherer (L & length bearing) to sample block; keep current Ballac
+   * - 'width_only': align ONLY Ballac (W & width bearing) to sample block; keep current Dherer locked
+   * - 'manual_bearing': apply manual bearing degree (e.g. Ballac bearing while Dherer stays locked to sample block)
+   */
+  mode?: 'both' | 'length_only' | 'width_only' | 'manual_bearing';
+  swapAxes?: boolean;
+  exactDimensions?: boolean;
+  manualLengthM?: number;
+  manualWidthM?: number;
+  manualLengthBearingDeg?: number;
+  manualWidthBearingDeg?: number;
+}
+
 export interface SameeNashqadInput {
   boundaryFileName: string;
   boundaryFileText: string;
@@ -133,9 +159,19 @@ export interface SameeNashqadInput {
   blockLengthM?: number;
   /** Compass bearing degree (0°–360° clockwise from North) defining the direction of Block Width (W) */
   widthBearingDeg?: number;
+  /** Optional independent compass bearing degree (0°–360° clockwise from North) defining Block Length (L) */
+  lengthBearingDeg?: number;
   plotWidthM?: number;
   plotDepthM?: number;
   roadWidthM?: number;
+  /** Force all generated blocks to match the uploaded sample block's exact bearing, dherer (L), and ballac (W) */
+  matchExactSampleBlock?: boolean;
+  /** Force Dherer (L + length bearing) to match sample block while allowing custom/manual Ballac */
+  matchSampleLength?: boolean;
+  /** Force Ballac (W + width bearing) to match sample block while allowing custom/manual Dherer */
+  matchSampleWidth?: boolean;
+  /** Rotate/swap Dherer <-> Ballac axes by 90° around the sample block center */
+  swapSampleAxes?: boolean;
   previousState?: LandSubdivisionState;
 }
 
@@ -565,6 +601,45 @@ function unifyMultiGeoJsonCollectionsToWgs84(
   const looksLikeWgs84Degrees =
     !hasExplicitCrs && maxAbsX <= 180 && maxAbsY <= 90 && spanX <= 2.5 && spanY <= 2.5;
 
+  // Detect mixed CRS across files (e.g., Xuduudka in WGS84 degrees + Block Tusaale in UTM meters, or vice versa)
+  const perEntryKinds = fileEntries.map((entry) => {
+    let eMinX = Infinity,
+      eMinY = Infinity,
+      eMaxX = -Infinity,
+      eMaxY = -Infinity;
+    const visitE = ([x, y]: Point2D) => {
+      if (x < eMinX) eMinX = x;
+      if (y < eMinY) eMinY = y;
+      if (x > eMaxX) eMaxX = x;
+      if (y > eMaxY) eMaxY = y;
+    };
+    entry.polygons.forEach((p) => p.ringRaw.forEach(visitE));
+    entry.lines.forEach((l) => l.coordsRaw.forEach(visitE));
+    entry.points.forEach((pt) => visitE(pt.coordRaw));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cTag = String((entry.rawJson as any)?.crs?.properties?.name || '').trim();
+    const hasProjTag = Boolean(cTag) && !/4326|crs84/i.test(cTag);
+    const eMaxAbsX = Math.max(Math.abs(eMinX), Math.abs(eMaxX));
+    const eMaxAbsY = Math.max(Math.abs(eMinY), Math.abs(eMaxY));
+    const eSpanX = eMaxX - eMinX;
+    const eSpanY = eMaxY - eMinY;
+    const isEntryWgs =
+      Number.isFinite(eMinX) &&
+      !hasProjTag &&
+      eMaxAbsX <= 180 &&
+      eMaxAbsY <= 90 &&
+      eSpanX <= 2.5 &&
+      eSpanY <= 2.5;
+    const isEntryUtm =
+      Number.isFinite(eMinX) &&
+      (hasProjTag ||
+        (eMinX >= 100000 && eMaxX <= 900000 && eMinY >= -10000000 && eMaxY <= 10000000 && eMaxY > 1000));
+    return { isEntryWgs, isEntryUtm, eMinX, eMaxX, eMinY, eMaxY, cTag };
+  });
+
+  const hasAnyWgsEntry = perEntryKinds.some((k) => k.isEntryWgs);
+  const hasAnyUtmEntry = perEntryKinds.some((k) => k.isEntryUtm);
+
   if (looksLikeWgs84Degrees) {
     // Check if coordinates are swapped [lat, lon] (unlikely in Somalia/Somaliland since lon ~41..51 > lat ~-1..12,
     // unless x < y and x <= 15 && y >= 40)
@@ -587,8 +662,28 @@ function unifyMultiGeoJsonCollectionsToWgs84(
     }));
   }
 
-  if (hasExplicitCrs || looksLikeStandardUtm) {
-    return fileEntries.map((entry) => {
+  if (hasExplicitCrs || looksLikeStandardUtm || (hasAnyWgsEntry && hasAnyUtmEntry)) {
+    return fileEntries.map((entry, entryIdx) => {
+      const ek = perEntryKinds[entryIdx];
+      if (ek && ek.isEntryWgs && !ek.isEntryUtm) {
+        const swapped = ek.eMinX >= -2 && ek.eMaxX <= 15 && ek.eMinY >= 39 && ek.eMaxY <= 52;
+        const fixPt = (c: Point2D): Point2D => (swapped ? [c[1], c[0]] : [c[0], c[1]]);
+        return {
+          polygons: entry.polygons.map((p) => ({
+            ringRaw: p.ringRaw.map(fixPt),
+            properties: p.properties,
+          })),
+          lines: entry.lines.map((l) => ({
+            coordsRaw: l.coordsRaw.map(fixPt),
+            properties: l.properties,
+          })),
+          points: entry.points.map((pt) => ({
+            coordRaw: fixPt(pt.coordRaw),
+            properties: pt.properties,
+          })),
+        };
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const entryCrs = (entry.rawJson as any)?.crs || (explicitCrsTag
         ? { type: 'name', properties: { name: explicitCrsTag } }
@@ -762,12 +857,75 @@ export function detectWidthBearingFromGeoJson(
   if (ringUtm.length < 3) return null;
 
   const fr = frameFromRing(ringUtm);
-  // fr.u points along fr.long (Dhererka L); vShort points along fr.short (Ballaca W)
-  const vShort: Point2D = [-fr.u[1], fr.u[0]];
+  const vShort: Point2D = fr.v || [-fr.u[1], fr.u[0]];
   let deg = (Math.atan2(vShort[0], vShort[1]) * 180) / Math.PI;
   deg = ((deg % 180) + 180) % 180;
   return +deg.toFixed(1);
 }
+
+/**
+ * Extracts exact surveyed Dherer (long side, m), Ballac (short side, m), and Bearing (°)
+ * from an uploaded Sample Block GeoJSON/KML file (optionally unified with Boundary file CRS).
+ */
+export function inspectSampleBlockMetricsFromGeoJson(
+  sampleFileText: string,
+  sampleFileName: string,
+  boundaryFileText?: string,
+  boundaryFileName?: string
+): {
+  lengthM: number;
+  widthM: number;
+  widthBearingDeg: number;
+  lengthBearingDeg: number;
+} | null {
+  const sp = parseGeoJsonPolygonsStrict(sampleFileText, sampleFileName);
+  if (!sp.ok || sp.polygons.length === 0) return null;
+
+  const entries: { rawJson: unknown; polygons: ExtractedPolygonFeature[] }[] = [];
+  let sampleIdx = 0;
+  if (boundaryFileText && boundaryFileName && boundaryFileText !== sampleFileText) {
+    const bp = parseGeoJsonPolygonsStrict(boundaryFileText, boundaryFileName);
+    if (bp.ok && bp.polygons.length > 0) {
+      entries.push({ rawJson: bp.rawJson, polygons: bp.polygons });
+      sampleIdx = 1;
+    }
+  }
+  entries.push({ rawJson: sp.rawJson, polygons: sp.polygons });
+
+  const unified = unifyPolygonCollectionsToWgs84(entries);
+  const allPts = unified.flatMap((u) => u.flatMap((p) => p.ringRaw));
+  if (allPts.length < 3) return null;
+  const { fwd } = buildUtmProjectorsFromLonLat(allPts);
+
+  let targetSampleWgs = unified[sampleIdx]?.[0]?.ringRaw;
+  if (sampleIdx === 0 && unified[0].length >= 2) {
+    // Combined file containing both boundary & sample block: pick smaller sample block
+    const sorted = unified[0]
+      .map((p) => ({
+        ring: p.ringRaw,
+        area: Math.abs(shoelaceArea(extractFirstCleanSampleRingUtm(p.ringRaw.map(fwd)))),
+      }))
+      .sort((a, b) => b.area - a.area);
+    const smaller = sorted.slice(1).find((x) => x.area >= 150 && x.area <= sorted[0].area * 0.45);
+    if (smaller) targetSampleWgs = smaller.ring;
+  }
+  if (!targetSampleWgs) return null;
+
+  const ringUtm = extractFirstCleanSampleRingUtm(targetSampleWgs.map(fwd));
+  if (ringUtm.length < 3) return null;
+  const fr = frameFromRing(ringUtm);
+  const vShort: Point2D = fr.v || [-fr.u[1], fr.u[0]];
+  const wDeg = ((((Math.atan2(vShort[0], vShort[1]) * 180) / Math.PI) % 180) + 180) % 180;
+  const lDeg = ((((Math.atan2(fr.u[0], fr.u[1]) * 180) / Math.PI) % 180) + 180) % 180;
+
+  return {
+    lengthM: +fr.long.toFixed(2),
+    widthM: +fr.short.toFixed(2),
+    widthBearingDeg: +wDeg.toFixed(1),
+    lengthBearingDeg: +lDeg.toFixed(1),
+  };
+}
+
 
 function extractFirstCleanSampleRingUtm(rawRingUtm: Point2D[]): Point2D[] {
   const cleaned = cleanPolygonVertices(rawRingUtm);
@@ -988,6 +1146,23 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     parsedBearingDeg = ((rawB % 360) + 360) % 360;
   }
 
+  const hasExplicitLengthBearing =
+    input.lengthBearingDeg !== undefined &&
+    input.lengthBearingDeg !== null &&
+    String(input.lengthBearingDeg).trim() !== '';
+
+  let parsedLengthBearingDeg = 0;
+  if (hasExplicitLengthBearing) {
+    const rawLB = Number(input.lengthBearingDeg);
+    if (!Number.isFinite(rawLB)) {
+      return {
+        ok: false,
+        errorSomali: 'Fadlan geli Bearing-ka Dhererka oo tiro sax ah (0° ilaa 360°).',
+      };
+    }
+    parsedLengthBearingDeg = ((rawLB % 360) + 360) % 360;
+  }
+
   let sampleParsed: { rawJson: unknown; polygons: ExtractedPolygonFeature[] } | null = null;
   if (input.sampleBlockMode === 'file') {
     if (input.sampleBlockFileText && input.sampleBlockFileName) {
@@ -1099,7 +1274,19 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
   let L: number;
   let W: number;
   let appliedBearingDeg: number;
-  let naturalSampleFr: { u: Point2D; c: Point2D; long: number; short: number } | null = null;
+  let naturalSampleFr: { u: Point2D; v?: Point2D; c: Point2D; long: number; short: number } | null =
+    null;
+  let sampleRingLonLatUsed: Point2D[] | null = null;
+  const forceExactSample = Boolean(input.matchExactSampleBlock);
+  const matchSampleLength = Boolean(input.matchSampleLength);
+  const matchSampleWidth = Boolean(input.matchSampleWidth);
+  const swapSampleAxes = Boolean(input.swapSampleAxes);
+  const hasIndependentAxisControl =
+    hasExplicitLengthBearing ||
+    matchSampleLength ||
+    matchSampleWidth ||
+    (input.blockLengthM !== undefined && input.sampleBlockMode === 'file') ||
+    (input.blockWidthM !== undefined && input.sampleBlockMode === 'file');
 
   if (samplePolysWgs && samplePolysWgs.length > 0) {
     const sampleRingUtm = extractFirstCleanSampleRingUtm(samplePolysWgs[0].ringRaw.map(fwd));
@@ -1109,11 +1296,59 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
         errorSomali: 'Block-ga tusaalaha ah malaha xaglo Polygon oo ku filan.',
       };
     }
+    sampleRingLonLatUsed = sampleRingUtm.map(inv);
     const fr = frameFromRing(sampleRingUtm);
     naturalSampleFr = fr;
     c0 = fr.c;
 
-    if (hasExplicitBearing) {
+    if (hasIndependentAxisControl) {
+      // Independent Dherer (u, L) and Ballac (v, W) seating!
+      if (hasExplicitLengthBearing) {
+        u = unitVectorFromCompassBearing(parsedLengthBearingDeg, false);
+      } else {
+        const baseU: Point2D = swapSampleAxes ? fr.v || [-fr.u[1], fr.u[0]] : fr.u;
+        u =
+          baseU[0] < 0 || (Math.abs(baseU[0]) < 1e-12 && baseU[1] < 0)
+            ? [-baseU[0], -baseU[1]]
+            : baseU;
+      }
+
+      if (hasExplicitBearing) {
+        v = unitVectorFromCompassBearing(parsedBearingDeg, true);
+      } else {
+        const rawV: Point2D = swapSampleAxes
+          ? fr.u
+          : fr.v || [-u[1], u[0]];
+        v =
+          rawV[1] < 0 || (Math.abs(rawV[1]) < 1e-12 && rawV[0] < 0)
+            ? [-rawV[0], -rawV[1]]
+            : rawV;
+      }
+
+      if (Math.abs(u[0] * v[1] - u[1] * v[0]) < 0.17) {
+        return {
+          ok: false,
+          errorSomali:
+            'Bearing-ka Ballaca iyo Bearing-ka Dhererka isku xariiq ma noqon karaan (ugu yaraan 10° ha u dhexeeyo).',
+        };
+      }
+
+      L =
+        !matchSampleLength &&
+        input.blockLengthM !== undefined &&
+        Number(input.blockLengthM) > 0
+          ? +Number(input.blockLengthM).toFixed(3)
+          : +fr.long.toFixed(3);
+      W =
+        !matchSampleWidth &&
+        input.blockWidthM !== undefined &&
+        Number(input.blockWidthM) > 0
+          ? +Number(input.blockWidthM).toFixed(3)
+          : +fr.short.toFixed(3);
+
+      const rawDeg = (Math.atan2(v[0], v[1]) * 180) / Math.PI;
+      appliedBearingDeg = +(((rawDeg % 360) + 360) % 360).toFixed(1);
+    } else if (hasExplicitBearing && !forceExactSample) {
       const rad = (parsedBearingDeg * Math.PI) / 180;
       v = [Math.sin(rad), Math.cos(rad)];
       u = [Math.cos(rad), -Math.sin(rad)];
@@ -1154,8 +1389,22 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
         W = +fr.short.toFixed(3);
       }
     } else {
-      u = fr.u;
-      v = [-u[1], u[0]];
+      let baseU: Point2D = swapSampleAxes ? fr.v || [-fr.u[1], fr.u[0]] : fr.u;
+      if (baseU[0] < 0 || (Math.abs(baseU[0]) < 1e-12 && baseU[1] < 0)) {
+        baseU = [-baseU[0], -baseU[1]];
+      }
+      u = baseU;
+      const rawV: Point2D = swapSampleAxes
+        ? fr.u
+        : fr.v || [-u[1], u[0]];
+      v =
+        rawV[1] < 0 || (Math.abs(rawV[1]) < 1e-12 && rawV[0] < 0)
+          ? [-rawV[0], -rawV[1]]
+          : rawV;
+      if (Math.abs(u[0] * v[1] - u[1] * v[0]) < 0.17) {
+        v = [-u[1], u[0]];
+        if (v[1] < 0) v = [-v[0], -v[1]];
+      }
       L = +fr.long.toFixed(3);
       W = +fr.short.toFixed(3);
       const rawDeg = (Math.atan2(v[0], v[1]) * 180) / Math.PI;
@@ -1167,7 +1416,18 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     L = Number(input.blockLengthM);
     W = Number(input.blockWidthM);
 
-    if (hasExplicitBearing) {
+    if (hasExplicitLengthBearing && hasExplicitBearing) {
+      u = unitVectorFromCompassBearing(parsedLengthBearingDeg, false);
+      v = unitVectorFromCompassBearing(parsedBearingDeg, true);
+      if (Math.abs(u[0] * v[1] - u[1] * v[0]) < 0.17) {
+        return {
+          ok: false,
+          errorSomali:
+            'Bearing-ka Ballaca iyo Bearing-ka Dhererka isku xariiq ma noqon karaan (ugu yaraan 10° ha u dhexeeyo).',
+        };
+      }
+      appliedBearingDeg = parsedBearingDeg;
+    } else if (hasExplicitBearing) {
       const rad = (parsedBearingDeg * Math.PI) / 180;
       v = [Math.sin(rad), Math.cos(rad)];
       u = [Math.cos(rad), -Math.sin(rad)];
@@ -1180,11 +1440,18 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     }
   }
 
+  const axesAreOrthogonal = Math.abs(Math.abs(u[0] * v[1] - u[1] * v[0]) - 1) <= 0.01;
+
   // Check if block is 90×48 m (or 48×90 m within survey tolerance ±2.5 m)
   const rawLongSide = Math.max(L, W);
   const rawShortSide = Math.min(L, W);
+  const isExact90x48 =
+    Math.abs(rawLongSide - 90) <= 0.15 && Math.abs(rawShortSide - 48) <= 0.15;
   const is90x48Block =
-    Math.abs(rawLongSide - 90) <= 2.5 && Math.abs(rawShortSide - 48) <= 2.5;
+    axesAreOrthogonal &&
+    (forceExactSample || hasIndependentAxisControl
+      ? isExact90x48
+      : Math.abs(rawLongSide - 90) <= 2.5 && Math.abs(rawShortSide - 48) <= 2.5);
 
   const hasCustomNonStandardOverride =
     (hasCallerPlotW || hasCallerPlotD || hasCallerRoad) &&
@@ -1194,11 +1461,6 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
       Math.abs(roadInput - 15) <= 0.5
     );
 
-  // Automatic 90×48 m rule:
-  // - 4-sided 15 m roads around every block (SU = 90 + 15 = 105 m, SV = 48 + 15 = 63 m)
-  // - Full plots = 18 × 24 m (432 m², 10 plot slots 1..10 per block)
-  // - Half plots 1, 5, 6, 10 = 18 × 12 m (216 m²)
-  // - Half plots 2, 3, 4, 7, 8, 9 = 9 × 24 m (216 m²)
   const useAuto90x48Rule = is90x48Block && !hasCustomNonStandardOverride;
 
   interface CandidateGeneratedBlock {
@@ -1223,6 +1485,8 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
   let actualPlotW = pwInput;
   let actualPlotD = pdInput;
   let nominalPlotArea = actualPlotW * actualPlotD;
+  let appliedLongAxisUtm: Point2D = L >= W ? u : v;
+  let appliedWidthAxisUtm: Point2D = L >= W ? v : u;
 
   let bMinX = Infinity,
     bMaxX = -Infinity,
@@ -1249,13 +1513,15 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     let vx: number;
     let vy: number;
 
-    if (naturalSampleFr && !hasExplicitBearing) {
-      ux = naturalSampleFr.u[0];
-      uy = naturalSampleFr.u[1];
-      if (ux < 0 || (Math.abs(ux) < 1e-12 && uy < 0)) {
-        ux = -ux;
-        uy = -uy;
+    if (naturalSampleFr && (!hasExplicitBearing || forceExactSample)) {
+      let baseAxis: Point2D = swapSampleAxes
+        ? [-naturalSampleFr.u[1], naturalSampleFr.u[0]]
+        : naturalSampleFr.u;
+      if (baseAxis[0] < 0 || (Math.abs(baseAxis[0]) < 1e-12 && baseAxis[1] < 0)) {
+        baseAxis = [-baseAxis[0], -baseAxis[1]];
       }
+      ux = baseAxis[0];
+      uy = baseAxis[1];
       vx = -uy;
       vy = ux;
       if (vy < 0) {
@@ -1283,6 +1549,8 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
         vy = -vy;
       }
     }
+    appliedLongAxisUtm = [ux, uy];
+    appliedWidthAxisUtm = [vx, vy];
 
     const SU = 90 + 15; // 105 m (90 m block + 15 m road on East & West)
     const SV = 48 + 15; // 63 m  (48 m block + 15 m road on North & South)
@@ -1306,8 +1574,7 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     for (const q of boundaryCCW) {
       const du = q[0] - c0[0];
       const dv = q[1] - c0[1];
-      const pu = du * ux + dv * uy;
-      const pv = du * vx + dv * vy;
+      const [pu, pv] = projectOntoBasisUV(du, dv, [ux, uy], [vx, vy]);
       if (pu < minCU) minCU = pu;
       if (pu > maxCU) maxCU = pu;
       if (pv < minCV) minCV = pv;
@@ -1424,7 +1691,9 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
       }
     }
   } else {
-    // Generic custom dimensions / non-90×48 block polygon clipping workflow
+    // Generic custom dimensions / exact sample block / independent-axis workflow
+    appliedLongAxisUtm = L >= W ? u : v;
+    appliedWidthAxisUtm = L >= W ? v : u;
     let effPw = pwInput;
     let effPd = pdInput;
     const countDirect = Math.floor((L + 1e-5) / pwInput) * Math.floor((W + 1e-5) / pdInput);
@@ -1434,11 +1703,22 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
       effPd = pwInput;
     }
 
-    const nC = Math.max(1, Math.floor((L + 1e-5) / effPw));
-    const nR = Math.max(1, Math.floor((W + 1e-5) / effPd));
-    actualPlotW = nC * effPw <= L + 0.05 ? effPw : L / nC;
-    actualPlotD = nR * effPd <= W + 0.05 ? effPd : W / nR;
-    nominalPlotArea = actualPlotW * actualPlotD;
+    let nC: number;
+    let nR: number;
+    if ((forceExactSample || hasIndependentAxisControl) && !hasCallerPlotW && !hasCallerPlotD) {
+      // Tile plots cleanly edge-to-edge across Dherer (L) × Ballac (W)
+      nC = Math.max(1, Math.round(L / effPw));
+      nR = Math.max(1, Math.round(W / effPd));
+      actualPlotW = L / nC;
+      actualPlotD = W / nR;
+    } else {
+      nC = Math.max(1, Math.floor((L + 1e-5) / effPw));
+      nR = Math.max(1, Math.floor((W + 1e-5) / effPd));
+      actualPlotW = nC * effPw <= L + 0.05 ? effPw : L / nC;
+      actualPlotD = nR * effPd <= W + 0.05 ? effPd : W / nR;
+    }
+    const sinAngle = Math.abs(u[0] * v[1] - u[1] * v[0]) || 1;
+    nominalPlotArea = actualPlotW * actualPlotD * sinAngle;
 
     const originUtm: Point2D = [
       c0[0] - u[0] * (L / 2) - v[0] * (W / 2),
@@ -1448,7 +1728,7 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     const toUV = (pt: Point2D): Point2D => {
       const dx = pt[0] - originUtm[0];
       const dy = pt[1] - originUtm[1];
-      return [dx * u[0] + dy * u[1], dx * v[0] + dy * v[1]];
+      return projectOntoBasisUV(dx, dy, u, v);
     };
 
     const fromUV = (uu: number, vv: number): Point2D => [
@@ -1705,6 +1985,25 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     });
   }
 
+  const sampleFileCleanLabel =
+    input.sampleBlockFileName ||
+    (sampleRingLonLatUsed ? 'Block Tusaale' : `${W.toFixed(1)}m × ${L.toFixed(1)}m`);
+
+  const sampleBlockAlignment: SampleBlockAlignmentInfo | null =
+    naturalSampleFr && sampleRingLonLatUsed
+      ? buildSampleBlockAlignmentInfo({
+          sampleFileName: sampleFileCleanLabel,
+          sampleRingLonLat: sampleRingLonLatUsed,
+          sampleFrame: naturalSampleFr,
+          appliedLongAxisUtm,
+          appliedWidthAxisUtm,
+          appliedLengthM: Math.max(L, W),
+          appliedWidthM: Math.min(L, W),
+          isAlignedToExactSample: forceExactSample || (matchSampleLength && matchSampleWidth),
+          axesSwapped: swapSampleAxes,
+        })
+      : null;
+
   const summary: NashqadWorkflowSummary = {
     mode: 'samee_nashqad',
     createdAt: new Date().toISOString(),
@@ -1717,23 +2016,37 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     boundaryAreaSqM,
     standardPlotAreaSqM: +nominalPlotArea.toFixed(2),
     widthBearingDeg: +appliedBearingDeg.toFixed(1),
+    sampleBlockAlignment,
   };
 
   const boundaryLonLat = boundaryCCW.map(inv);
   const boundaryItem: ParsedGeoItem = {
-    name: input.boundaryFileName.replace(/\.(geo)?json$/i, '') || 'Xuduudka Beerta',
+    name: input.boundaryFileName.replace(/\.(geo)?json$|\.(kml|kmz)$/i, '') || 'Xuduudka Beerta',
     type: 'Polygon',
     coords: boundaryLonLat,
   };
 
+  const sampleCandidatesList: SampleBlockCandidate[] = sampleRingLonLatUsed
+    ? [
+        {
+          label: `${sampleFileCleanLabel} (${naturalSampleFr ? `${naturalSampleFr.long.toFixed(1)}×${naturalSampleFr.short.toFixed(1)}m` : ''})`,
+          ring: sampleRingLonLatUsed,
+        },
+      ]
+    : [];
+
   const nextParams: SubdivisionParams = {
     ...(input.previousState?.params || DEFAULT_SUBDIVISION_PARAMS),
-    L: +L.toFixed(2),
-    W: +W.toFixed(2),
+    L: +Math.max(L, W).toFixed(2),
+    W: +Math.min(L, W).toFixed(2),
     pw: +actualPlotW.toFixed(2),
     pd: +actualPlotD.toFixed(2),
     rU: roadM,
     rV: roadM,
+    rot: 0,
+    swap: swapSampleAxes,
+    su: 0,
+    sv: 0,
   };
 
   const base = createEmptyLandSubdivisionState();
@@ -1742,9 +2055,11 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
     boundaryItems: [boundaryItem],
     boundaryFileName: input.boundaryFileName,
     selectedBoundaryIndex: 0,
-    sampleCustom: input.sampleBlockMode === 'file',
+    sampleCustom: Boolean(sampleRingLonLatUsed),
+    sampleCandidates: sampleCandidatesList,
+    selectedSampleIndex: sampleCandidatesList.length > 0 ? 0 : -1,
     sampleFileName:
-      input.sampleBlockMode === 'file' && input.sampleBlockFileName
+      sampleRingLonLatUsed && input.sampleBlockFileName
         ? `${input.sampleBlockFileName} (${appliedBearingDeg}°)`
         : `${W.toFixed(1)}m × ${L.toFixed(1)}m (${appliedBearingDeg}°)`,
     params: nextParams,
@@ -1755,12 +2070,15 @@ export function runSameeNashqadWorkflow(input: SameeNashqadInput): SameeNashqadR
       blocks: prebuiltBlocks,
       plots: prebuiltPlots,
       validationWarnings: [],
+      sampleBlockAlignment,
     },
     nashqadSummary: summary,
     auditHistory: [
       createAuditEntry(
         'geojson_import',
-        useAuto90x48Rule
+        forceExactSample
+          ? `Blocks-ka oo dhan waxaa la waafajiyey Block Tusaale (${L.toFixed(1)}×${W.toFixed(1)}m, Bearing ${appliedBearingDeg}°${swapSampleAxes ? ', 90° la wareejiyey' : ''}): ${prebuiltBlocks.length} Block, ${fullPlotsCount} Plot dhammaystiran, ${halfPlotsCount} Half plot.`
+          : useAuto90x48Rule
           ? `Nashqad toos ah 90×48m (Waddo 15m afarta dhinac, Plot 18×24m, Half 18×12m & 9×24m): ${prebuiltBlocks.length} Block, ${fullPlotsCount} Plot dhammaystiran, ${halfPlotsCount} Half plot (${totalPlotsAreaSqM.toLocaleString()} m²).`
           : `Nashqad toos ah waa la sameeyey (Bearing ${appliedBearingDeg}°): ${prebuiltBlocks.length} Block, ${fullPlotsCount} Plot dhammaystiran, ${halfPlotsCount} Half plot (${totalPlotsAreaSqM.toLocaleString()} m²).`
       ),
@@ -1819,7 +2137,7 @@ function classifyRoleFromFileNameAndProps(
   ) {
     return 'plots';
   }
-  if (/block|bulook|blk|02_block/.test(lower) && polygons.length > 0) {
+  if (/block|bulook|blk|tusaale|sample|02_block/.test(lower) && polygons.length > 0) {
     return 'blocks';
   }
   if (
@@ -2414,11 +2732,31 @@ export function buildNashqadBeerState(
     boundaryAreaSqM = +Math.abs(shoelaceArea(hullWgs.map(fwd))).toFixed(2);
   }
 
-  // 2. Blocks Layer (merged across 1 or multiple block GeoJSON files, deduplicating identical centroids)
+  // 2. Blocks Layer (merged across 1 or multiple block GeoJSON files; also detects a dedicated single Sample Block file alongside multi-block files!)
+  let dedicatedSampleBlockFile: InspectedNashqadFile | null = null;
+  if (blocksFiles.length >= 2) {
+    const explicitSample = blocksFiles.find(
+      (bf) => bf.polygons.length === 1 && /tusaale|sample/i.test(bf.fileName)
+    );
+    const singleVsMulti =
+      !explicitSample &&
+      blocksFiles.filter((bf) => bf.polygons.length === 1).length === 1 &&
+      blocksFiles.some((bf) => bf.polygons.length >= 2)
+        ? blocksFiles.find((bf) => bf.polygons.length === 1) || null
+        : null;
+    dedicatedSampleBlockFile = explicitSample || singleVsMulti;
+  } else if (blocksFiles.length === 1 && blocksFiles[0].polygons.length === 1 && plotsFiles.length > 0) {
+    // 1 single sample block uploaded alongside pre-generated plots.geojson
+    dedicatedSampleBlockFile = blocksFiles[0];
+  }
+
   const prebuiltBlocks: PrebuiltGeoJsonSubdivision['blocks'] = [];
   const blockUtmRingsForLookup: { id: string; ringUtm: Point2D[]; centerUtm: Point2D }[] = [];
 
   blocksFiles.forEach((bf) => {
+    if (dedicatedSampleBlockFile && bf.id === dedicatedSampleBlockFile.id && blocksFiles.length >= 2) {
+      return;
+    }
     bf.polygons.forEach((poly) => {
       const ringUtm = poly.ringRaw.map(fwd);
       if (ringUtm.length < 3) return;
@@ -2757,6 +3095,50 @@ export function buildNashqadBeerState(
     recognizedBy: f.recognizedBy,
   }));
 
+  // Detect bearing / dimension discrepancy if a Sample Block file was uploaded alongside prebuilt blocks/plots
+  let multiFileSampleAlignment: SampleBlockAlignmentInfo | null = null;
+  let multiFileSampleCandidates: SampleBlockCandidate[] = [];
+  if (dedicatedSampleBlockFile && dedicatedSampleBlockFile.polygons.length > 0) {
+    const smpRingLonLat = dedicatedSampleBlockFile.polygons[0].ringRaw;
+    const smpRingUtm = extractFirstCleanSampleRingUtm(smpRingLonLat.map(fwd));
+    if (smpRingUtm.length >= 3) {
+      const smpFrame = frameFromRing(smpRingUtm);
+      multiFileSampleCandidates = [
+        {
+          label: `${dedicatedSampleBlockFile.fileName} (${smpFrame.long.toFixed(1)}×${smpFrame.short.toFixed(1)}m)`,
+          ring: smpRingLonLat,
+        },
+      ];
+      // Measure dominant frame of system blocks (prefer largest complete block in prebuiltBlocks, or plots frame)
+      const referenceRingsUtm =
+        blockUtmRingsForLookup.length > 0 &&
+        !(blocksFiles.length === 1 && blocksFiles[0].id === dedicatedSampleBlockFile.id)
+          ? blockUtmRingsForLookup.map((b) => b.ringUtm)
+          : rawPlotRecords.filter((r) => r.explicitNooca !== 'half').map((r) => r.ringUtm);
+
+      if (referenceRingsUtm.length > 0) {
+        const largestRef = [...referenceRingsUtm].sort(
+          (a, b) => Math.abs(shoelaceArea(b)) - Math.abs(shoelaceArea(a))
+        )[0];
+        const refFr = frameFromRing(cleanPolygonVertices(largestRef));
+        const isRefPlotOnly =
+          blockUtmRingsForLookup.length === 0 ||
+          (blocksFiles.length === 1 && blocksFiles[0].id === dedicatedSampleBlockFile.id);
+        multiFileSampleAlignment = buildSampleBlockAlignmentInfo({
+          sampleFileName: dedicatedSampleBlockFile.fileName,
+          sampleRingLonLat: smpRingLonLat,
+          sampleFrame: smpFrame,
+          appliedLongAxisUtm: refFr.u,
+          appliedWidthAxisUtm: refFr.v || [-refFr.u[1], refFr.u[0]],
+          appliedLengthM: isRefPlotOnly ? smpFrame.long : refFr.long,
+          appliedWidthM: isRefPlotOnly ? smpFrame.short : refFr.short,
+          isAlignedToExactSample: false,
+          axesSwapped: false,
+        });
+      }
+    }
+  }
+
   const summary: NashqadWorkflowSummary = {
     mode: 'soo_geli_nashqad',
     createdAt: new Date().toISOString(),
@@ -2768,6 +3150,7 @@ export function buildNashqadBeerState(
     totalPlotsAreaSqM,
     boundaryAreaSqM,
     standardPlotAreaSqM,
+    sampleBlockAlignment: multiFileSampleAlignment,
   };
 
   const base = createEmptyLandSubdivisionState();
@@ -2794,6 +3177,11 @@ export function buildNashqadBeerState(
     boundaryFileName:
       boundaryFiles.length > 0 ? boundaryFiles[0].fileName : 'xuduudaha.geojson lama helin',
     selectedBoundaryIndex: boundaryItems.length > 0 ? 0 : -1,
+    sampleCustom: multiFileSampleCandidates.length > 0,
+    sampleCandidates: multiFileSampleCandidates,
+    selectedSampleIndex: multiFileSampleCandidates.length > 0 ? 0 : -1,
+    sampleFileName:
+      dedicatedSampleBlockFile?.fileName || base.sampleFileName,
     specialAreaItems,
     specialAreaFileName:
       specialAreaFiles.length > 0
@@ -2817,6 +3205,7 @@ export function buildNashqadBeerState(
       blocks: prebuiltBlocks,
       plots: prebuiltPlots,
       validationWarnings: missingFileMessages,
+      sampleBlockAlignment: multiFileSampleAlignment,
     },
     nashqadSummary: summary,
     auditHistory: [
@@ -2825,6 +3214,323 @@ export function buildNashqadBeerState(
         `Nashqad beer waa la soo geliyey (${activeFiles.length} fayl): ${prebuiltBlocks.length} Block, ${fullPlotsCount} Plot dhammaystiran, ${halfPlotsCount} Half plot.`
       ),
       ...(previousState?.auditHistory || []).slice(0, 49),
+    ],
+  };
+
+  return { ok: true, nextState, summary };
+}
+
+/**
+ * Aligns ALL blocks & plots across the farm boundary to the uploaded Sample Block (`Block Tusaale`),
+ * supporting BOTH full alignment (`mode: 'both'`) AND independent per-axis seating:
+ * - `mode: 'length_only'` ("Fadhiisi Dhererka"): seats Dherer (L & length bearing) onto Sample Block while keeping Ballac
+ * - `mode: 'width_only'` ("Fadhiisi Ballaca"): seats Ballac (W & width bearing) onto Sample Block while keeping Dherer locked
+ * - `mode: 'manual_bearing'` ("Bearing-ka Gacanta °"): adjusts Ballac or Dherer bearing degree manually without disturbing the other axis!
+ */
+export function alignAllBlocksToSampleBlock(
+  state: LandSubdivisionState,
+  options?: SampleBlockAxisAlignOptions
+): SameeNashqadResult {
+  const mode = options?.mode || 'both';
+  const exactDimensions = options?.exactDimensions ?? true;
+  const swapAxes = Boolean(options?.swapAxes);
+
+  // Resolve farm boundary ring in WGS84
+  const bndItem =
+    state.boundaryItems[state.selectedBoundaryIndex] || state.boundaryItems[0] || null;
+  const boundaryRingLonLat =
+    (state.prebuiltSubdivision?.boundaryRingLonLat &&
+    state.prebuiltSubdivision.boundaryRingLonLat.length >= 3
+      ? state.prebuiltSubdivision.boundaryRingLonLat
+      : null) || (bndItem && bndItem.coords.length >= 3 ? bndItem.coords : null);
+
+  if (!boundaryRingLonLat || boundaryRingLonLat.length < 3) {
+    return {
+      ok: false,
+      errorSomali: 'Lama helin Xuduudka Beerta si blocks-ka loo waafajiyo block-ga tusaalaha ah.',
+    };
+  }
+
+  // Resolve sample block ring in WGS84
+  const cand =
+    (state.selectedSampleIndex >= 0
+      ? state.sampleCandidates[state.selectedSampleIndex]
+      : null) ||
+    state.sampleCandidates[0] ||
+    null;
+  const sampleRingLonLat =
+    (state.prebuiltSubdivision?.sampleBlockAlignment?.sampleRingLonLat &&
+    state.prebuiltSubdivision.sampleBlockAlignment.sampleRingLonLat.length >= 3
+      ? state.prebuiltSubdivision.sampleBlockAlignment.sampleRingLonLat
+      : null) || (cand && cand.ring.length >= 3 ? cand.ring : null);
+
+  if (!sampleRingLonLat || sampleRingLonLat.length < 3) {
+    return {
+      ok: false,
+      errorSomali: 'Lama helin Block Tusaale ah oo lagu waafajiyo blocks-ka.',
+    };
+  }
+
+  const sampleName =
+    state.prebuiltSubdivision?.sampleBlockAlignment?.sampleFileName ||
+    cand?.label ||
+    state.sampleFileName ||
+    'Block Tusaale';
+
+  // Measure sample block axes & current applied block axes
+  const { fwd } = buildUtmProjectorsFromLonLat([...boundaryRingLonLat, ...sampleRingLonLat]);
+  const sringUtm = extractFirstCleanSampleRingUtm(sampleRingLonLat.map(fwd));
+  if (sringUtm.length < 3) {
+    return {
+      ok: false,
+      errorSomali: 'Block-ga tusaalaha ah malaha xaglo ku filan.',
+    };
+  }
+  const smpFr = frameFromRing(sringUtm);
+  const vSmp: Point2D = smpFr.v || [-smpFr.u[1], smpFr.u[0]];
+  const sampleLenM = +smpFr.long.toFixed(2);
+  const sampleWidM = +smpFr.short.toFixed(2);
+  const sampleLenB = normalizeCompassBearingMod180((Math.atan2(smpFr.u[0], smpFr.u[1]) * 180) / Math.PI);
+  const sampleWidB = normalizeCompassBearingMod180((Math.atan2(vSmp[0], vSmp[1]) * 180) / Math.PI);
+
+  const curAlign =
+    state.prebuiltSubdivision?.sampleBlockAlignment ||
+    state.nashqadSummary?.sampleBlockAlignment ||
+    null;
+
+  const curLenM = curAlign ? curAlign.appliedLengthM : state.params.L || sampleLenM;
+  const curWidM = curAlign ? curAlign.appliedWidthM : state.params.W || sampleWidM;
+  const curLenB = curAlign
+    ? curAlign.appliedLengthBearingDeg
+    : state.params.customLengthBearingDeg ?? sampleLenB;
+  const curWidB = curAlign
+    ? curAlign.appliedWidthBearingDeg
+    : state.params.customWidthBearingDeg ?? sampleWidB;
+
+  let targetL = sampleLenM;
+  let targetW = sampleWidM;
+  let targetLenB: number | undefined;
+  let targetWidB: number | undefined;
+
+  if (mode === 'length_only') {
+    targetL = options?.manualLengthM && options.manualLengthM > 0 ? options.manualLengthM : sampleLenM;
+    targetW = options?.manualWidthM && options.manualWidthM > 0 ? options.manualWidthM : curWidM;
+    targetLenB =
+      options?.manualLengthBearingDeg !== undefined ? options.manualLengthBearingDeg : sampleLenB;
+    targetWidB =
+      options?.manualWidthBearingDeg !== undefined ? options.manualWidthBearingDeg : curWidB;
+    // Prevent collinearity if current width bearing was within 10° of new length bearing
+    if (computeBearingDiffMod180(targetLenB, targetWidB) < 10) {
+      targetWidB = normalizeCompassBearingMod180(targetLenB + 90);
+    }
+  } else if (mode === 'width_only') {
+    targetL = options?.manualLengthM && options.manualLengthM > 0 ? options.manualLengthM : curLenM;
+    targetW = options?.manualWidthM && options.manualWidthM > 0 ? options.manualWidthM : sampleWidM;
+    targetLenB =
+      options?.manualLengthBearingDeg !== undefined ? options.manualLengthBearingDeg : curLenB;
+    targetWidB =
+      options?.manualWidthBearingDeg !== undefined ? options.manualWidthBearingDeg : sampleWidB;
+    if (computeBearingDiffMod180(targetLenB, targetWidB) < 10) {
+      targetLenB = normalizeCompassBearingMod180(targetWidB + 90);
+    }
+  } else if (mode === 'manual_bearing') {
+    targetL = options?.manualLengthM && options.manualLengthM > 0 ? options.manualLengthM : curLenM;
+    targetW = options?.manualWidthM && options.manualWidthM > 0 ? options.manualWidthM : curWidM;
+    targetLenB =
+      options?.manualLengthBearingDeg !== undefined ? options.manualLengthBearingDeg : curLenB;
+    targetWidB =
+      options?.manualWidthBearingDeg !== undefined ? options.manualWidthBearingDeg : curWidB;
+    if (computeBearingDiffMod180(targetLenB, targetWidB) < 10) {
+      return {
+        ok: false,
+        errorSomali:
+          'Bearing-ka Ballaca iyo Bearing-ka Dhererka isku xariiq ma noqon karaan (ugu yaraan 10° ha u dhexeeyo).',
+      };
+    }
+  } else {
+    // mode === 'both'
+    targetL = exactDimensions ? sampleLenM : curLenM;
+    targetW = exactDimensions ? sampleWidM : curWidM;
+  }
+
+  // MODE A: Prebuilt GeoJSON / Nashqad Workflow -> Regenerate all blocks & plots inside farm boundary
+  if (state.prebuiltSubdivision) {
+    const toFcText = (ring: Point2D[]) => {
+      const closed =
+        ring.length >= 3 &&
+        (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])
+          ? [...ring, ring[0]]
+          : ring;
+      return JSON.stringify({
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Polygon', coordinates: [closed] },
+          },
+        ],
+      });
+    };
+
+    const res =
+      mode === 'both'
+        ? runSameeNashqadWorkflow({
+            boundaryFileName: state.boundaryFileName || 'Xuduudka_Beerta.geojson',
+            boundaryFileText: toFcText(boundaryRingLonLat),
+            sampleBlockMode: 'file',
+            sampleBlockFileName: sampleName,
+            sampleBlockFileText: toFcText(sampleRingLonLat),
+            matchExactSampleBlock: exactDimensions,
+            swapSampleAxes: swapAxes,
+            previousState: state,
+          })
+        : runSameeNashqadWorkflow({
+            boundaryFileName: state.boundaryFileName || 'Xuduudka_Beerta.geojson',
+            boundaryFileText: toFcText(boundaryRingLonLat),
+            sampleBlockMode: 'file',
+            sampleBlockFileName: sampleName,
+            sampleBlockFileText: toFcText(sampleRingLonLat),
+            blockLengthM: targetL,
+            blockWidthM: targetW,
+            lengthBearingDeg: targetLenB,
+            widthBearingDeg: targetWidB,
+            matchSampleLength: mode === 'length_only' && options?.manualLengthM === undefined,
+            matchSampleWidth: mode === 'width_only' && options?.manualWidthM === undefined,
+            previousState: state,
+          });
+
+    if (!res.ok) return res;
+
+    // Preserve accompanying layers & estate allocation preferences from prior state
+    const preservedWadiLines = state.prebuiltSubdivision.wadiLinesLonLat;
+    const mergedState: LandSubdivisionState = {
+      ...res.nextState,
+      specialAreaItems: state.specialAreaItems,
+      specialAreaFileName: state.specialAreaFileName,
+      wadiItems: state.wadiItems,
+      wadiFileName: state.wadiFileName,
+      roadItems: state.roadItems,
+      roadFileName: state.roadFileName,
+      cityRoadAnchorLonLat: state.cityRoadAnchorLonLat,
+      extraOverlayLayers: state.extraOverlayLayers,
+      tierUnitPrices: state.tierUnitPrices,
+      allocationMode: state.allocationMode,
+      includeValidHalfPlotsInAllocation: state.includeValidHalfPlotsInAllocation,
+      enforceNonAdjacentBlocks: state.enforceNonAdjacentBlocks,
+      zonePresetMode: state.zonePresetMode,
+      isLinkedToEstate: state.isLinkedToEstate,
+      prebuiltSubdivision: res.nextState.prebuiltSubdivision
+        ? {
+            ...res.nextState.prebuiltSubdivision,
+            wadiLinesLonLat: preservedWadiLines,
+          }
+        : null,
+    };
+
+    return {
+      ok: true,
+      nextState: mergedState,
+      summary: res.summary,
+    };
+  }
+
+  // MODE B: Parametric CAD Designer Mode -> Snap params (L, W, pw, pd, customLengthBearingDeg, customWidthBearingDeg)
+  const basePw = state.params.pw > 0 ? state.params.pw : 18;
+  const basePd = state.params.pd > 0 ? state.params.pd : 24;
+  const nC = Math.max(1, Math.round(targetL / basePw));
+  const nR = Math.max(1, Math.round(targetW / basePd));
+  const alignedPw = +(targetL / nC).toFixed(3);
+  const alignedPd = +(targetW / nR).toFixed(3);
+
+  const nextParams: SubdivisionParams = {
+    ...state.params,
+    L: targetL,
+    W: targetW,
+    pw: alignedPw,
+    pd: alignedPd,
+    rot: 0,
+    swap: mode === 'both' ? swapAxes : false,
+    su: 0,
+    sv: 0,
+    customLengthBearingDeg:
+      mode === 'both' &&
+      computeBearingDiffMod180(sampleLenB, normalizeCompassBearingMod180(sampleWidB + 90)) < 0.25
+        ? null
+        : (targetLenB ?? sampleLenB),
+    customWidthBearingDeg:
+      mode === 'both' &&
+      computeBearingDiffMod180(sampleLenB, normalizeCompassBearingMod180(sampleWidB + 90)) < 0.25
+        ? null
+        : (targetWidB ?? sampleWidB),
+  };
+
+  const effectiveBndItem: ParsedGeoItem = bndItem || {
+    name: state.boundaryFileName || 'Xuduudka Beerta',
+    type: 'Polygon',
+    coords: boundaryRingLonLat,
+  };
+  const effectiveSampleCand: SampleBlockCandidate = cand || {
+    label: sampleName,
+    ring: sampleRingLonLat,
+  };
+
+  const computed = computeLandSubdivision(
+    effectiveBndItem,
+    effectiveSampleCand,
+    nextParams,
+    null,
+    state.specialAreaItems
+  );
+
+  const fullPlotsCount = computed ? computed.plots.length : 0;
+  const halfPlotsCount = computed ? (computed.htmlHalvesCounted || []).length : 0;
+  const blocksCount = computed ? computed.blocks.length : 0;
+  const totalPlotsAreaSqM = computed
+    ? +(
+        fullPlotsCount * alignedPw * alignedPd +
+        (computed.htmlHalvesCounted || []).reduce((s, h) => s + h.area, 0)
+      ).toFixed(2)
+    : 0;
+
+  const summary: NashqadWorkflowSummary = {
+    mode: state.nashqadSummary?.mode || 'samee_nashqad',
+    createdAt: new Date().toISOString(),
+    recognizedFiles: state.nashqadSummary?.recognizedFiles || [],
+    missingFileMessages: [],
+    blocksCount,
+    fullPlotsCount,
+    halfPlotsCount,
+    totalPlotsAreaSqM,
+    boundaryAreaSqM: computed ? +computed.barea.toFixed(2) : 0,
+    standardPlotAreaSqM: +(alignedPw * alignedPd).toFixed(2),
+    widthBearingDeg: computed?.sampleBlockAlignment?.appliedWidthBearingDeg,
+    sampleBlockAlignment: computed?.sampleBlockAlignment || null,
+  };
+
+  const modeAuditLabel =
+    mode === 'length_only'
+      ? 'Dhererka oo keliya'
+      : mode === 'width_only'
+      ? 'Ballaca oo keliya'
+      : mode === 'manual_bearing'
+      ? `Bearing gacanta (${summary.widthBearingDeg ?? targetWidB ?? 0}°)`
+      : `Dherer & Ballac${swapAxes ? ', 90° la wareejiyey' : ''}`;
+
+  const nextState: LandSubdivisionState = {
+    ...state,
+    params: nextParams,
+    blockZones: computed ? buildAutoBlockZones(computed.blocks, state.zonePresetMode) : {},
+    blockTiers: computed ? buildRowBasedBlockTiers(computed.blocks) : {},
+    manualPlotHeirOverrides: {},
+    approvalStatus: state.approvalStatus === 'approved' ? 'under_review' : state.approvalStatus,
+    nashqadSummary: state.nashqadSummary ? summary : null,
+    auditHistory: [
+      createAuditEntry(
+        'geojson_import',
+        `Blocks-ka waxaa lagu fadhiisiyey Block Tusaale (${modeAuditLabel} · ${targetL}×${targetW}m): ${blocksCount} Block, ${fullPlotsCount} Plot.`
+      ),
+      ...(state.auditHistory || []).slice(0, 49),
     ],
   };
 

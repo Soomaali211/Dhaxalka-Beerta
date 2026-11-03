@@ -419,20 +419,32 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-xs overflow-y-auto no-print">
-      <div className="bg-[#0B1220] border border-[#243449] text-[#F8FAFC] rounded-t-3xl sm:rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
-        {/* Header */}
-        <div className="px-5 py-4 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/35 flex items-center justify-center text-[#22C55E] shrink-0">
+    <div
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-2.5 sm:p-4 bg-black/75 backdrop-blur-xs no-print"
+      onClick={() => {
+        setPendingRestore(null);
+        setStatusNotice(null);
+        setConfirmOverwriteTarget(null);
+        setConfirmDeleteTarget(null);
+        onClose();
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-[#0B1220] border border-[#243449] text-[#F8FAFC] rounded-2xl w-full max-w-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden"
+      >
+        {/* Sticky Compact Header */}
+        <div className="px-4 py-2.5 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/35 flex items-center justify-center text-[#22C55E] shrink-0">
               <Cloud className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm sm:text-base font-extrabold text-[#F8FAFC] truncate">
-                Google Drive &amp; Kaydka Kiisaska (Cloud Backup)
+              <h2 className="text-sm font-extrabold text-[#F8FAFC] truncate">
+                Google Drive &amp; Kaydka Kiisaska
               </h2>
               <p className="text-[11px] text-[#94A3B8] truncate">
-                Ku kaydi ama ka soo celi kiisaska iyo khariidadaha Google Drive ama fayl JSON
+                Ku kaydi ama ka soo celi Google Drive ama fayl JSON
               </p>
             </div>
           </div>
@@ -446,7 +458,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               setConfirmDeleteTarget(null);
               onClose();
             }}
-            className="min-h-[40px] min-w-[40px] rounded-xl text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0B1220] flex items-center justify-center cursor-pointer"
+            className="h-9 w-9 rounded-xl text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0B1220] flex items-center justify-center cursor-pointer shrink-0"
             aria-label="Xidh"
           >
             <X className="w-4 h-4" />
@@ -454,22 +466,22 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         </div>
 
         {/* Mode Switcher: Google Drive Cloud vs Local Device JSON */}
-        <div className="px-5 pt-3.5 bg-[#0B1220]">
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[#0F1B2D] border border-[#243449]">
+        <div className="px-4 pt-2.5 bg-[#0B1220] shrink-0">
+          <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#0F1B2D] border border-[#243449]">
             <button
               type="button"
               onClick={() => {
                 setActiveTab('google_drive');
                 setStatusNotice(null);
               }}
-              className={`min-h-[38px] rounded-lg px-3 py-1.5 text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+              className={`min-h-[34px] rounded-lg px-2.5 py-1 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                 activeTab === 'google_drive'
                   ? 'bg-[#22C55E] text-[#030712]'
                   : 'text-[#94A3B8] hover:text-[#F8FAFC]'
               }`}
             >
               <Cloud className="w-3.5 h-3.5 shrink-0" />
-              <span>Google Drive (Cloud)</span>
+              <span>Google Drive</span>
             </button>
             <button
               type="button"
@@ -477,7 +489,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                 setActiveTab('local_file');
                 setStatusNotice(null);
               }}
-              className={`min-h-[38px] rounded-lg px-3 py-1.5 text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+              className={`min-h-[34px] rounded-lg px-2.5 py-1 text-xs font-extrabold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                 activeTab === 'local_file'
                   ? 'bg-[#22C55E] text-[#030712]'
                   : 'text-[#94A3B8] hover:text-[#F8FAFC]'
@@ -489,8 +501,8 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-5 space-y-4 overflow-y-auto text-xs">
+        {/* Scrollable Body */}
+        <div className="flex-1 min-h-0 p-3.5 sm:p-4 space-y-3 overflow-y-auto overscroll-contain text-xs">
           {/* Status / Error Banner */}
           {statusNotice && (
             <div

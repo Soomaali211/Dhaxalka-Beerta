@@ -21,6 +21,7 @@ import {
   FileCheck,
   Download,
 } from 'lucide-react';
+import { InteractivePanZoomViewport } from './InteractivePanZoomViewport';
 
 interface OfficialCertificateModalProps {
   isOpen: boolean;
@@ -155,60 +156,64 @@ export function OfficialCertificateModal({
 
   return (
     <div
-      className="print-certificate-overlay fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/85 backdrop-blur-xs overflow-y-auto"
+      className="print-certificate-overlay fixed inset-0 z-[1100] flex items-center justify-center p-2.5 sm:p-4 bg-black/85 backdrop-blur-xs"
       role="dialog"
       aria-modal="true"
       aria-label="Shahaadada Rasmiga ah ee Dhaxalka"
+      onClick={onClose}
     >
-      <div className="print-certificate-container bg-[#0B1220] border border-[#243449] rounded-t-3xl sm:rounded-2xl w-full max-w-5xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden my-auto">
-        <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto mt-3 sm:hidden shrink-0 no-print" />
-
-        {/* Modal Controls Bar (Hidden during print) */}
-        <div className="px-4 sm:px-6 py-3.5 border-b border-[#243449] flex items-center justify-between gap-3 bg-[#0F1B2D] no-print">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center shrink-0">
-              <FileCheck className="w-5 h-5" />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="print-certificate-container bg-[#0B1220] border border-[#243449] rounded-2xl w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[88dvh] flex flex-col shadow-2xl overflow-hidden"
+      >
+        {/* Sticky Compact Modal Controls Bar (Hidden during print) */}
+        <div className="px-4 py-2.5 border-b border-[#243449] flex items-center justify-between gap-2.5 bg-[#0F1B2D] shrink-0 no-print">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center shrink-0">
+              <FileCheck className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <span className="block text-sm font-bold text-[#F8FAFC] truncate">
                 Shahaadada Rasmiga ah · {referenceNumberDisplay}
               </span>
-              <span className="block text-xs text-[#94A3B8] truncate">
+              <span className="block text-[11px] text-[#94A3B8] truncate">
                 {caseNameDisplay}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={onPrint}
-              className="min-h-[42px] inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-[#030712] bg-[#10B981] hover:bg-[#059669] rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-[#030712] bg-[#10B981] hover:bg-[#059669] rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <Printer className="w-4 h-4 shrink-0" />
+              <Printer className="w-3.5 h-3.5 shrink-0" />
               <span>Daabac / PDF</span>
             </button>
             <button
               type="button"
               onClick={onExportExcel}
-              className="min-h-[42px] inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-[#F8FAFC] bg-[#0B1220] border border-[#243449] hover:border-[#10B981]/60 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              title="Soo dejiso Excel"
+              aria-label="Soo dejiso Excel"
+              className="min-h-[36px] inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-[#F8FAFC] bg-[#0B1220] border border-[#243449] hover:border-[#10B981]/60 rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <Download className="w-4 h-4 text-[#10B981] shrink-0" />
+              <Download className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
               <span className="hidden sm:inline">Excel</span>
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] rounded-xl hover:bg-[#0B1220] transition-colors cursor-pointer"
+              className="h-9 w-9 flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] rounded-xl hover:bg-[#0B1220] transition-colors cursor-pointer"
               aria-label="Xidh"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Printable Document Body (Crisp white A4 paper layout) */}
-        <div className="print-certificate-body p-5 sm:p-8 overflow-y-auto flex-1 bg-white text-neutral-900 font-sans print:p-0">
+        <div className="print-certificate-body p-4 sm:p-7 overflow-y-auto overscroll-contain flex-1 min-h-0 bg-white text-neutral-900 font-sans print:p-0">
           {/* Document Header */}
           <div className="text-center border-b-2 border-neutral-900 pb-5 mb-5">
             <div className="text-xl font-bold font-arabic text-neutral-800 my-1">
@@ -606,6 +611,11 @@ export function OfficialCertificateModal({
                 </h2>
 
               <div className="border border-neutral-300 rounded-lg overflow-hidden bg-slate-50">
+                <InteractivePanZoomViewport
+                  initialAlign="center"
+                  className="h-[300px] sm:h-[380px] bg-slate-100 print:h-auto print:bg-white"
+                >
+                  <div className="w-[min(740px,calc(100vw-3rem))] sm:w-[740px] print:!w-full bg-white shadow-xs print:shadow-none">
                 <svg
                   viewBox={`0 0 ${printableMapProjection.svgW} ${printableMapProjection.svgH}`}
                   className="w-full h-auto block bg-white"
@@ -809,6 +819,8 @@ export function OfficialCertificateModal({
                     />
                   )}
                 </svg>
+                  </div>
+                </InteractivePanZoomViewport>
 
                 {/* Dimensions & Map Legend Bar */}
                 <div className="px-3.5 py-2.5 bg-neutral-50 border-t border-neutral-300 text-[10.5px] space-y-1.5">

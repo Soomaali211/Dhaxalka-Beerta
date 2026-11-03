@@ -30,6 +30,11 @@ import {
   getDistinctHeirColor,
   summarizePlotIdsCompact,
 } from '../utils/landSubdivisionEngine';
+import { computeUnifiedFarmMetrics } from '../utils/unifiedMetrics';
+import {
+  InteractivePanZoomHandle,
+  InteractivePanZoomViewport,
+} from './InteractivePanZoomViewport';
 
 export type PdfPaperSize = 'A4' | 'A3';
 export type PdfPageOrientation = 'landscape' | 'portrait';
@@ -56,6 +61,8 @@ interface InheritanceMapPdfComposerProps {
   deceasedName?: string;
   report: FarmCartographicReport;
   previewZoom: number;
+  onPreviewZoomChange?: (nextZoom: number) => void;
+  panZoomRef?: React.Ref<InteractivePanZoomHandle>;
   svgRef: React.MutableRefObject<SVGSVGElement | null>;
 }
 
@@ -139,6 +146,8 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
   deceasedName,
   report,
   previewZoom,
+  onPreviewZoomChange,
+  panZoomRef,
   svgRef,
 }) => {
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -151,37 +160,22 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
     'layout' | 'legend' | 'compass_scale' | 'source'
   >('layout');
 
-  // Measure live preview viewport so the map sheet automatically fills the screen cleanly
-  const previewContainerRef = useRef<HTMLDivElement | null>(null);
+  // Measure live preview viewport so the map sheet automatically fits cleanly at 100% zoom
   const [viewportDims, setViewportDims] = useState<{ w: number; h: number }>({
     w: 1120,
     h: 760,
   });
-
-  useEffect(() => {
-    const el = previewContainerRef.current;
-    if (!el) return;
-    const updateDims = () => {
-      const rect = el.getBoundingClientRect();
-      if (rect.width > 80 && rect.height > 80) {
-        setViewportDims({ w: rect.width, h: rect.height });
-      }
-    };
-    updateDims();
-    if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => updateDims());
-      ro.observe(el);
-      return () => ro.disconnect();
-    }
-    window.addEventListener('resize', updateDims);
-    return () => window.removeEventListener('resize', updateDims);
-  }, []);
 
   // 1. Page Layout State
   const [paperSize, setPaperSize] = useState<PdfPaperSize>('A4');
   const [orientation, setOrientation] = useState<PdfPageOrientation>('landscape');
   const [layoutStyle, setLayoutStyle] = useState<PdfSheetLayoutStyle>('sidebar_titleblock');
   const [includeSchedulePage2, setIncludeSchedulePage2] = useState<boolean>(false);
+
+  const unifiedMetrics = useMemo(
+    () => computeUnifiedFarmMetrics(subdivisionState, subdivisionResult, true),
+    [subdivisionState, subdivisionResult]
+  );
 
   // 2. Title & Header State
   const defaultTitle = useMemo(() => {
@@ -196,11 +190,19 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
     if (deceasedName && deceasedName.trim()) {
       parts.push(`Marxuum: ${deceasedName.trim()}`);
     }
+    const halfPart =
+      unifiedMetrics.halfPlotsCount > 0 ? ` · ${unifiedMetrics.halfPlotsCount} Half` : '';
     parts.push(
-      `${report.totalPlots} Plot (${report.totalBuuxaCount} Buuxa · ${report.totalQaybCount} Half) · ${report.boundaryAreaDisplayHa.toFixed(2)} ha`
+      `${unifiedMetrics.fullPlotsCount} Buuxa${halfPart} · Plots: ${Math.round(unifiedMetrics.allPlotsAreaSqM).toLocaleString()} m² · Xuduud: ${unifiedMetrics.boundaryAreaHa.toFixed(2)} ha`
     );
     return parts.join(' · ');
-  }, [deceasedName, report.totalPlots, report.totalBuuxaCount, report.totalQaybCount, report.boundaryAreaDisplayHa]);
+  }, [
+    deceasedName,
+    unifiedMetrics.fullPlotsCount,
+    unifiedMetrics.halfPlotsCount,
+    unifiedMetrics.allPlotsAreaSqM,
+    unifiedMetrics.boundaryAreaHa,
+  ]);
 
   const [mapTitle, setMapTitle] = useState<string>(defaultTitle);
   const [mapSubtitle, setMapSubtitle] = useState<string>(defaultSubtitle);
@@ -1070,11 +1072,11 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
     const sb = regions.sidebar;
     if (!sb) return null;
 
-    const titleLines = wrapSvgLines(mapTitle, 32, 3);
-    const subtitleLines = wrapSvgLines(mapSubtitle, 42, 2);
+    const titleLines = wrapSvgLines(mapTitle, 36, 3);
+    const subtitleLines = wrapSvgLines(mapSubtitle, 44, 2);
     const noteLines = wrapSvgLines(sourceNotesText, 44, 3);
 
-    const headerBoxH = 16 + 14 + titleLines.length * 16 + subtitleLines.length * 12 + 34;
+    const headerBoxH = 16 + 14 + titleLines.length * 15 + subtitleLines.length * 12 + 34;
     const sourceBoxH = 108 + noteLines.length * 11;
     const legendBoxY = sb.y + headerBoxH + 8;
     const legendBoxH = Math.max(120, sb.h - headerBoxH - sourceBoxH - 16);
@@ -1156,13 +1158,15 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
         <text
           x={sb.x + 10}
           y={sb.y + headerBoxH - 10}
-          fontSize="8.2"
+          fontSize="8.0"
           fontWeight="700"
           fontFamily="JetBrains Mono, monospace"
           fill="#1E293B"
         >
-          Dhaxlayaasha: {heirAllocations.length} · Blocks: {report.totalBlocks} · Plots:{' '}
-          {report.totalPlots}
+          Dhaxlayaal: {heirAllocations.length} · Blocks:{' '}
+          {unifiedMetrics.blocksCount || report.totalBlocks} · {unifiedMetrics.fullPlotsCount}{' '}
+          Buuxa
+          {unifiedMetrics.halfPlotsCount > 0 ? ` + ${unifiedMetrics.halfPlotsCount} Half` : ''}
         </text>
 
         {/* 2. LEGENDS WITH DHAXLAHA BOX */}
@@ -1600,15 +1604,13 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
     );
   };
 
-  // Compute large, responsive preview sheet width (fills ~94% of available viewport at 100% zoom)
+  // Compute base 100%-fit preview sheet width (InteractivePanZoomViewport handles smooth focal-point zoom & 360° pan)
   const computedPreviewWidthPx = useMemo(() => {
-    const padW = viewportDims.w < 640 ? 14 : 28;
-    const padH = viewportDims.h < 640 ? 14 : 28;
+    const padW = viewportDims.w < 640 ? 18 : 36;
+    const padH = viewportDims.h < 640 ? 18 : 36;
     const availW = Math.max(280, viewportDims.w - padW);
     const availH = Math.max(260, viewportDims.h - padH);
 
-    // On phones (<640px), fill full horizontal screen width at 100% zoom so map isn't postage-stamp tiny;
-    // on tablets/desktops (>=640px), fit cleanly inside the huge viewport while keeping crisp aspect ratio!
     const baseFitW =
       viewportDims.w < 640
         ? availW
@@ -1617,8 +1619,8 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
             Math.min(availW, (availH * pageMetrics.svgW) / pageMetrics.svgH)
           );
 
-    return Math.round(baseFitW * previewZoom);
-  }, [viewportDims.w, viewportDims.h, pageMetrics.svgW, pageMetrics.svgH, previewZoom]);
+    return Math.round(baseFitW);
+  }, [viewportDims.w, viewportDims.h, pageMetrics.svgW, pageMetrics.svgH]);
 
   const combinedPaperValue = `${paperSize}_${orientation}`;
   const handleQuickPaperChange = (val: string) => {
@@ -1640,14 +1642,14 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
       `}</style>
 
       {/* COMPACT 1-ROW QUICK PRINT LAYOUT BAR (Replaces bulky sidebar so map preview is huge!) */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-2.5 sm:px-4 py-1.5 text-xs text-slate-100 overflow-x-auto shrink-0 print:hidden no-print">
+      <div className="scroll-fade-right flex items-center justify-between gap-2 border-b border-[#223250] bg-[#0a1220] px-2.5 sm:px-4 py-1.5 text-xs text-[#e8eef7] overflow-x-auto no-scrollbar shrink-0 print:hidden no-print">
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* 1. Paper & Orientation */}
           <select
             value={combinedPaperValue}
             onChange={(e) => handleQuickPaperChange(e.target.value)}
             aria-label="Warqadda & Jihada"
-            className="min-h-[34px] rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-2 py-1 text-xs font-semibold text-white focus:outline-none cursor-pointer"
+            className="min-h-[36px] rounded-lg bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] px-2 py-1 text-xs font-semibold text-[#e8eef7] focus:outline-none cursor-pointer"
           >
             <option value="A4_landscape">A4 Landscape (Ballac)</option>
             <option value="A4_portrait">A4 Portrait (Dherer)</option>
@@ -1660,7 +1662,7 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
             value={layoutStyle}
             onChange={(e) => setLayoutStyle(e.target.value as PdfSheetLayoutStyle)}
             aria-label="Qaabka Khariidadda"
-            className="min-h-[34px] rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-2 py-1 text-xs font-semibold text-white focus:outline-none cursor-pointer"
+            className="min-h-[36px] rounded-lg bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] px-2 py-1 text-xs font-semibold text-[#e8eef7] focus:outline-none cursor-pointer"
           >
             <option value="sidebar_titleblock">Qaabka: Tiirka Dhinaca</option>
             <option value="fullmap_bottom_legend">Qaabka: Khariidad Ballaadhan</option>
@@ -1671,7 +1673,7 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
             value={plotLabelMode}
             onChange={(e) => setPlotLabelMode(e.target.value as PdfPlotLabelMode)}
             aria-label="Qoraalka Gudaha Plots-ka"
-            className="min-h-[34px] rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-2 py-1 text-xs font-semibold text-white focus:outline-none cursor-pointer"
+            className="min-h-[36px] rounded-lg bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] px-2 py-1 text-xs font-semibold text-[#e8eef7] focus:outline-none cursor-pointer"
           >
             <option value="plot_only">Plot: Lambarka (P01)</option>
             <option value="plot_and_heir">Plot: P01 + Dhaxale</option>
@@ -1683,10 +1685,10 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
           <button
             type="button"
             onClick={() => setIncludeSchedulePage2((v) => !v)}
-            className={`min-h-[34px] rounded-lg border px-2.5 py-1 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
+            className={`min-h-[36px] rounded-lg border px-2.5 py-1 text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
               includeSchedulePage2
-                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
-                : 'border-slate-700 bg-slate-800 text-slate-300 hover:text-white'
+                ? 'border-[#22c55e] bg-[#22c55e]/15 text-[#22c55e]'
+                : 'border-[#223250] bg-[#111b2e] text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
             title="Ku dar ama ka saar Bogga 2aad (Jadwalka Dhaxlayaasha & Saxiixa)"
           >
@@ -1694,153 +1696,114 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
           </button>
         </div>
 
-        {/* Right: Collapsible Fine-Tuning Drawer Trigger */}
+        {/* Right: Collapsible Fine-Tuning Bottom-Sheet / Drawer Trigger */}
         <button
           type="button"
           onClick={() => setIsSettingsDrawerOpen((v) => !v)}
-          className={`min-h-[34px] inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
+          className={`min-h-[36px] inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-bold transition cursor-pointer whitespace-nowrap shrink-0 ${
             isSettingsDrawerOpen
-              ? 'border-emerald-500 bg-emerald-600 text-white'
-              : 'border-slate-700 bg-slate-800 text-slate-100 hover:border-emerald-500/60'
+              ? 'border-[#22c55e] bg-[#22c55e] text-[#060d18]'
+              : 'border-[#223250] bg-[#111b2e] text-[#e8eef7] hover:border-[#22c55e]/60'
           }`}
         >
-          <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-          <span>{isSettingsDrawerOpen ? 'Qari Qalabka' : 'Habee Cinwaan & Sumado'}</span>
+          <SlidersHorizontal
+            className={`h-3.5 w-3.5 shrink-0 ${
+              isSettingsDrawerOpen ? 'text-[#060d18]' : 'text-[#22c55e]'
+            }`}
+          />
+          <span>{isSettingsDrawerOpen ? 'Qari Qalabka' : 'Habee Daabacaadda'}</span>
         </button>
       </div>
 
-      {/* MAIN WORKSPACE: FULL-SCREEN MAP PREVIEW + OPTIONAL FLOATING DRAWER */}
+      {/* MAIN WORKSPACE: FULL-SCREEN MAP PREVIEW + MOBILE BOTTOM-SHEET / DESKTOP DRAWER */}
       <div className="relative flex-1 min-h-0 flex overflow-hidden print:block print:overflow-visible">
         {isSettingsDrawerOpen && (
           <>
-            {/* Subtle click-away backdrop on mobile */}
+            {/* Click-away backdrop on mobile */}
             <div
               onClick={() => setIsSettingsDrawerOpen(false)}
-              className="fixed inset-0 z-20 bg-black/40 sm:hidden print:hidden no-print"
+              className="fixed inset-0 z-20 bg-black/55 sm:hidden print:hidden no-print"
               aria-hidden="true"
             />
-            <aside className="absolute right-0 top-0 bottom-0 z-30 w-[315px] sm:w-[350px] max-w-[92vw] border-l border-slate-700 bg-slate-900/98 backdrop-blur-md text-slate-100 flex flex-col shadow-2xl overflow-hidden print:hidden no-print">
-              <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-950 border-b border-slate-800">
-                <span className="text-xs font-extrabold text-white">
+            <aside className="fixed inset-x-0 bottom-0 z-30 max-h-[72dvh] w-full rounded-t-3xl border-t border-[#223250] bg-[#0a1220] text-[#e8eef7] flex flex-col shadow-2xl overflow-hidden sm:absolute sm:inset-y-0 sm:right-0 sm:left-auto sm:w-[350px] sm:max-h-none sm:rounded-none sm:border-t-0 sm:border-l print:hidden no-print">
+              <div className="mx-auto mt-2 mb-0.5 h-1.5 w-10 rounded-full bg-slate-600 sm:hidden" />
+              <div className="flex items-center justify-between px-3.5 py-2.5 bg-[#060d18] border-b border-[#223250]">
+                <span className="text-xs font-extrabold text-[#e8eef7]">
                   Habaynta Print Layout-ka
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsSettingsDrawerOpen(false)}
-                  className="min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-                  aria-label="Xir Qalabka"
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e] cursor-pointer"
+                  aria-label="Xidh Qalabka"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              {/* Compact 4-Tab Switcher */}
-              <div className="grid grid-cols-4 gap-1 p-1.5 bg-slate-950/70 border-b border-slate-800">
+              {/* Compact 4-Tab Switcher: Bog · Cabir · Legend · Cinwaan (E8) */}
+              <div className="grid grid-cols-4 gap-1 p-1.5 bg-[#060d18]/90 border-b border-[#223250]">
                 <button
                   type="button"
                   onClick={() => setActiveConfigTab('layout')}
-                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
+                  className={`min-h-[40px] flex flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1.5 text-[11px] font-bold transition cursor-pointer ${
                     activeConfigTab === 'layout'
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#a9b8d0] hover:bg-[#111b2e] hover:text-[#e8eef7]'
                   }`}
                 >
                   <LayoutTemplate className="h-3.5 w-3.5" />
-                  <span>Cinwaan</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveConfigTab('legend')}
-                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
-                    activeConfigTab === 'legend'
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-                  }`}
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  <span>Dhaxlaha</span>
+                  <span>Bog</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveConfigTab('compass_scale')}
-                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
+                  className={`min-h-[40px] flex flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1.5 text-[11px] font-bold transition cursor-pointer ${
                     activeConfigTab === 'compass_scale'
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#a9b8d0] hover:bg-[#111b2e] hover:text-[#e8eef7]'
                   }`}
                 >
                   <Compass className="h-3.5 w-3.5" />
-                  <span>Scale</span>
+                  <span>Cabir</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveConfigTab('legend')}
+                  className={`min-h-[40px] flex flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1.5 text-[11px] font-bold transition cursor-pointer ${
+                    activeConfigTab === 'legend'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#a9b8d0] hover:bg-[#111b2e] hover:text-[#e8eef7]'
+                  }`}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  <span>Legend</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveConfigTab('source')}
-                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md px-1.5 py-1.5 text-[10.5px] font-semibold transition cursor-pointer ${
+                  className={`min-h-[40px] flex flex-col items-center justify-center gap-0.5 rounded-lg px-1.5 py-1.5 text-[11px] font-bold transition cursor-pointer ${
                     activeConfigTab === 'source'
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#a9b8d0] hover:bg-[#111b2e] hover:text-[#e8eef7]'
                   }`}
                 >
                   <Info className="h-3.5 w-3.5" />
-                  <span>Xigasho</span>
+                  <span>Cinwaan</span>
                 </button>
               </div>
 
               {/* Scrollable Config Body */}
-              <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 text-xs">
-          {/* TAB 1: TITLE & PAGE LAYOUT */}
+              <div className="flex-1 overflow-y-auto p-3.5 pb-6 space-y-3.5 text-xs">
+          {/* TAB 1: BOGGA & QAABKA (PAGE LAYOUT) */}
           {activeConfigTab === 'layout' && (
             <>
               <div className="space-y-3">
                 <h3 className="text-xs font-bold text-slate-200">
-                  1. Cinwaanka Khariidadda (Title)
-                </h3>
-
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">
-                    Cinwaanka Weyn (Map Title)
-                  </label>
-                  <input
-                    type="text"
-                    value={mapTitle}
-                    onChange={(e) => setMapTitle(e.target.value)}
-                    placeholder="Khariidadda Qaybinta Dhaxalka Beerta..."
-                    className="w-full rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-3 py-2 text-xs text-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">
-                    Cinwaan-hoosaad (Subtitle / Marxuumka)
-                  </label>
-                  <input
-                    type="text"
-                    value={mapSubtitle}
-                    onChange={(e) => setMapSubtitle(e.target.value)}
-                    placeholder="Marxuum: ... · Wadarta Plots & Bedka"
-                    className="w-full rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-3 py-2 text-xs text-white focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">
-                    Qoraalka Madaxa Sare (Header Kicker)
-                  </label>
-                  <input
-                    type="text"
-                    value={headerKicker}
-                    onChange={(e) => setHeaderKicker(e.target.value)}
-                    className="w-full rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-3 py-2 text-xs text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 space-y-3">
-                <h3 className="text-xs font-bold text-slate-200">
-                  2. Qaabka Bogga (Page Layout)
+                  Qaabka Bogga &amp; Warqadda (Bog)
                 </h3>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -2334,12 +2297,56 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
             </>
           )}
 
-          {/* TAB 4: SOURCE INFORMATION */}
+          {/* TAB 4: CINWAANKA & XIGASHADA (TITLE & SOURCE INFORMATION - E7/E8) */}
           {activeConfigTab === 'source' && (
             <div className="space-y-3">
               <h3 className="text-xs font-bold text-slate-200">
-                Xogta Xigashada (Source Information)
+                1. Cinwaanka Khariidadda (2 Sadar — E7)
               </h3>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  Cinwaanka Weyn (Map Title)
+                </label>
+                <textarea
+                  rows={2}
+                  value={mapTitle}
+                  onChange={(e) => setMapTitle(e.target.value)}
+                  placeholder="Khariidadda Qaybinta Dhaxalka Beerta..."
+                  className="w-full rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-3 py-2 text-xs text-white focus:outline-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  Cinwaan-hoosaad (Marxuumka &amp; Cabirka)
+                </label>
+                <input
+                  type="text"
+                  value={mapSubtitle}
+                  onChange={(e) => setMapSubtitle(e.target.value)}
+                  placeholder="Marxuum: ... · Wadarta Plots & Bedka"
+                  className="w-full rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-3 py-2 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">
+                  Qoraalka Madaxa Sare (Header Kicker)
+                </label>
+                <input
+                  type="text"
+                  value={headerKicker}
+                  onChange={(e) => setHeaderKicker(e.target.value)}
+                  className="w-full rounded-lg bg-slate-800 border border-slate-700 focus:border-emerald-500 px-3 py-2 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-800">
+                <h3 className="text-xs font-bold text-slate-200">
+                  2. Xogta Xigashada &amp; Tixraaca
+                </h3>
+              </div>
 
               <div>
                 <label className="block text-[11px] text-slate-400 mb-1">
@@ -2421,12 +2428,20 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
           </>
         )}
 
-        {/* LARGE FULL-VIEWPORT PREVIEW & PRINTABLE CARTOGRAPHIC SHEET(S) */}
-        <div
-          ref={previewContainerRef}
-          className="flex-1 overflow-auto bg-slate-200 p-2 sm:p-3.5 print:overflow-visible print:bg-white print:p-0"
+        {/* INTERACTIVE 360° PAN & FOCAL-POINT ZOOM PREVIEW + PRINTABLE CARTOGRAPHIC SHEET(S) */}
+        <InteractivePanZoomViewport
+          ref={panZoomRef}
+          zoom={previewZoom}
+          onZoomChange={onPreviewZoomChange}
+          initialAlign={includeSchedulePage2 ? 'top' : 'center'}
+          resetKey={`${paperSize}_${orientation}_${layoutStyle}_${includeSchedulePage2}`}
+          onViewportResize={setViewportDims}
+          className="flex-1 min-h-0 bg-slate-200 print:overflow-visible print:bg-white"
         >
-          <div className="mx-auto flex flex-col items-center justify-center min-h-full gap-5 print:block">
+          <div
+            className="flex flex-col items-center gap-5 print:block"
+            style={{ width: `${computedPreviewWidthPx}px` }}
+          >
             {/* PAGE 1: VECTOR CARTOGRAPHIC INHERITANCE MAP SHEET */}
             <section
               className={`bg-white shadow-2xl ring-1 ring-slate-300 print:w-full! print:shadow-none print:ring-0 ${
@@ -2925,7 +2940,7 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
             </section>
           )}
           </div>
-        </div>
+        </InteractivePanZoomViewport>
       </div>
     </div>
   );

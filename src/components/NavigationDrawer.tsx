@@ -28,6 +28,8 @@ interface NavigationDrawerProps {
   savedCasesCount: number;
   currentPlotsCount: number;
   currentHalfPlotsCount: number;
+  currentBoundaryAreaSqM?: number;
+  currentAllPlotsAreaSqM?: number;
   currentHasMap: boolean;
   currency: Currency;
   onClose: () => void;
@@ -59,8 +61,13 @@ const PRIMARY_DESTINATIONS: {
   },
   {
     id: 'list_data',
-    label: 'Liiska Xogta',
+    label: 'Xogta & Kiisaska',
     icon: TableProperties,
+  },
+  {
+    id: 'export',
+    label: 'Soo saar & PDF',
+    icon: Download,
   },
 ];
 
@@ -72,6 +79,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   savedCasesCount,
   currentPlotsCount,
   currentHalfPlotsCount,
+  currentBoundaryAreaSqM,
+  currentAllPlotsAreaSqM,
   currentHasMap,
   currency,
   onClose,
@@ -82,7 +91,6 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onOpenPresetsModal,
   onOpenQuranicModal,
   onOpenBackupRestoreModal,
-  onOpenExportModal,
   onOpenWelcomeSplash,
 }) => {
   const handleNavigate = (dest: PrimaryDestination) => {
@@ -91,9 +99,9 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   };
 
   const renderDrawerContent = (isMobileDrawer: boolean) => (
-    <div className="flex flex-col h-full bg-[#0B1220] text-[#F8FAFC]">
-      {/* Brand Header (Exact Screen 3 Match: Cube-Pin + Beerta & Dhaxalka / GIS Management + X) */}
-      <div className="px-5 py-4 border-b border-[#243449] flex items-center justify-between gap-3">
+    <div className="flex flex-col h-full bg-[#0a1220] text-[#e8eef7]">
+      {/* Brand Header */}
+      <div className="px-5 py-4 border-b border-[#223250] flex items-center justify-between gap-3">
         <button
           type="button"
           onClick={() => {
@@ -104,10 +112,10 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
         >
           <BrandCubeLogo size="md" />
           <div className="min-w-0">
-            <div className="text-sm font-extrabold text-[#F8FAFC] tracking-tight truncate">
+            <div className="text-sm font-extrabold text-[#e8eef7] tracking-tight truncate">
               Beerta &amp; Dhaxalka
             </div>
-            <div className="text-xs text-[#94A3B8] truncate">Maaraynta Beerta &amp; GIS</div>
+            <div className="text-xs text-[#a9b8d0] truncate">Maaraynta Beerta &amp; GIS</div>
           </div>
         </button>
 
@@ -115,7 +123,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[44px] min-w-[44px] -mr-2 rounded-xl flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D] cursor-pointer"
+            className="min-h-[48px] min-w-[48px] -mr-2 rounded-xl flex items-center justify-center text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e] cursor-pointer"
             aria-label="Xir liiska"
           >
             <X className="w-5 h-5" />
@@ -123,8 +131,8 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
         )}
       </div>
 
-      {/* Primary 3 Destinations (Screen 3 Emerald Pill Active Style) */}
-      <nav className="p-4 space-y-2 flex-1 overflow-y-auto" aria-label="Qaybaha Waaweyn">
+      {/* Primary 4 Destinations */}
+      <nav className="p-4 space-y-1.5 flex-1 overflow-y-auto" aria-label="Qaybaha Waaweyn">
         {PRIMARY_DESTINATIONS.map((item) => {
           const Icon = item.icon;
           const isSelected = activeDestination === item.id;
@@ -133,23 +141,23 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
               key={item.id}
               type="button"
               onClick={() => handleNavigate(item.id)}
-              className={`w-full min-h-[50px] flex items-center justify-between gap-3 px-4 py-3 rounded-2xl text-left transition-colors cursor-pointer ${
+              className={`w-full min-h-[48px] flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl text-left transition-colors cursor-pointer ${
                 isSelected
-                  ? 'bg-[#22C55E]/18 border border-[#22C55E]/40 text-[#22C55E]'
-                  : 'text-[#F8FAFC] hover:bg-[#0F1B2D] border border-transparent'
+                  ? 'bg-[#22c55e]/18 border border-[#22c55e]/40 text-[#22c55e]'
+                  : 'text-[#e8eef7] hover:bg-[#111b2e] border border-transparent'
               }`}
             >
               <span className="flex items-center gap-3.5 min-w-0">
                 <Icon
                   className={`w-5 h-5 shrink-0 ${
-                    isSelected ? 'text-[#22C55E]' : 'text-[#94A3B8]'
+                    isSelected ? 'text-[#22c55e]' : 'text-[#a9b8d0]'
                   }`}
                 />
                 <span className="text-sm font-bold truncate">{item.label}</span>
               </span>
 
               {item.id === 'list_data' && (
-                <span className="font-mono-numbers tabular-nums text-xs font-bold text-[#94A3B8]">
+                <span className="font-mono-numbers tabular-nums text-xs font-bold text-[#a9b8d0]">
                   {savedCasesCount}
                 </span>
               )}
@@ -157,7 +165,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           );
         })}
 
-        {/* Dashboard Sub-Views Switcher (Map Satellite/OSM vs CAD Studio vs Overview) */}
+        {/* Dashboard Sub-Views Switcher */}
         {onSelectDashboardSubMode && (
           <div className="pt-2 pl-3 space-y-1">
             <button
@@ -167,10 +175,10 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                 onSelectDashboardSubMode('interactive_map');
                 onClose();
               }}
-              className={`w-full min-h-[40px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+              className={`w-full min-h-[42px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
                 activeDestination === 'dashboard' && dashboardSubMode === 'interactive_map'
-                  ? 'text-[#22C55E] bg-[#0F1B2D]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]/60'
+                  ? 'text-[#22c55e] bg-[#111b2e]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e]/60'
               }`}
             >
               <Map className="w-4 h-4 shrink-0" />
@@ -184,10 +192,10 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                 onSelectDashboardSubMode('cad_designer');
                 onClose();
               }}
-              className={`w-full min-h-[40px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+              className={`w-full min-h-[42px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
                 activeDestination === 'dashboard' && dashboardSubMode === 'cad_designer'
-                  ? 'text-[#22C55E] bg-[#0F1B2D]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]/60'
+                  ? 'text-[#22c55e] bg-[#111b2e]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e]/60'
               }`}
             >
               <Wrench className="w-4 h-4 shrink-0" />
@@ -201,10 +209,10 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                 onSelectDashboardSubMode('overview');
                 onClose();
               }}
-              className={`w-full min-h-[40px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+              className={`w-full min-h-[42px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
                 activeDestination === 'dashboard' && dashboardSubMode === 'overview'
-                  ? 'text-[#22C55E] bg-[#0F1B2D]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]/60'
+                  ? 'text-[#22c55e] bg-[#111b2e]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e]/60'
               }`}
             >
               <LayoutDashboard className="w-4 h-4 shrink-0" />
@@ -213,20 +221,20 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           </div>
         )}
 
-        {/* Active Case Status Callout */}
+        {/* Fadhi & Active Case Status Callout with Unified Metrics (E10 & E11) */}
         {activeCase && (
-          <div className="mt-4 rounded-2xl bg-[#0F1B2D] border border-[#243449] p-3.5 space-y-1.5">
-            <div className="flex items-center justify-between gap-2 text-[11px] font-mono-numbers text-[#94A3B8]">
-              <span className="font-bold text-[#22C55E] truncate">
+          <div className="mt-4 rounded-2xl bg-[#111b2e] border border-[#223250] p-3.5 space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-[11px] font-mono-numbers text-[#a9b8d0]">
+              <span className="font-bold text-[#22c55e] truncate">
                 {activeCase.referenceNumber}
               </span>
               <span>{CASE_STATUS_METADATA[activeCase.status].labelSomali}</span>
             </div>
-            <div className="text-xs font-bold text-[#F8FAFC] truncate">{activeCase.caseName}</div>
-            <div className="flex items-center justify-between gap-2 text-[11px] text-[#94A3B8] pt-1">
-              <span>
+            <div className="text-xs font-bold text-[#e8eef7] line-clamp-2">{activeCase.caseName}</div>
+            <div className="flex items-center justify-between gap-2 text-[11px] text-[#a9b8d0] pt-1">
+              <span className="font-mono-numbers tabular-nums">
                 {currentHasMap
-                  ? `${currentPlotsCount} Plot · ${currentHalfPlotsCount} Half`
+                  ? `${currentPlotsCount} Buuxa · ${currentHalfPlotsCount} Half`
                   : 'Bilaa khariidad'}
               </span>
               <button
@@ -235,45 +243,45 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
                   onOpenQuickCasesModal();
                   onClose();
                 }}
-                className="font-bold text-[#22C55E] hover:underline cursor-pointer"
+                className="font-bold text-[#22c55e] hover:underline cursor-pointer"
               >
                 Beddel
               </button>
             </div>
+            {currentHasMap &&
+              ((currentAllPlotsAreaSqM && currentAllPlotsAreaSqM > 0) ||
+                (currentBoundaryAreaSqM && currentBoundaryAreaSqM > 0)) && (
+                <div className="pt-1.5 border-t border-[#223250]/80 grid grid-cols-2 gap-1.5 text-[10px] font-mono-numbers tabular-nums text-[#a9b8d0]">
+                  <div>
+                    Plots: <span className="text-[#e8eef7] font-bold">{(currentAllPlotsAreaSqM || 0).toLocaleString()} m²</span>
+                  </div>
+                  <div>
+                    Xuduud: <span className="text-[#e8eef7] font-bold">{(currentBoundaryAreaSqM || 0).toLocaleString()} m²</span>
+                  </div>
+                </div>
+              )}
           </div>
         )}
 
         {/* Info Callout Box */}
-        <div className="mt-3 rounded-2xl bg-[#0F1B2D]/80 border border-[#243449] p-3.5 flex items-start gap-2.5">
-          <Info className="w-4 h-4 text-[#22C55E] shrink-0 mt-0.5" />
-          <p className="text-xs text-[#94A3B8] leading-relaxed">
-            Nashqadaynta beerta (GeoJSON) iyo xisaabinta Faraa&apos;idka waa diyaar — Khad Leh (OSM/Dayax-gacmeed) iyo Bilaa Khad.
+        <div className="mt-3 rounded-2xl bg-[#111b2e]/80 border border-[#223250] p-3.5 flex items-start gap-2.5">
+          <Info className="w-4 h-4 text-[#22c55e] shrink-0 mt-0.5" />
+          <p className="text-xs text-[#a9b8d0] leading-relaxed">
+            Nashqadaynta beerta (GeoJSON/KML) iyo xisaabinta Faraa&apos;idka waa diyaar — Khad Leh (Dayax-gacmeed/OSM) iyo Bilaa Khad.
           </p>
         </div>
 
-        {/* Tools & Settings Section */}
-        <div className="pt-3 border-t border-[#243449]/70 space-y-1">
-          <button
-            type="button"
-            onClick={() => {
-              onOpenExportModal();
-              onClose();
-            }}
-            className="w-full min-h-[44px] flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#F8FAFC] hover:bg-[#0F1B2D] transition-colors cursor-pointer"
-          >
-            <Download className="w-4 h-4 text-[#22C55E] shrink-0" />
-            <span className="truncate">Soo saar (GeoJSON, PDF, CSV, Excel)</span>
-          </button>
-
+        {/* Fadhi & Kaydka Section */}
+        <div className="pt-3 border-t border-[#223250]/70 space-y-1">
           <button
             type="button"
             onClick={() => {
               onOpenBackupRestoreModal();
               onClose();
             }}
-            className="w-full min-h-[44px] flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#F8FAFC] hover:bg-[#0F1B2D] transition-colors cursor-pointer"
+            className="w-full min-h-[44px] flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#e8eef7] hover:bg-[#111b2e] transition-colors cursor-pointer"
           >
-            <DatabaseBackup className="w-4 h-4 text-[#22C55E] shrink-0" />
+            <DatabaseBackup className="w-4 h-4 text-[#22c55e] shrink-0" />
             <span className="truncate">Google Drive &amp; Kaydka Guud</span>
           </button>
 

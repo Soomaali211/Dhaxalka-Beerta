@@ -214,23 +214,61 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
   const totalInheritingPeople = distribution.heirAllocations.reduce((s, h) => s + h.count, 0);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5 text-[#F8FAFC]">
-      {/* TOP BAR: BACK TO CALCULATOR + SAVE / PRINT / EXCEL */}
-      <div className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="max-w-6xl mx-auto space-y-4 text-[#e8eef7]">
+      {/* STEP 3 STEPPER: ✓ Hantida — ✓ Dhaxlayaasha — ③ Natiijada (E6) */}
+      <div className="bg-[#111b2e] border border-[#223250] rounded-2xl px-4 py-3.5 no-print">
+        <div className="flex items-center justify-between gap-2 max-w-md mx-auto">
+          <button
+            type="button"
+            onClick={onBackToCalculator}
+            className="flex items-center gap-2 cursor-pointer"
+          >
+            <span className="w-7 h-7 rounded-full bg-[#22c55e] text-[#060d18] text-xs font-extrabold flex items-center justify-center">
+              <Check className="w-4 h-4 stroke-[3]" />
+            </span>
+            <span className="text-xs font-bold text-[#e8eef7]">Hantida</span>
+          </button>
+
+          <div className="flex-1 h-0.5 bg-[#22c55e] rounded-full mx-1" />
+
+          <button
+            type="button"
+            onClick={onBackToCalculator}
+            className="flex items-center gap-2 cursor-pointer"
+          >
+            <span className="w-7 h-7 rounded-full bg-[#22c55e] text-[#060d18] text-xs font-extrabold flex items-center justify-center">
+              <Check className="w-4 h-4 stroke-[3]" />
+            </span>
+            <span className="text-xs font-bold text-[#e8eef7]">Dhaxlayaasha</span>
+          </button>
+
+          <div className="flex-1 h-0.5 bg-[#22c55e] rounded-full mx-1" />
+
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-full bg-[#111b2e] border-2 border-[#22c55e] text-[#22c55e] text-xs font-extrabold flex items-center justify-center">
+              3
+            </span>
+            <span className="text-xs font-extrabold text-[#22c55e]">Natiijada</span>
+          </div>
+        </div>
+      </div>
+
+      {/* TOP BAR: BACK TO CALCULATOR + SAVE / PRINT / JADWAL */}
+      <div className="bg-[#111b2e] border border-[#223250] rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={onBackToCalculator}
-            className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0B1220] border border-[#243449] hover:border-[#10B981] px-3.5 py-2 text-xs font-bold text-[#F8FAFC] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="min-h-[48px] inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220] border border-[#223250] hover:border-[#22c55e] px-3.5 py-2 text-xs font-bold text-[#e8eef7] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4 text-[#10B981]" />
+            <ArrowLeft className="w-4 h-4 text-[#22c55e]" />
             <span>Wax Ka Beddel</span>
           </button>
           <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-extrabold text-[#F8FAFC] tracking-tight truncate">
+            <h1 className="text-base sm:text-lg font-extrabold text-[#e8eef7] tracking-tight line-clamp-2">
               Natiijada Dhaxalka &amp; Qaybinta Hantida
             </h1>
-            <p className="text-xs text-[#94A3B8] truncate">
+            <p className="text-xs text-[#a9b8d0] truncate">
               Dhammaan dhaxlayaasha iyo qofkasta wuxuu helay (Dhul, Lacag, Xoolo &amp; Heerka)
             </p>
           </div>
@@ -240,16 +278,16 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
           <button
             type="button"
             onClick={onSaveCaseRecord}
-            className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0B1220] border border-[#243449] hover:border-[#10B981] text-[#F8FAFC] px-3.5 py-2 text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220] border border-[#223250] hover:border-[#22c55e] text-[#e8eef7] px-3.5 py-2 text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <BookmarkCheck className="w-4 h-4 text-[#10B981]" />
+            <BookmarkCheck className="w-4 h-4 text-[#22c55e]" />
             <span>Keydi</span>
           </button>
           {onPrintInheritanceMapPdf && (
             <button
               type="button"
               onClick={onPrintInheritanceMapPdf}
-              className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0B1220] border border-[#10B981]/60 hover:border-[#10B981] text-[#10B981] px-3.5 py-2 text-xs font-extrabold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220] border border-[#22c55e]/60 hover:border-[#22c55e] text-[#22c55e] px-3.5 py-2 text-xs font-extrabold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <MapPin className="w-4 h-4" />
               <span>Khariidadda Dhaxalka PDF</span>
@@ -258,7 +296,7 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
           <button
             type="button"
             onClick={onPrintCertificate}
-            className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] px-4 py-2 text-xs font-extrabold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] px-4 py-2 text-xs font-extrabold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>Shahaadada PDF</span>
@@ -266,10 +304,10 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
           <button
             type="button"
             onClick={onExportExcel}
-            className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0B1220] border border-[#243449] hover:border-[#10B981] text-[#F8FAFC] px-3.5 py-2 text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220] border border-[#223250] hover:border-[#22c55e] text-[#e8eef7] px-3.5 py-2 text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
-            <Download className="w-4 h-4 text-[#10B981]" />
-            <span>Excel</span>
+            <Download className="w-4 h-4 text-[#22c55e]" />
+            <span>Jadwal (.xlsx)</span>
           </button>
         </div>
       </div>

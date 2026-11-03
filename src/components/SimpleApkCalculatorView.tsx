@@ -12,12 +12,12 @@ import {
 } from '../types/landSubdivision';
 import { LAND_ALLOCATION_MODE_METADATA } from '../utils/landSubdivisionEngine';
 import { updateHeirPersonName } from '../utils/heirNameUtils';
+import { countEnteredHeirs } from '../utils/unifiedMetrics';
 import {
   Check,
   Plus,
   Minus,
   Lock,
-  Calculator,
   RotateCcw,
   BookmarkCheck,
   ChevronDown,
@@ -27,6 +27,8 @@ import {
   UserCheck,
   Grid,
   ArrowRight,
+  ArrowLeft,
+  AlertCircle,
 } from 'lucide-react';
 
 interface SimpleApkCalculatorViewProps {
@@ -114,6 +116,7 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
   const totalEstateValue = assets.reduce((s, a) => s + (a.estimatedValueUSD || 0), 0);
   const totalQuickQuantity = assets[0]?.quantity || 1;
   const totalDeductionsUSD = deductions.reduce((s, d) => s + (d.amountUSD || 0), 0);
+  const enteredHeirsCount = countEnteredHeirs(heirsInput);
 
   const handleQuickMoneyChange = (valStr: string) => {
     const amount = Math.max(0, parseFloat(valStr) || 0);
@@ -501,10 +504,11 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4 text-[#F8FAFC]">
-      {/* SCREEN 5: 3-STEP HORIZONTAL STEPPER (1 Kiiska — 2 Dhaxlayaasha — 3 Natiijada) */}
-      <div className="bg-[#0F1B2D] border border-[#243449] rounded-2xl px-4 py-3.5">
+    <div className="max-w-3xl mx-auto space-y-4 pb-6 text-[#e8eef7]">
+      {/* 3-STEP HORIZONTAL STEPPER WITH DISTINCT COMPLETED (✓), CURRENT (RING), UPCOMING STATES (E6) */}
+      <div className="bg-[#111b2e] border border-[#223250] rounded-2xl px-4 py-3.5">
         <div className="flex items-center justify-between gap-2 max-w-md mx-auto">
+          {/* Step 1: Hantida */}
           <button
             type="button"
             onClick={() => setWizardStep(1)}
@@ -512,18 +516,29 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
           >
             <span
               className={`w-7 h-7 rounded-full text-xs font-extrabold flex items-center justify-center transition-colors ${
-                wizardStep >= 1
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'bg-[#0B1220] border border-[#243449] text-[#94A3B8]'
+                wizardStep > 1
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'bg-[#111b2e] border-2 border-[#22c55e] text-[#22c55e]'
               }`}
             >
-              1
+              {wizardStep > 1 ? <Check className="w-4 h-4 stroke-[3]" /> : '1'}
             </span>
-            <span className="text-xs font-bold text-[#F8FAFC]">Kiiska</span>
+            <span
+              className={`text-xs font-bold ${
+                wizardStep === 1 ? 'text-[#22c55e]' : 'text-[#e8eef7]'
+              }`}
+            >
+              Hantida
+            </span>
           </button>
 
-          <div className="flex-1 h-0.5 bg-[#22C55E]/50 rounded-full mx-1" />
+          <div
+            className={`flex-1 h-0.5 rounded-full mx-1 ${
+              wizardStep > 1 ? 'bg-[#22c55e]' : 'bg-[#223250]'
+            }`}
+          />
 
+          {/* Step 2: Dhaxlayaasha */}
           <button
             type="button"
             onClick={() => setWizardStep(2)}
@@ -532,37 +547,53 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
             <span
               className={`w-7 h-7 rounded-full text-xs font-extrabold flex items-center justify-center transition-colors ${
                 wizardStep === 2
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'bg-[#22C55E]/20 border border-[#22C55E] text-[#22C55E]'
+                  ? 'bg-[#111b2e] border-2 border-[#22c55e] text-[#22c55e]'
+                  : 'bg-[#0a1220] border border-[#223250] text-[#a9b8d0]'
               }`}
             >
               2
             </span>
-            <span className="text-xs font-bold text-[#F8FAFC]">Dhaxlayaasha</span>
+            <span
+              className={`text-xs font-bold ${
+                wizardStep === 2 ? 'text-[#22c55e]' : 'text-[#a9b8d0]'
+              }`}
+            >
+              Dhaxlayaasha
+            </span>
           </button>
 
-          <div className="flex-1 h-0.5 bg-[#243449] rounded-full mx-1" />
+          <div className="flex-1 h-0.5 bg-[#223250] rounded-full mx-1" />
 
+          {/* Step 3: Natiijada (Disabled when 0 heirs entered — E13) */}
           <button
             type="button"
-            onClick={onCalculateAndViewResults}
-            className="flex items-center gap-2 cursor-pointer group"
+            disabled={enteredHeirsCount === 0}
+            onClick={() => {
+              if (enteredHeirsCount > 0) {
+                onCalculateAndViewResults();
+              }
+            }}
+            className="flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed disabled:opacity-55 group"
           >
-            <span className="w-7 h-7 rounded-full bg-[#0B1220] border border-[#243449] group-hover:border-[#22C55E] text-xs font-extrabold text-[#94A3B8] group-hover:text-[#F8FAFC] flex items-center justify-center transition-colors">
+            <span className="w-7 h-7 rounded-full bg-[#0a1220] border border-[#223250] group-hover:border-[#22c55e] text-xs font-extrabold text-[#a9b8d0] flex items-center justify-center transition-colors">
               3
             </span>
-            <span className="text-xs font-semibold text-[#94A3B8] group-hover:text-[#F8FAFC]">
+            <span className="text-xs font-semibold text-[#a9b8d0]">
               Natiijada
             </span>
           </button>
         </div>
       </div>
 
-      {/* SCREEN 5 CARD 1: "1. Dooro Booska ama Block-ga" */}
-      <section className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-4 sm:p-5 space-y-3">
+      {/* STEP 1 CARD: "1. Hantida & Dhulka" */}
+      <section
+        className={`bg-[#111b2e] border rounded-2xl p-4 sm:p-5 space-y-3 transition-colors ${
+          wizardStep === 1 ? 'border-[#22c55e]/65' : 'border-[#223250]'
+        }`}
+      >
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm sm:text-base font-extrabold text-[#F8FAFC]">
-            1. Dooro Booska ama Block-ga
+          <h2 className="text-sm sm:text-base font-extrabold text-[#e8eef7]">
+            1. Hantida &amp; Dhulka (Booska ama Block-ga)
           </h2>
           <button
             type="button"
@@ -692,33 +723,54 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
           )}
       </section>
 
-      {/* SCREEN 5 CARD 2: "2. Dhaxlayaasha" */}
-      <section className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-4 sm:p-5 space-y-3.5">
+      {/* STEP 2 CARD: "2. Dhaxlayaasha" */}
+      <section
+        className={`bg-[#111b2e] border rounded-2xl p-4 sm:p-5 space-y-3.5 transition-colors ${
+          wizardStep === 2 ? 'border-[#22c55e]/65' : 'border-[#223250]'
+        }`}
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm sm:text-base font-extrabold text-[#F8FAFC]">
-            2. Dhaxlayaasha
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm sm:text-base font-extrabold text-[#e8eef7]">
+              2. Dhaxlayaasha
+            </h2>
+            <span
+              className={`px-2 py-0.5 rounded-lg text-[11px] font-mono-numbers tabular-nums font-bold ${
+                enteredHeirsCount > 0
+                  ? 'bg-[#22c55e]/15 text-[#22c55e] border border-[#22c55e]/30'
+                  : 'bg-[#facc15]/15 text-[#facc15] border border-[#facc15]/30'
+              }`}
+            >
+              {enteredHeirsCount} Dhaxle
+            </span>
+          </div>
 
-          {/* Compact Deceased Gender Pill (Nin / Naag) */}
-          <div className="inline-flex items-center rounded-xl bg-[#0B1220] border border-[#243449] p-0.5 text-xs font-bold">
+          {/* Compact Deceased Gender Selector */}
+          <div className="inline-flex items-center rounded-xl bg-[#0a1220] border border-[#223250] p-0.5 text-xs font-bold">
             <button
               type="button"
-              onClick={() => handleGenderChange('male')}
-              className={`min-h-[32px] px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+              onClick={() => {
+                setWizardStep(2);
+                handleGenderChange('male');
+              }}
+              className={`min-h-[36px] px-3 py-1 rounded-lg transition-colors cursor-pointer ${
                 heirsInput.deceasedGender === 'male'
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
               }`}
             >
               Marxuum (Nin)
             </button>
             <button
               type="button"
-              onClick={() => handleGenderChange('female')}
-              className={`min-h-[32px] px-3 py-1 rounded-lg transition-colors cursor-pointer ${
+              onClick={() => {
+                setWizardStep(2);
+                handleGenderChange('female');
+              }}
+              className={`min-h-[36px] px-3 py-1 rounded-lg transition-colors cursor-pointer ${
                 heirsInput.deceasedGender === 'female'
-                  ? 'bg-[#22C55E] text-[#05130B]'
-                  : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
               }`}
             >
               Marxuumad (Naag)
@@ -727,46 +779,48 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
         </div>
 
         <div className="space-y-2.5">
-          {/* Wiilal (Sons) */}
-          <div className="min-h-[58px] rounded-xl bg-[#0B1220] border border-[#243449] px-4 py-2.5 flex items-center justify-between gap-3">
-            <span className="text-sm font-bold text-[#F8FAFC]">Wiilal (Sons)</span>
+          {/* Wiilal (Pure Somali — E15) */}
+          <div className="min-h-[58px] rounded-xl bg-[#0a1220] border border-[#223250] px-4 py-2.5 flex items-center justify-between gap-3">
+            <span className="text-sm font-bold text-[#e8eef7]">Wiilal</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={heirsInput.sonsCount <= 0}
-                onClick={() =>
+                onClick={() => {
+                  setWizardStep(2);
                   onUpdateHeirs({
                     ...heirsInput,
                     sonsCount: Math.max(0, heirsInput.sonsCount - 1),
-                  })
-                }
+                  });
+                }}
                 aria-label="Yaree Wiilal"
-                className="w-11 h-11 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#94A3B8] disabled:opacity-35 flex items-center justify-center text-[#F8FAFC] cursor-pointer disabled:cursor-not-allowed"
+                className="w-11 h-11 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#a9b8d0] disabled:opacity-35 flex items-center justify-center text-[#e8eef7] cursor-pointer disabled:cursor-not-allowed"
               >
                 <Minus className="w-4 h-4" />
               </button>
-              <span className="min-w-[34px] text-center font-mono-numbers tabular-nums text-base font-extrabold text-[#F8FAFC]">
+              <span className="min-w-[34px] text-center font-mono-numbers tabular-nums text-base font-extrabold text-[#e8eef7]">
                 {heirsInput.sonsCount}
               </span>
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
+                  setWizardStep(2);
                   onUpdateHeirs({
                     ...heirsInput,
                     sonsCount: Math.min(30, heirsInput.sonsCount + 1),
-                  })
-                }
+                  });
+                }}
                 aria-label="Kordhi Wiilal"
-                className="w-11 h-11 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#22C55E] flex items-center justify-center text-[#F8FAFC] cursor-pointer"
+                className="w-11 h-11 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e] flex items-center justify-center text-[#e8eef7] cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Gabdho (Daughters) */}
-          <div className="min-h-[58px] rounded-xl bg-[#0B1220] border border-[#243449] px-4 py-2.5 flex items-center justify-between gap-3">
-            <span className="text-sm font-bold text-[#F8FAFC]">Gabdho (Daughters)</span>
+          {/* Gabdho (Pure Somali — E15) */}
+          <div className="min-h-[58px] rounded-xl bg-[#0a1220] border border-[#223250] px-4 py-2.5 flex items-center justify-between gap-3">
+            <span className="text-sm font-bold text-[#e8eef7]">Gabdho</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -907,21 +961,21 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
           <button
             type="button"
             onClick={onOpenDetailedAssetsModal}
-            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0B1220] border border-[#243449] hover:border-[#22C55E] text-xs font-semibold text-[#F8FAFC] cursor-pointer"
+            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-[#0a1220] border border-[#223250] hover:border-[#22c55e] text-xs font-semibold text-[#e8eef7] cursor-pointer"
           >
             Deymaha &amp; Hantida
           </button>
         </div>
 
-        {/* Primary Next CTA Button (Exact Screen 5 Match) */}
-        <button
-          type="button"
-          onClick={onCalculateAndViewResults}
-          className="w-full min-h-[52px] rounded-2xl bg-[#22C55E] hover:bg-[#16A34A] active:scale-[0.99] text-[#05130B] font-extrabold text-base flex items-center justify-center gap-2 shadow-[0_8px_24px_rgba(34,197,94,0.28)] transition-all cursor-pointer"
-        >
-          <span>Next</span>
-          <ArrowRight className="w-5 h-5 stroke-[2.5]" />
-        </button>
+        {/* 0-Heir Inline Validation Guidance (E13) */}
+        {enteredHeirsCount === 0 && (
+          <div className="rounded-xl bg-[#facc15]/10 border border-[#facc15]/35 px-3.5 py-2.5 flex items-start gap-2.5 text-xs text-[#facc15]">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              Geli ugu yaraan hal dhaxle (Wiil, Gabadh, Lammaane, Waalid ama Ehel kale) si aad ugu gudubto Natiijada.
+            </span>
+          </div>
+        )}
       </section>
 
       {/* EXPANDABLE EXTENDED SHAFI'I SECTIONS (All 8 Steps, Individual Heir Names, Cash/Livestock/Debts) */}
@@ -1726,39 +1780,66 @@ export const SimpleApkCalculatorView: React.FC<SimpleApkCalculatorViewProps> = (
         </div>
       )}
 
-      {/* STEP 8: COMPACT SAVE / RESET FOOTER BAR */}
+      {/* SINGLE STICKY BOTTOM ACTION BAR (Eliminates Duplicate Next / Arag Natiijada — E13 & E14) */}
       <section
         id="step-actions"
-        className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-2.5"
+        className="sticky bottom-16 lg:bottom-3 z-20 bg-[#0a1220]/95 backdrop-blur-md border border-[#223250] rounded-2xl p-3 sm:p-3.5 shadow-2xl flex flex-wrap items-center justify-between gap-2"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {wizardStep === 2 && (
+            <button
+              type="button"
+              onClick={() => setWizardStep(1)}
+              className="min-h-[48px] px-3 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#a9b8d0] inline-flex items-center gap-1.5 text-xs font-bold text-[#e8eef7] cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4 text-[#a9b8d0]" />
+              <span>Dib</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onClearCase}
-            className="min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B1220] border border-[#243449] hover:border-[#94A3B8] px-3.5 py-2 text-xs font-bold text-[#F8FAFC] transition-colors whitespace-nowrap cursor-pointer"
+            className="min-h-[48px] px-3 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#a9b8d0] inline-flex items-center gap-1.5 text-xs font-bold text-[#e8eef7] cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-[#94A3B8]" />
+            <RotateCcw className="w-3.5 h-3.5 text-[#a9b8d0]" />
             <span>Nadiifi</span>
           </button>
 
           <button
             type="button"
             onClick={onSaveCaseRecord}
-            className="min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B1220] border border-[#243449] hover:border-[#22C55E] text-[#22C55E] px-3.5 py-2 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer"
+            className="min-h-[48px] px-3 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e] text-[#22c55e] inline-flex items-center gap-1.5 text-xs font-bold cursor-pointer"
           >
             <BookmarkCheck className="w-3.5 h-3.5" />
-            <span>Keydi Kiiska</span>
+            <span>Keydi</span>
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={onCalculateAndViewResults}
-          className="min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/40 hover:bg-[#22C55E]/25 text-[#22C55E] px-4 py-2 text-xs font-extrabold transition-colors whitespace-nowrap cursor-pointer"
-        >
-          <Calculator className="w-3.5 h-3.5" />
-          <span>Arag Natiijada &amp; Saamiyada</span>
-        </button>
+        {wizardStep === 1 ? (
+          <button
+            type="button"
+            onClick={() => setWizardStep(2)}
+            className="min-h-[48px] px-5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] font-extrabold text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <span>Xiga: Dhaxlayaasha</span>
+            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={enteredHeirsCount === 0}
+            onClick={() => {
+              if (enteredHeirsCount > 0) {
+                onCalculateAndViewResults();
+              }
+            }}
+            className="min-h-[48px] px-5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] disabled:bg-[#223250] disabled:text-[#a9b8d0] text-[#060d18] font-extrabold text-sm inline-flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:cursor-not-allowed"
+          >
+            <span>Xiga: Natiijada</span>
+            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        )}
       </section>
     </div>
   );

@@ -18,6 +18,10 @@ import {
 import { calculateComprehensiveEstateDistribution } from '../utils/estateAssetDistributionEngine';
 import { getEditableGroupKeyForShareId, updateHeirPersonName } from '../utils/heirNameUtils';
 import { CASE_STATUS_METADATA } from '../utils/caseManagementEngine';
+import {
+  computeSavedCaseUnifiedMetrics,
+  computeUnifiedFarmMetrics,
+} from '../utils/unifiedMetrics';
 import { CaseManagementView } from './CaseManagementView';
 import { ExcelSpreadsheetView } from './ExcelSpreadsheetView';
 import {
@@ -34,6 +38,7 @@ import {
   Search,
   ShieldAlert,
   SlidersHorizontal,
+  Users,
   X,
 } from 'lucide-react';
 
@@ -534,43 +539,38 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
     });
   }, [savedCases, caseSearchQuery, caseStatusFilter]);
 
-  const activeCaseLandAreaSqM = useMemo(() => {
-    if (currentHasMap && subdivisionResult) {
-      return Math.round(subdivisionResult.barea);
-    }
-    if (plotsSummary.divisibleAreaSqM > 0) {
-      return Math.round(plotsSummary.divisibleAreaSqM);
-    }
-    return 0;
-  }, [currentHasMap, subdivisionResult, plotsSummary.divisibleAreaSqM]);
+  const unifiedMetrics = useMemo(
+    () => computeUnifiedFarmMetrics(subdivisionState, subdivisionResult, currentHasMap),
+    [subdivisionState, subdivisionResult, currentHasMap]
+  );
 
   return (
-    <div className="space-y-4 text-[#F8FAFC]">
-      {/* SCREEN 8 SEGMENTED CATEGORY TABS (Cases | Blocks | Plots | Heirs + Excel) */}
+    <div className="space-y-4 text-[#e8eef7]">
+      {/* SEGMENTED CATEGORY TABS IN PURE SOMALI (Kiisas | Blocks | Plots | Dhaxlayaal + Jadwal — E15) */}
       <div className="flex items-center gap-2">
-        <div className="flex-1 bg-[#0F1B2D] border border-[#243449] rounded-xl p-1 grid grid-cols-4 gap-1">
+        <div className="flex-1 bg-[#111b2e] border border-[#223250] rounded-xl p-1 grid grid-cols-4 gap-1">
           <button
             type="button"
             onClick={() => {
               onChangeCategory('cases');
               setCasesSubView('list');
             }}
-            className={`min-h-[40px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
               activeCategory === 'cases'
-                ? 'bg-[#10B981] text-[#030712] shadow-sm'
-                : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
+                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
           >
-            Cases
+            Kiisas
           </button>
 
           <button
             type="button"
             onClick={() => onChangeCategory('blocks')}
-            className={`min-h-[40px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
               activeCategory === 'blocks'
-                ? 'bg-[#10B981] text-[#030712] shadow-sm'
-                : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
+                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
           >
             Blocks
@@ -579,10 +579,10 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
           <button
             type="button"
             onClick={() => onChangeCategory('plots')}
-            className={`min-h-[40px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
               activeCategory === 'plots'
-                ? 'bg-[#10B981] text-[#030712] shadow-sm'
-                : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
+                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
           >
             Plots
@@ -591,47 +591,47 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
           <button
             type="button"
             onClick={() => onChangeCategory('heirs')}
-            className={`min-h-[40px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
               activeCategory === 'heirs'
-                ? 'bg-[#10B981] text-[#030712] shadow-sm'
-                : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
+                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
             }`}
           >
-            Heirs
+            Dhaxlayaal
           </button>
         </div>
 
         <button
           type="button"
           onClick={() => onChangeCategory('excel')}
-          title="Shaxda Excel"
-          className={`min-h-[48px] px-3 rounded-xl border inline-flex items-center justify-center gap-1.5 text-xs font-extrabold transition-colors shrink-0 cursor-pointer ${
+          title="Jadwalka Xogta"
+          className={`min-h-[50px] px-3 rounded-xl border inline-flex items-center justify-center gap-1.5 text-xs font-extrabold transition-colors shrink-0 cursor-pointer ${
             activeCategory === 'excel'
-              ? 'bg-[#10B981] border-[#10B981] text-[#030712]'
-              : 'bg-[#0F1B2D] border-[#243449] text-[#94A3B8] hover:text-[#F8FAFC]'
+              ? 'bg-[#22c55e] border-[#22c55e] text-[#060d18]'
+              : 'bg-[#111b2e] border-[#223250] text-[#a9b8d0] hover:text-[#e8eef7]'
           }`}
         >
           <FileSpreadsheet className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">Excel</span>
+          <span className="hidden sm:inline">Jadwal</span>
         </button>
       </div>
 
-      {/* TAB 1: INHERITANCE CASES (Screen 8 List + Screen 7 Case Details + Full Case Manager) */}
+      {/* TAB 1: KIISAS (Saved Cases List + Case Details + Full Case Manager) */}
       {activeCategory === 'cases' && (
         <div className="space-y-4">
           {casesSubView === 'list' && (
             <>
-              {/* Search + Filter + Full Manager Action Row (Screen 8) */}
+              {/* Search + Filter + Full Manager Action Row */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                 <div className="flex-1 flex items-center gap-2">
                   <div className="relative flex-1">
-                    <Search className="w-4 h-4 text-[#94A3B8] absolute left-3.5 top-3.5" />
+                    <Search className="w-4 h-4 text-[#a9b8d0] absolute left-3.5 top-3.5" />
                     <input
                       type="text"
                       value={caseSearchQuery}
                       onChange={(e) => setCaseSearchQuery(e.target.value)}
-                      placeholder="Search cases..."
-                      className="w-full min-h-[46px] bg-[#0F1B2D] border border-[#243449] focus:border-[#10B981] rounded-xl pl-10 pr-3.5 py-2 text-sm text-[#F8FAFC] placeholder-[#94A3B8]/70 focus:outline-none"
+                      placeholder="Raadi kiis, tixraac ama marxuum..."
+                      className="w-full min-h-[48px] bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] rounded-xl pl-10 pr-3.5 py-2 text-sm text-[#e8eef7] placeholder-[#a9b8d0]/70 focus:outline-none"
                     />
                   </div>
                   <div className="relative">
@@ -641,16 +641,15 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                       onChange={(e) =>
                         setCaseStatusFilter(e.target.value as 'all' | CaseLifecycleStatus)
                       }
-                      className="min-h-[46px] bg-[#0F1B2D] border border-[#243449] hover:border-[#10B981]/60 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-[#F8FAFC] focus:outline-none appearance-none cursor-pointer"
+                      className="min-h-[48px] bg-[#111b2e] border border-[#223250] hover:border-[#22c55e]/60 rounded-xl pl-9 pr-3 py-2 text-xs font-bold text-[#e8eef7] focus:outline-none appearance-none cursor-pointer"
                     >
-                      <option value="all" className="bg-[#0F1B2D]">All</option>
-                      <option value="cusub" className="bg-[#0F1B2D]">Cusub</option>
-                      <option value="socda" className="bg-[#0F1B2D]">Socda</option>
-                      <option value="la_hubinayo" className="bg-[#0F1B2D]">Hubin</option>
-                      <option value="la_ansixiyey" className="bg-[#0F1B2D]">Ansax</option>
-                      <option value="la_xidhay" className="bg-[#0F1B2D]">Xidhan</option>
+                      <option value="all" className="bg-[#111b2e]">Dhammaan</option>
+                      <option value="cusub" className="bg-[#111b2e]">Cusub</option>
+                      <option value="socda" className="bg-[#111b2e]">Socda</option>
+                      <option value="la_xaqiijiyey" className="bg-[#111b2e]">La xaqiijiyey</option>
+                      <option value="la_xidhay" className="bg-[#111b2e]">La xidhay</option>
                     </select>
-                    <SlidersHorizontal className="w-4 h-4 text-[#94A3B8] absolute left-3 top-3.5 pointer-events-none" />
+                    <SlidersHorizontal className="w-4 h-4 text-[#a9b8d0] absolute left-3 top-3.5 pointer-events-none" />
                   </div>
                 </div>
 
@@ -658,24 +657,24 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setCasesSubView('full_manager')}
-                    className="flex-1 sm:flex-initial min-h-[46px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#10B981] px-3.5 py-2 text-xs font-bold text-[#F8FAFC] cursor-pointer"
+                    className="flex-1 sm:flex-initial min-h-[48px] inline-flex items-center justify-center gap-2 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e] px-3.5 py-2 text-xs font-bold text-[#e8eef7] cursor-pointer"
                   >
-                    <FolderCog className="w-4 h-4 text-[#10B981]" />
+                    <FolderCog className="w-4 h-4 text-[#22c55e]" />
                     <span>+ Kiis Cusub / Maamul</span>
                   </button>
                 </div>
               </div>
 
-              {/* Clean Case Cards List (Screen 8) */}
+              {/* Case Cards List with 2-line titles (E7) and Unified Metrics (E10, E11) */}
               {filteredSavedCases.length === 0 ? (
-                <div className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-8 text-center space-y-3">
-                  <p className="text-xs text-[#94A3B8]">
+                <div className="bg-[#111b2e] border border-[#223250] rounded-2xl p-8 text-center space-y-3">
+                  <p className="text-xs text-[#a9b8d0]">
                     Lama helin kiis u dhigma raadintaada.
                   </p>
                   <button
                     type="button"
                     onClick={() => setCasesSubView('full_manager')}
-                    className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#10B981] text-[#030712] px-4 py-2 text-xs font-extrabold cursor-pointer"
+                    className="min-h-[48px] inline-flex items-center gap-2 rounded-xl bg-[#22c55e] text-[#060d18] px-4 py-2 text-xs font-extrabold cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
                     <span>Abuur Kiis Cusub</span>
@@ -685,8 +684,10 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                 <div className="space-y-3">
                   {filteredSavedCases.map((sc) => {
                     const isCurrent = activeCase?.id === sc.id;
-                    const estPlotAreaSqM =
-                      (sc.fullPlotsCount || 0) * 432 + (sc.validHalfPlotsCount || 0) * 216;
+                    const caseMetrics = computeSavedCaseUnifiedMetrics(
+                      sc,
+                      isCurrent ? unifiedMetrics : null
+                    );
                     const statusMeta = CASE_STATUS_METADATA[sc.status];
 
                     return (
@@ -699,47 +700,47 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                           }
                           setCasesSubView('case_details');
                         }}
-                        className={`w-full text-left bg-[#0F1B2D] hover:bg-[#132238] border rounded-2xl p-4 flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                        className={`w-full text-left bg-[#111b2e] hover:bg-[#16243d] border rounded-2xl p-4 flex items-center justify-between gap-3 transition-all cursor-pointer ${
                           isCurrent
-                            ? 'border-[#10B981]/70 shadow-lg shadow-[#10B981]/5'
-                            : 'border-[#243449]'
+                            ? 'border-[#22c55e]/70 shadow-lg shadow-[#22c55e]/5'
+                            : 'border-[#223250]'
                         }`}
                       >
                         <div className="min-w-0 space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-sm font-extrabold text-[#F8FAFC] truncate">
-                              {sc.referenceNumber} - {sc.caseName}
+                          <div className="flex flex-wrap items-start gap-2">
+                            <h3 className="text-sm font-extrabold text-[#e8eef7] line-clamp-2 leading-snug">
+                              {sc.referenceNumber} — {sc.caseName}
                             </h3>
                             {isCurrent && (
-                              <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#10B981]/15 text-[#10B981]">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#22c55e]/15 text-[#22c55e] shrink-0">
                                 Furan
                               </span>
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs font-mono-numbers tabular-nums">
-                            <span className="text-[#10B981] font-bold">
-                              {sc.heirCount} heirs
+                            <span className="text-[#22c55e] font-bold">
+                              {sc.heirCount} dhaxle
                             </span>
-                            <span className="text-[#94A3B8]">·</span>
-                            <span className="text-[#94A3B8]">
-                              {sc.hasMapGeometry && estPlotAreaSqM > 0
-                                ? `${estPlotAreaSqM.toLocaleString()} m²`
+                            <span className="text-[#a9b8d0]">·</span>
+                            <span className="text-[#a9b8d0]">
+                              {caseMetrics.hasMap && caseMetrics.allPlotsAreaSqM > 0
+                                ? `Plots: ${caseMetrics.allPlotsAreaSqM.toLocaleString()} m² (${caseMetrics.fullPlotsCount} Buuxa · ${caseMetrics.halfPlotsCount} Half)`
                                 : sc.totalNetEstateUSD > 0
                                 ? formatMoney(sc.totalNetEstateUSD)
                                 : 'Bilaa khariidad'}
                             </span>
-                            <span className="text-[#94A3B8]">·</span>
-                            <span className="text-[11px] text-[#94A3B8]">
+                            <span className="text-[#a9b8d0]">·</span>
+                            <span className="text-[11px] text-[#a9b8d0]">
                               {statusMeta.labelSomali}
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2.5 shrink-0">
-                          <span className="text-xs text-[#94A3B8] font-mono-numbers tabular-nums">
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="hidden sm:inline text-xs text-[#a9b8d0] font-mono-numbers tabular-nums">
                             {sc.caseDate}
                           </span>
-                          <ChevronRight className="w-4 h-4 text-[#94A3B8]" />
+                          <ChevronRight className="w-4 h-4 text-[#a9b8d0]" />
                         </div>
                       </button>
                     );
@@ -749,86 +750,99 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
             </>
           )}
 
-          {/* SCREEN 7: CASE DETAILS VIEW (Heirs | Land | Results) */}
+          {/* CASE DETAILS VIEW (Dhaxlayaasha | Dhulka | Natiijada) */}
           {casesSubView === 'case_details' && (
             <div className="space-y-4">
-              {/* Inline Screen 7 Header */}
+              {/* Inline Header */}
               <div className="flex items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setCasesSubView('list')}
-                  className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#10B981] px-3.5 py-2 text-xs font-extrabold text-[#F8FAFC] cursor-pointer"
+                  className="min-h-[48px] inline-flex items-center gap-2 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e] px-3.5 py-2 text-xs font-extrabold text-[#e8eef7] cursor-pointer"
                 >
-                  <ArrowLeft className="w-4 h-4 text-[#10B981]" />
-                  <span>Case Details</span>
+                  <ArrowLeft className="w-4 h-4 text-[#22c55e]" />
+                  <span>Dib ugu noqo Kiisaska</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCasesSubView('full_manager')}
-                  className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#10B981] px-3.5 py-2 text-xs font-bold text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
+                  className="min-h-[48px] inline-flex items-center gap-1.5 rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e] px-3.5 py-2 text-xs font-bold text-[#a9b8d0] hover:text-[#e8eef7] cursor-pointer"
                 >
-                  <FolderCog className="w-4 h-4 text-[#10B981]" />
+                  <FolderCog className="w-4 h-4 text-[#22c55e]" />
                   <span>Wax ka beddel / Taariikhda</span>
                 </button>
               </div>
 
-              {/* Hero Case Summary Card (Screen 7) */}
-              <section className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-4 sm:p-5 space-y-4">
+              {/* Hero Case Summary Card with Unified Metrics (E7, E10, E11) */}
+              <section className="bg-[#111b2e] border border-[#223250] rounded-2xl p-4 sm:p-5 space-y-4">
                 <div>
-                  <h2 className="text-base sm:text-lg font-extrabold text-[#F8FAFC]">
+                  <h2 className="text-base sm:text-lg font-extrabold text-[#e8eef7] line-clamp-2 leading-snug">
                     {activeCase
-                      ? `${activeCase.referenceNumber} - ${activeCase.caseName}`
+                      ? `${activeCase.referenceNumber} — ${activeCase.caseName}`
                       : 'Kiiska Hadda Furan'}
                   </h2>
                   {activeCase?.description && (
-                    <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
+                    <p className="text-xs text-[#a9b8d0] mt-1 leading-relaxed">
                       {activeCase.description}
                     </p>
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-[#243449]">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-[#223250]">
                   <div>
-                    <span className="text-[11px] text-[#94A3B8] block">Heirs</span>
-                    <strong className="text-sm sm:text-base font-extrabold text-[#10B981] font-mono-numbers tabular-nums mt-0.5 block">
-                      {currentHeirCount} Dhaxlaa
+                    <span className="text-[11px] text-[#a9b8d0] block">Dhaxlayaasha</span>
+                    <strong className="text-sm sm:text-base font-extrabold text-[#22c55e] font-mono-numbers tabular-nums mt-0.5 block">
+                      {currentHeirCount} Dhaxle
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[11px] text-[#94A3B8] block">Land Area</span>
-                    <strong className="text-sm sm:text-base font-extrabold text-[#F8FAFC] font-mono-numbers tabular-nums mt-0.5 block">
-                      {activeCaseLandAreaSqM > 0
-                        ? `${activeCaseLandAreaSqM.toLocaleString()} m²`
+                    <span className="text-[11px] text-[#a9b8d0] block">Wadarta Bedka Plots-ka</span>
+                    <strong className="text-sm sm:text-base font-extrabold text-[#e8eef7] font-mono-numbers tabular-nums mt-0.5 block">
+                      {unifiedMetrics.hasMap
+                        ? `${unifiedMetrics.allPlotsAreaSqM.toLocaleString()} m²`
                         : '0 m²'}
                     </strong>
                   </div>
                   <div>
-                    <span className="text-[11px] text-[#94A3B8] block">Created</span>
-                    <strong className="text-sm sm:text-base font-extrabold text-[#F8FAFC] font-mono-numbers tabular-nums mt-0.5 block">
+                    <span className="text-[11px] text-[#a9b8d0] block">Bedka Xuduudka Beerta</span>
+                    <strong className="text-sm sm:text-base font-extrabold text-[#e8eef7] font-mono-numbers tabular-nums mt-0.5 block">
+                      {unifiedMetrics.hasMap && unifiedMetrics.boundaryAreaSqM > 0
+                        ? `${unifiedMetrics.boundaryAreaSqM.toLocaleString()} m²`
+                        : '0 m²'}
+                    </strong>
+                    {unifiedMetrics.hasMap && unifiedMetrics.boundaryAreaHa > 0 && (
+                      <span className="text-[10.5px] font-mono-numbers tabular-nums text-[#a9b8d0]">
+                        {unifiedMetrics.boundaryAreaHa} ha
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-[#a9b8d0] block">Taariikhda</span>
+                    <strong className="text-sm sm:text-base font-extrabold text-[#e8eef7] font-mono-numbers tabular-nums mt-0.5 block">
                       {activeCase?.caseDate || new Date().toISOString().slice(0, 10)}
                     </strong>
                   </div>
                 </div>
               </section>
 
-              {/* Screen 7 Sub-Tabs: Heirs | Land | Results */}
-              <div className="bg-[#0F1B2D] border border-[#243449] rounded-xl p-1 grid grid-cols-3 gap-1">
+              {/* Sub-Tabs in Somali: Dhaxlayaasha | Dhulka | Natiijada (E15) */}
+              <div className="bg-[#111b2e] border border-[#223250] rounded-xl p-1 grid grid-cols-3 gap-1">
                 {(
                   [
-                    { id: 'heirs', label: 'Heirs' },
-                    { id: 'land', label: 'Land' },
-                    { id: 'results', label: 'Results' },
+                    { id: 'heirs', label: 'Dhaxlayaasha' },
+                    { id: 'land', label: 'Dhulka' },
+                    { id: 'results', label: 'Natiijada' },
                   ] as const
                 ).map((sub) => (
                   <button
                     key={sub.id}
                     type="button"
                     onClick={() => setCaseDetailsTab(sub.id)}
-                    className={`min-h-[40px] rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
+                    className={`min-h-[42px] rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
                       caseDetailsTab === sub.id
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                        ? 'bg-[#22c55e] text-[#060d18]'
+                        : 'text-[#a9b8d0] hover:text-[#e8eef7]'
                     }`}
                   >
                     {sub.label}
@@ -836,32 +850,41 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                 ))}
               </div>
 
-              {/* CASE DETAILS -> HEIRS (Screen 7 exact layout) */}
+              {/* CASE DETAILS -> DHAXLAYAASHA (with E12 Guided Empty State) */}
               {caseDetailsTab === 'heirs' && (
                 <section className="space-y-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-extrabold text-[#F8FAFC]">Heir List</h3>
+                    <h3 className="text-sm font-extrabold text-[#e8eef7]">Liiska Dhaxlayaasha</h3>
                     <button
                       type="button"
                       onClick={onNavigateToCalculator}
-                      className="min-h-[40px] inline-flex items-center gap-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] px-3.5 py-2 text-xs font-extrabold cursor-pointer"
+                      className="min-h-[42px] inline-flex items-center gap-1.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] px-3.5 py-2 text-xs font-extrabold cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>Add Heir</span>
+                      <span>Ku dar Dhaxle</span>
                     </button>
                   </div>
 
                   {distribution.allIndividualHeirs.length === 0 ? (
-                    <div className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-6 text-center space-y-2.5">
-                      <p className="text-xs text-[#94A3B8]">
-                        Weli lama gelin dhaxal-sugayaal kiiskan.
-                      </p>
+                    <div className="bg-[#111b2e] border border-[#223250] rounded-2xl p-7 text-center space-y-3">
+                      <div className="w-12 h-12 rounded-2xl bg-[#22c55e]/15 border border-[#22c55e]/30 text-[#22c55e] flex items-center justify-center mx-auto">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1 max-w-sm mx-auto">
+                        <h4 className="text-sm font-extrabold text-[#e8eef7]">
+                          Weli dhaxlayaal lama gelin kiiskan (0 Dhaxle)
+                        </h4>
+                        <p className="text-xs text-[#a9b8d0] leading-relaxed">
+                          Fur qaybta Xisaabi si aad u geliso lammaanaha, carruurta, waalidka ama ehelka kale oo si toos ah loogu xisaabiyo saamiyada Faraa&apos;idka.
+                        </p>
+                      </div>
                       <button
                         type="button"
                         onClick={onNavigateToCalculator}
-                        className="min-h-[42px] px-4 py-2 rounded-xl bg-[#10B981] text-[#030712] text-xs font-extrabold cursor-pointer"
+                        className="min-h-[48px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] text-xs font-extrabold cursor-pointer"
                       >
-                        Fur Xisaabiyaha Dhaxalka
+                        <Plus className="w-4 h-4 stroke-[2.5]" />
+                        <span>Bilow Xisaabi</span>
                       </button>
                     </div>
                   ) : (
@@ -878,17 +901,17 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                             onClick={() =>
                               setInspectedHeirKey(`${ind.heirGroupId}::${ind.personIndex}`)
                             }
-                            className="bg-[#0F1B2D] hover:bg-[#132238] border border-[#243449] rounded-2xl p-3.5 flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                            className="bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] rounded-2xl p-3.5 flex items-center justify-between gap-3 transition-colors cursor-pointer"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <span className="w-8 h-8 rounded-full bg-[#0B1220] border border-[#243449] text-xs font-mono-numbers tabular-nums font-extrabold text-[#10B981] flex items-center justify-center shrink-0">
+                              <span className="w-8 h-8 rounded-full bg-[#0a1220] border border-[#223250] text-xs font-mono-numbers tabular-nums font-extrabold text-[#22c55e] flex items-center justify-center shrink-0">
                                 {idx + 1}
                               </span>
                               <div className="min-w-0">
-                                <div className="text-sm font-extrabold text-[#F8FAFC] truncate">
+                                <div className="text-sm font-extrabold text-[#e8eef7] truncate">
                                   {ind.personName}
                                 </div>
-                                <div className="text-xs text-[#94A3B8] truncate">
+                                <div className="text-xs text-[#a9b8d0] truncate">
                                   {ind.roleTitleSomali}
                                   {gisAlloc && gisAlloc.totalAreaSqM > 0
                                     ? ` · ${Math.round(gisAlloc.totalAreaSqM).toLocaleString()} m²`
@@ -898,7 +921,7 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                             </div>
 
                             <div className="text-right shrink-0">
-                              <span className="text-sm font-mono-numbers tabular-nums font-extrabold text-[#10B981]">
+                              <span className="text-sm font-mono-numbers tabular-nums font-extrabold text-[#22c55e]">
                                 {ind.individualPercentage.toFixed(1)}%
                               </span>
                             </div>
@@ -910,18 +933,18 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                 </section>
               )}
 
-              {/* CASE DETAILS -> LAND */}
+              {/* CASE DETAILS -> DHULKA (with Unified Area & Half-Plot Reconciliation — E10, E11) */}
               {caseDetailsTab === 'land' && (
-                <section className="bg-[#0F1B2D] border border-[#243449] rounded-2xl p-4 sm:p-5 space-y-4">
+                <section className="bg-[#111b2e] border border-[#223250] rounded-2xl p-4 sm:p-5 space-y-4">
                   {!currentHasMap || !subdivisionResult ? (
                     <div className="text-center py-4 space-y-3">
-                      <p className="text-xs text-[#94A3B8]">
+                      <p className="text-xs text-[#a9b8d0]">
                         Kiiskan weli khariidad dhul ah kuma xidhna.
                       </p>
                       <button
                         type="button"
                         onClick={onNavigateToLandDesigner}
-                        className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#10B981] text-[#030712] px-4 py-2 text-xs font-extrabold cursor-pointer"
+                        className="min-h-[48px] inline-flex items-center gap-2 rounded-xl bg-[#22c55e] text-[#060d18] px-4 py-2 text-xs font-extrabold cursor-pointer"
                       >
                         <MapPin className="w-4 h-4" />
                         <span>Fur Khariidadda GIS</span>
@@ -930,29 +953,35 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                   ) : (
                     <>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div className="bg-[#0B1220] border border-[#243449] rounded-xl p-3">
-                          <span className="text-[#94A3B8] block">Blocks</span>
-                          <strong className="text-base font-mono-numbers tabular-nums text-[#F8FAFC] mt-0.5 block">
-                            {blocksSummary.totalBlocks}
+                        <div className="bg-[#0a1220] border border-[#223250] rounded-xl p-3">
+                          <span className="text-[#a9b8d0] block">Blocks</span>
+                          <strong className="text-base font-mono-numbers tabular-nums text-[#e8eef7] mt-0.5 block">
+                            {unifiedMetrics.blocksCount}
                           </strong>
                         </div>
-                        <div className="bg-[#0B1220] border border-[#243449] rounded-xl p-3">
-                          <span className="text-[#94A3B8] block">Plots Buuxa</span>
-                          <strong className="text-base font-mono-numbers tabular-nums text-[#10B981] mt-0.5 block">
-                            {plotsSummary.divisibleFullCount}
+                        <div className="bg-[#0a1220] border border-[#223250] rounded-xl p-3">
+                          <span className="text-[#a9b8d0] block">Plots Buuxa</span>
+                          <strong className="text-base font-mono-numbers tabular-nums text-[#22c55e] mt-0.5 block">
+                            {unifiedMetrics.fullPlotsCount}
                           </strong>
                         </div>
-                        <div className="bg-[#0B1220] border border-[#243449] rounded-xl p-3">
-                          <span className="text-[#94A3B8] block">Half-Plots</span>
-                          <strong className="text-base font-mono-numbers tabular-nums text-sky-400 mt-0.5 block">
-                            {plotsSummary.validHalfCount}
+                        <div className="bg-[#0a1220] border border-[#223250] rounded-xl p-3">
+                          <span className="text-[#a9b8d0] block">Plots Nus ah (Half)</span>
+                          <strong className="text-base font-mono-numbers tabular-nums text-[#38bdf8] mt-0.5 block">
+                            {unifiedMetrics.halfPlotsCount}
                           </strong>
+                          <span className="text-[10.5px] text-[#a9b8d0]">
+                            {unifiedMetrics.halfPlotsIncluded ? 'Ku jira' : 'Laga reebay'}
+                          </span>
                         </div>
-                        <div className="bg-[#0B1220] border border-[#243449] rounded-xl p-3">
-                          <span className="text-[#94A3B8] block">Bedka La Qaybinayo</span>
-                          <strong className="text-base font-mono-numbers tabular-nums text-[#F8FAFC] mt-0.5 block">
-                            {plotsSummary.divisibleAreaSqM.toLocaleString()} m²
+                        <div className="bg-[#0a1220] border border-[#223250] rounded-xl p-3">
+                          <span className="text-[#a9b8d0] block">Wadarta Bedka Plots-ka</span>
+                          <strong className="text-base font-mono-numbers tabular-nums text-[#e8eef7] mt-0.5 block">
+                            {unifiedMetrics.allPlotsAreaSqM.toLocaleString()} m²
                           </strong>
+                          <span className="text-[10.5px] font-mono-numbers tabular-nums text-[#a9b8d0]">
+                            Dhaxalka: {unifiedMetrics.divisiblePlotsAreaSqM.toLocaleString()} m²
+                          </span>
                         </div>
                       </div>
 
@@ -960,17 +989,17 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                         <button
                           type="button"
                           onClick={onNavigateToLandDesigner}
-                          className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] px-4 py-2 text-xs font-extrabold cursor-pointer"
+                          className="min-h-[48px] inline-flex items-center gap-2 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] px-4 py-2 text-xs font-extrabold cursor-pointer"
                         >
                           <MapPin className="w-4 h-4" />
-                          <span>Ku Eeg Khariidadda (OSM / Satellite)</span>
+                          <span>Ku Eeg Khariidadda</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => onChangeCategory('plots')}
-                          className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#0B1220] border border-[#243449] hover:border-[#10B981] text-[#F8FAFC] px-4 py-2 text-xs font-bold cursor-pointer"
+                          className="min-h-[48px] inline-flex items-center gap-2 rounded-xl bg-[#0a1220] border border-[#223250] hover:border-[#22c55e] text-[#e8eef7] px-4 py-2 text-xs font-bold cursor-pointer"
                         >
-                          <Grid className="w-4 h-4 text-[#10B981]" />
+                          <Grid className="w-4 h-4 text-[#22c55e]" />
                           <span>Liiska Plots-ka</span>
                         </button>
                       </div>
@@ -1139,7 +1168,7 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
               {/* Search, Filter & Sort Toolbar */}
               <section className="bg-[#0F1B2D] border border-[#243449] rounded-2xl overflow-hidden">
                 <div className="p-4 border-b border-[#243449] bg-[#0B1220] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-1 p-1 bg-[#0F1B2D] border border-[#243449] rounded-xl">
+                  <div className="flex items-center gap-1 p-1 bg-[#111b2e] border border-[#223250] rounded-xl overflow-x-auto no-scrollbar scroll-fade-right max-w-full">
                     {(
                       [
                         { id: 'all', label: 'Dhammaan' },
@@ -1153,10 +1182,10 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                         key={f.id}
                         type="button"
                         onClick={() => setBlockFilter(f.id)}
-                        className={`min-h-[34px] px-2.5 py-1 text-xs font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        className={`min-h-[38px] px-3 py-1 text-xs font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                           blockFilter === f.id
-                            ? 'bg-[#10B981] text-[#030712]'
-                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                            ? 'bg-[#22c55e] text-[#060d18]'
+                            : 'text-[#a9b8d0] hover:text-[#e8eef7]'
                         }`}
                       >
                         {f.label}
@@ -1369,12 +1398,12 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
               {/* Search, Filter & Sort Toolbar */}
               <section className="bg-[#0F1B2D] border border-[#243449] rounded-2xl overflow-hidden">
                 <div className="p-4 border-b border-[#243449] bg-[#0B1220] flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-1 p-1 bg-[#0F1B2D] border border-[#243449] rounded-xl">
+                  <div className="flex items-center gap-1 p-1 bg-[#111b2e] border border-[#223250] rounded-xl overflow-x-auto no-scrollbar scroll-fade-right max-w-full">
                     {(
                       [
                         { id: 'all', label: `Dhammaan (${enrichedPlots.length})` },
-                        { id: 'full_plot', label: `Buuxa (${plotsSummary.divisibleFullCount})` },
-                        { id: 'valid_half', label: `Half-Plot (${plotsSummary.validHalfCount})` },
+                        { id: 'full_plot', label: `Buuxa (${unifiedMetrics.fullPlotsCount})` },
+                        { id: 'valid_half', label: `Half (${unifiedMetrics.halfPlotsCount})` },
                         { id: 'excluded', label: `Laga Reebay (${plotsSummary.excludedCount})` },
                         { id: 'assigned', label: 'La Qoondayey' },
                         { id: 'clipped_outside', label: 'Go’an / Dibadda' },
@@ -1384,10 +1413,10 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                         key={f.id}
                         type="button"
                         onClick={() => setPlotFilter(f.id)}
-                        className={`min-h-[34px] px-2.5 py-1 text-xs font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        className={`min-h-[38px] px-3 py-1 text-xs font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                           plotFilter === f.id
-                            ? 'bg-[#10B981] text-[#030712]'
-                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                            ? 'bg-[#22c55e] text-[#060d18]'
+                            : 'text-[#a9b8d0] hover:text-[#e8eef7]'
                         }`}
                       >
                         {f.label}
@@ -1593,7 +1622,7 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
 
           <section className="bg-[#0F1B2D] border border-[#243449] rounded-2xl overflow-hidden">
             <div className="p-4 border-b border-[#243449] bg-[#0B1220] flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-1 p-1 bg-[#0F1B2D] border border-[#243449] rounded-xl">
+              <div className="flex items-center gap-1 p-1 bg-[#111b2e] border border-[#223250] rounded-xl overflow-x-auto no-scrollbar scroll-fade-right max-w-full">
                 {(
                   [
                     { id: 'all', label: `Dhammaan (${enrichedHeirs.length})` },
@@ -1605,10 +1634,10 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                     key={f.id}
                     type="button"
                     onClick={() => setHeirFilter(f.id)}
-                    className={`min-h-[34px] px-2.5 py-1 text-xs font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    className={`min-h-[38px] px-3 py-1 text-xs font-bold rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                       heirFilter === f.id
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                        ? 'bg-[#22c55e] text-[#060d18]'
+                        : 'text-[#a9b8d0] hover:text-[#e8eef7]'
                     }`}
                   >
                     {f.label}
@@ -1618,42 +1647,53 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
 
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative flex-1 sm:w-56">
-                  <Search className="w-3.5 h-3.5 text-[#94A3B8] absolute left-3 top-3.5" />
+                  <Search className="w-3.5 h-3.5 text-[#a9b8d0] absolute left-3 top-3.5" />
                   <input
                     type="text"
                     value={heirSearch}
                     onChange={(e) => setHeirSearch(e.target.value)}
                     placeholder="Raadi magaca, xiriirka, Plot..."
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] focus:border-[#10B981] rounded-xl pl-8 pr-3 py-2 text-xs text-[#F8FAFC] placeholder-[#94A3B8]/60 focus:outline-none"
+                    className="w-full min-h-[42px] bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] rounded-xl pl-8 pr-3 py-2 text-xs text-[#e8eef7] placeholder-[#a9b8d0]/60 focus:outline-none"
                   />
                 </div>
 
-                <div className="inline-flex items-center gap-1.5 bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 min-h-[42px]">
-                  <ArrowUpDown className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
+                <div className="inline-flex items-center gap-1.5 bg-[#111b2e] border border-[#223250] rounded-xl px-2.5 min-h-[42px]">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />
                   <select
                     value={heirSort}
                     onChange={(e) => setHeirSort(e.target.value as HeirSortMode)}
-                    className="bg-transparent text-xs font-bold text-[#F8FAFC] focus:outline-none py-1.5"
+                    className="bg-transparent text-xs font-bold text-[#e8eef7] focus:outline-none py-1.5"
                   >
-                    <option value="share_desc" className="bg-[#0F1B2D]">Saamiga ugu badan (%)</option>
-                    <option value="name_asc" className="bg-[#0F1B2D]">Magaca (A–Z)</option>
-                    <option value="role_asc" className="bg-[#0F1B2D]">Xiriirka Qoyska</option>
+                    <option value="share_desc" className="bg-[#111b2e]">Saamiga ugu badan (%)</option>
+                    <option value="name_asc" className="bg-[#111b2e]">Magaca (A–Z)</option>
+                    <option value="role_asc" className="bg-[#111b2e]">Xiriirka Qoyska</option>
                   </select>
                 </div>
               </div>
             </div>
 
             {filteredHeirs.length === 0 ? (
-              <div className="p-8 text-center space-y-2">
-                <p className="text-xs text-[#94A3B8]">
-                  Lama helin dhaxal-suge u dhigma raadintaada.
-                </p>
+              <div className="p-8 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-[#22c55e]/15 border border-[#22c55e]/30 text-[#22c55e] flex items-center justify-center mx-auto">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div className="space-y-1 max-w-sm mx-auto">
+                  <h4 className="text-sm font-extrabold text-[#e8eef7]">
+                    {enrichedHeirs.length === 0
+                      ? 'Weli dhaxlayaal lama gelin (0 Dhaxle)'
+                      : 'Lama helin dhaxal-suge u dhigma raadintaada'}
+                  </h4>
+                  <p className="text-xs text-[#a9b8d0] leading-relaxed">
+                    Fur qaybta Xisaabi si aad u geliso dhaxlayaasha una eegto qof kasta saamigiisa rasmiga ah.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={onNavigateToCalculator}
-                  className="min-h-[42px] px-4 py-2 rounded-xl bg-[#10B981] text-[#030712] text-xs font-extrabold cursor-pointer"
+                  className="min-h-[48px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] text-xs font-extrabold cursor-pointer"
                 >
-                  Ku Dar Dhaxal-sugayaasha
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Bilow Xisaabi</span>
                 </button>
               </div>
             ) : (

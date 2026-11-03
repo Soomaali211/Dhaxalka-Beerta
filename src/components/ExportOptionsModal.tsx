@@ -30,6 +30,7 @@ import {
   buildPlotsGeoJsonClipboardText,
   copyTextSafelyToClipboard,
 } from '../utils/nashqadWorkflowEngine';
+import { computeUnifiedFarmMetrics } from '../utils/unifiedMetrics';
 
 interface ExportOptionsModalProps {
   isOpen: boolean;
@@ -72,6 +73,7 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const unifiedMetrics = computeUnifiedFarmMetrics(subdivisionState, subdivisionResult);
   const hasGisPlots = Boolean(
     subdivisionResult &&
       (subdivisionResult.plots.length > 0 ||
@@ -203,85 +205,99 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-xs p-0 sm:p-4 no-print"
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/75 backdrop-blur-xs p-2.5 sm:p-4 no-print"
       role="dialog"
       aria-modal="true"
       aria-label="Doorashooyinka Soo-saarista"
+      onClick={onClose}
     >
-      <div className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-[#0B1220] border border-[#243449] text-[#F8FAFC] p-5 pb-safe shadow-2xl">
-        <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto mb-3 sm:hidden" />
-
-        {/* Modal Top Header */}
-        <div className="flex items-center justify-between gap-3 pb-3.5 border-b border-[#243449]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#22C55E]/15 text-[#22C55E] flex items-center justify-center shrink-0">
-              <Download className="w-5 h-5" />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[84dvh] flex flex-col overflow-hidden rounded-2xl bg-[#0B1220] border border-[#243449] text-[#F8FAFC] shadow-2xl"
+      >
+        {/* Sticky Compact Modal Header */}
+        <div className="px-3.5 py-2.5 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-[#22C55E]/15 text-[#22C55E] flex items-center justify-center shrink-0">
+              <Download className="w-4 h-4" />
             </div>
-            <h2 className="text-lg font-extrabold text-[#F8FAFC] tracking-tight">Soo saar</h2>
+            <div className="min-w-0">
+              <h2 className="text-sm font-extrabold text-[#F8FAFC] tracking-tight truncate">
+                Soo saar
+              </h2>
+              <span className="text-[11px] font-mono-numbers tabular-nums font-semibold text-[#a9b8d0]">
+                {displayedCount} Muuqda
+              </span>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
             aria-label="Xir"
-            className="min-h-[44px] min-w-[44px] -mr-2 rounded-xl flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D] cursor-pointer"
+            className="h-9 w-9 rounded-xl flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0B1220] cursor-pointer shrink-0"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Section Subtitle + Visible Count */}
-        <div className="flex items-center justify-between mt-4 mb-2.5 px-0.5">
-          <span className="text-sm font-bold text-[#F8FAFC]">Doorashooyinka Soo-saarista</span>
-          <span className="text-xs font-mono-numbers tabular-nums font-semibold text-[#94A3B8]">
-            {displayedCount} Muuqda
-          </span>
-        </div>
+        {/* Scrollable Compact Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2">
+          {unifiedMetrics.hasMap && (
+            <div className="rounded-xl bg-[#111b2e] border border-[#223250] px-2.5 py-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10.5px] font-mono-numbers tabular-nums text-[#a9b8d0]">
+              <span>
+                Buuxa: <strong className="text-[#e8eef7]">{unifiedMetrics.fullPlotsCount}</strong> · Half:{' '}
+                <strong className="text-[#38bdf8]">{unifiedMetrics.halfPlotsCount}</strong>
+              </span>
+              <span>
+                Plots: <strong className="text-[#22c55e]">{unifiedMetrics.allPlotsAreaSqM.toLocaleString()} m²</strong> · Xuduud:{' '}
+                <strong className="text-[#e8eef7]">{unifiedMetrics.boundaryAreaHa} ha</strong>
+              </span>
+            </div>
+          )}
 
-        {/* "Kuwa Muuqda Keliya" Switch Card */}
-        <div className="rounded-2xl bg-[#0F1B2D] border border-[#243449] px-4 py-3 mb-3.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <SlidersHorizontal className="w-4 h-4 text-[#22C55E] shrink-0" />
-            <span className="text-sm font-semibold text-[#F8FAFC] truncate">
-              Kuwa Muuqda Keliya
-            </span>
+          {/* "Kuwa Muuqda Keliya" Switch Card */}
+          <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] px-3 py-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
+              <span className="text-xs font-semibold text-[#F8FAFC] truncate">
+                Kuwa Muuqda Keliya
+              </span>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={onlyVisible}
+              onClick={() => setOnlyVisible((prev) => !prev)}
+              className={`relative w-10 h-6 rounded-full transition-colors cursor-pointer shrink-0 ${
+                onlyVisible ? 'bg-[#22C55E]' : 'bg-[#243449]'
+              }`}
+            >
+              <span
+                className={`block w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                  onlyVisible ? 'translate-x-5' : 'translate-x-1'
+                }`}
+              />
+            </button>
           </div>
 
-          <button
-            type="button"
-            role="switch"
-            aria-checked={onlyVisible}
-            onClick={() => setOnlyVisible((prev) => !prev)}
-            className={`relative w-12 h-7 rounded-full transition-colors cursor-pointer shrink-0 ${
-              onlyVisible ? 'bg-[#22C55E]' : 'bg-[#243449]'
-            }`}
-          >
-            <span
-              className={`block w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                onlyVisible ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Export Option Action Cards (Screen 4 Match + Preserved Excel/Shapefile) */}
-        <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-0.5">
-          {/* Quick Copy Text Fallback Row (for environments where file download is blocked) */}
+          {/* Quick Copy Text Fallback Row */}
           {hasGisPlots && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
                 onClick={handleCopyGeoJsonText}
-                className="min-h-[44px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#22C55E]/40 hover:border-[#22C55E] px-3 py-2 flex items-center justify-center gap-2 text-xs font-extrabold text-[#F8FAFC] transition-colors cursor-pointer"
+                className="min-h-[38px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#22C55E]/40 hover:border-[#22C55E] px-2.5 py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-[#F8FAFC] transition-colors cursor-pointer"
               >
                 {copiedMode === 'geojson' ? (
                   <>
-                    <Check className="w-4 h-4 text-[#22C55E] shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
                     <span>La koobiyeeyey</span>
                   </>
                 ) : (
                   <>
-                    <Copy className="w-4 h-4 text-[#22C55E] shrink-0" />
+                    <Copy className="w-3.5 h-3.5 text-[#22C55E] shrink-0" />
                     <span>Koobiyee GeoJSON</span>
                   </>
                 )}
@@ -290,16 +306,16 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
               <button
                 type="button"
                 onClick={handleCopyCsvText}
-                className="min-h-[44px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-sky-400/40 hover:border-sky-400 px-3 py-2 flex items-center justify-center gap-2 text-xs font-extrabold text-[#F8FAFC] transition-colors cursor-pointer"
+                className="min-h-[38px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-sky-400/40 hover:border-sky-400 px-2.5 py-1.5 flex items-center justify-center gap-1.5 text-[11px] font-extrabold text-[#F8FAFC] transition-colors cursor-pointer"
               >
                 {copiedMode === 'csv' ? (
                   <>
-                    <Check className="w-4 h-4 text-sky-400 shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                     <span>La koobiyeeyey</span>
                   </>
                 ) : (
                   <>
-                    <Copy className="w-4 h-4 text-sky-400 shrink-0" />
+                    <Copy className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                     <span>Koobiyee CSV</span>
                   </>
                 )}
@@ -312,22 +328,22 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
             type="button"
             disabled={!hasGisPlots}
             onClick={handleExportGeoJson}
-            className="w-full min-h-[64px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-[#22C55E]/60 px-4 py-3 flex items-center justify-between gap-3 text-left transition-colors disabled:opacity-45 cursor-pointer disabled:cursor-not-allowed"
+            className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-[#22C55E]/60 px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors disabled:opacity-45 cursor-pointer disabled:cursor-not-allowed"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center shrink-0">
-                <FileCode2 className="w-5 h-5" />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center shrink-0">
+                <FileCode2 className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                <div className="text-xs font-bold text-[#F8FAFC] truncate">
                   Faylka GeoJSON (.geojson)
                 </div>
-                <div className="text-xs text-[#94A3B8] truncate">
+                <div className="text-[11px] text-[#94A3B8] truncate">
                   Lakabyada khariidadda (xuduud, blocks &amp; plots)
                 </div>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+            <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
           </button>
 
           {/* 1A-0. Export Khariidadda Muuqaalka Dhaxalka PDF */}
@@ -338,22 +354,22 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
                 onClose();
                 onOpenCartographicPdfModal('inheritance_map');
               }}
-              className="w-full min-h-[64px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#22C55E]/45 hover:border-[#22C55E] px-4 py-3 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+              className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#22C55E]/45 hover:border-[#22C55E] px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
             >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center shrink-0">
-                  <Printer className="w-5 h-5" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center shrink-0">
+                  <Printer className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                  <div className="text-xs font-bold text-[#F8FAFC] truncate">
                     Khariidadda Muuqaalka Dhaxalka (PDF)
                   </div>
-                  <div className="text-xs text-[#94A3B8] truncate">
-                    Cinwaanka, Sumadaha Dhaxlayaasha, North Arrow, Scale, Xigashada &amp; Qaabka Bogga
+                  <div className="text-[11px] text-[#94A3B8] truncate">
+                    Sumadaha Dhaxlayaasha, North Arrow, Scale &amp; Qaabka Bogga
                   </div>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+              <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
             </button>
           )}
 
@@ -365,22 +381,22 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
                 onClose();
                 onOpenCartographicPdfModal('layout11');
               }}
-              className="w-full min-h-[64px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-[#22C55E]/70 px-4 py-3 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+              className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-[#22C55E]/70 px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
             >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center shrink-0">
-                  <MapIcon className="w-5 h-5" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center shrink-0">
+                  <MapIcon className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                  <div className="text-xs font-bold text-[#F8FAFC] truncate">
                     Khariidadda Beerta PDF (Automatic_Layout11)
                   </div>
-                  <div className="text-xs text-[#94A3B8] truncate">
+                  <div className="text-[11px] text-[#94A3B8] truncate">
                     100% QGIS Layout · Xuduudka, Dooxyada &amp; Sumadaha
                   </div>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+              <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
             </button>
           )}
 
@@ -392,22 +408,22 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
                 onClose();
                 onOpenCartographicPdfModal('heerarka_report');
               }}
-              className="w-full min-h-[64px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-teal-400/60 px-4 py-3 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+              className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-teal-400/60 px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
             >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-teal-500/15 border border-teal-500/30 text-teal-300 flex items-center justify-center shrink-0">
-                  <Printer className="w-5 h-5" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-teal-500/15 border border-teal-500/30 text-teal-300 flex items-center justify-center shrink-0">
+                  <Printer className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                  <div className="text-xs font-bold text-[#F8FAFC] truncate">
                     Warbixinta Heerarka Beerta PDF (4 Bog)
                   </div>
-                  <div className="text-xs text-[#94A3B8] truncate">
+                  <div className="text-[11px] text-[#94A3B8] truncate">
                     Heer 3 / 2 / 1 · Khariidadda Heerarka &amp; Jadwalka Blocks-ka
                   </div>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+              <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
             </button>
           )}
 
@@ -418,44 +434,44 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
               onClose();
               onExportLayoutPdf();
             }}
-            className="w-full min-h-[64px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-rose-400/60 px-4 py-3 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+            className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-rose-400/60 px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
-                <FileText className="w-5 h-5" />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
+                <FileText className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                <div className="text-xs font-bold text-[#F8FAFC] truncate">
                   Shahaadada Dhaxalka PDF
                 </div>
-                <div className="text-xs text-[#94A3B8] truncate">
+                <div className="text-[11px] text-[#94A3B8] truncate">
                   Warqadda rasmiga ah ee Faraa&apos;idka &amp; Saamiyada
                 </div>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+            <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
           </button>
 
           {/* 3. Jadwalka Xogta CSV */}
           <button
             type="button"
             onClick={handleExportCsvTable}
-            className="w-full min-h-[64px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-sky-400/60 px-4 py-3 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+            className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-sky-400/60 px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center shrink-0">
-                <Table2 className="w-5 h-5" />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-400 flex items-center justify-center shrink-0">
+                <Table2 className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                <div className="text-xs font-bold text-[#F8FAFC] truncate">
                   Jadwalka Xogta CSV
                 </div>
-                <div className="text-xs text-[#94A3B8] truncate">
+                <div className="text-[11px] text-[#94A3B8] truncate">
                   Diiwaanka cabbirrada plots-ka &amp; saamiyada
                 </div>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+            <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
           </button>
 
           {/* 4. Buugga Xogta Excel (.xlsx) */}
@@ -465,22 +481,22 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
               onClose();
               onExportExcelWorkbook();
             }}
-            className="w-full min-h-[60px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-emerald-400/60 px-4 py-2.5 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+            className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-emerald-400/60 px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
-                <FileSpreadsheet className="w-5 h-5" />
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                <FileSpreadsheet className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                <div className="text-xs font-bold text-[#F8FAFC] truncate">
                   Buugga Xogta Excel (.xlsx)
                 </div>
-                <div className="text-xs text-[#94A3B8] truncate">
+                <div className="text-[11px] text-[#94A3B8] truncate">
                   Warbixinta buuxda ee Faraa&apos;idka &amp; GIS
                 </div>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+            <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
           </button>
 
           {/* 5. Xogta GIS Shapefile (.zip) */}
@@ -489,22 +505,22 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
               type="button"
               disabled={isExportingShp}
               onClick={handleExportShapefile}
-              className="w-full min-h-[60px] rounded-2xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-amber-400/60 px-4 py-2.5 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer disabled:opacity-50"
+              className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#243449] hover:border-amber-400/60 px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer disabled:opacity-50"
             >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
-                  <FolderArchive className="w-5 h-5" />
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                  <FolderArchive className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-[#F8FAFC] truncate">
+                  <div className="text-xs font-bold text-[#F8FAFC] truncate">
                     {isExportingShp ? 'Dhoofinaya Shapefile...' : 'Xogta GIS Shapefile (.zip)'}
                   </div>
-                  <div className="text-xs text-[#94A3B8] truncate">
+                  <div className="text-[11px] text-[#94A3B8] truncate">
                     QGIS &amp; ArcGIS (.shp, .dbf, .prj)
                   </div>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-[#94A3B8] shrink-0" />
+              <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
             </button>
           )}
         </div>

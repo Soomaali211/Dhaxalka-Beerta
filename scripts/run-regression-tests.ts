@@ -42,6 +42,11 @@ import {
   doesSubdivisionHaveGeometry,
 } from '../src/utils/caseManagementEngine';
 import {
+  computeSavedCaseUnifiedMetrics,
+  computeUnifiedFarmMetrics,
+  countEnteredHeirs,
+} from '../src/utils/unifiedMetrics';
+import {
   createUndoRedoHistory,
   performRedo,
   performUndo,
@@ -63,10 +68,12 @@ import {
   selectMapFeaturesByRadiusUtm,
 } from '../src/utils/demAndRoadTierEngine';
 import {
+  alignAllBlocksToSampleBlock,
   buildNashqadBeerState,
   buildPlotsGeoJsonClipboardText,
   detectWidthBearingFromGeoJson,
   inspectAndClassifyNashqadBeerFiles,
+  inspectSampleBlockMetricsFromGeoJson,
   parseGeoJsonPolygonsStrict,
   runSameeNashqadWorkflow,
   splitPairIntoBoundaryAndSampleBlock,
@@ -75,6 +82,13 @@ import {
   convertKmlTextToGeoJsonObject,
   isLikelyKmlString,
 } from '../src/utils/kmlAndGeoJsonParser';
+import {
+  audit15mAnd90x48mCompliance,
+  autoFixToStandard15m90x48,
+  buildSurveyBoundaryGeoJsonFromCenter,
+  computeOfflineClimatology10Yr,
+  runSahankaAiSurvey,
+} from '../src/utils/sahankaAiEngine';
 
 let passedCount = 0;
 let failedCount = 0;
@@ -2381,13 +2395,774 @@ console.log('\n12. Soo Gelinta Faylasha KML (APK) & Toggle-ka Half-Plots (Ku Dar
   );
 }
 
-console.log('\n-------------------------------------------------------------------');
-console.log(` REGRESSION SUMMARY: ${passedCount} passed, ${failedCount} failed`);
-console.log('-------------------------------------------------------------------');
+// =========================================================================
+// SECTION 13: Falanqaynta E10, E11 & E13 — Unified Farm Metrics & 0-Heir Guard
+// =========================================================================
+console.log('\n13. Falanqaynta E10, E11 & E13 — Hal Isha Xisaabeed (Unified Metrics & 0-Heir Guard)');
+{
+  const sampleState = createInitialSampleSubdivisionState();
+  const bItem = sampleState.boundaryItems[sampleState.selectedBoundaryIndex] || null;
+  const sCand =
+    sampleState.selectedSampleIndex >= 0
+      ? sampleState.sampleCandidates[sampleState.selectedSampleIndex] || null
+      : null;
+  const subRes = computeLandSubdivision(
+    bItem,
+    sCand,
+    sampleState.params,
+    sampleState.prebuiltSubdivision,
+    sampleState.specialAreaItems
+  );
 
-if (failedCount > 0) {
-  process.exit(1);
+  const mExcl = computeUnifiedFarmMetrics(
+    { ...sampleState, includeValidHalfPlotsInAllocation: false },
+    subRes,
+    true
+  );
+  const mIncl = computeUnifiedFarmMetrics(
+    { ...sampleState, includeValidHalfPlotsInAllocation: true },
+    subRes,
+    true
+  );
+
+  assert(
+    mExcl.hasMap &&
+      mExcl.boundaryAreaSqM > mExcl.allPlotsAreaSqM &&
+      mExcl.halfPlotsCount > 0 &&
+      mExcl.allPlotsAreaSqM > mExcl.divisiblePlotsAreaSqM &&
+      mIncl.divisiblePlotsAreaSqM === mIncl.allPlotsAreaSqM,
+    `E10/E11: computeUnifiedFarmMetrics separates Boundary (${mExcl.boundaryAreaSqM} m²), All Plots (${mExcl.allPlotsAreaSqM} m²), Divisible Plots (${mExcl.divisiblePlotsAreaSqM} m² vs ${mIncl.divisiblePlotsAreaSqM} m²), and preserves ${mExcl.halfPlotsCount} Half Plots`
+  );
+
+  // Exact PDF audit scenario reconciliation: 95,700 m² boundary, 118 Full (50,976 m²) + 11 Half (2,376 m²) = 53,352 m²
+  const createdRes = createNewManagedCase({
+    existingCases: [],
+    caseName: 'Kiiska Tusaalaha Koowaad',
+    referenceNumber: 'KIIS-2026-0099',
+    caseDate: '2026-10-31',
+    deceasedName: 'Marxuum Tusaale',
+  });
+  assert(createdRes.ok, 'E10/E11: createNewManagedCase creates test case cleanly');
+  if (createdRes.ok) {
+    const mockAuditCase = createdRes.caseRecord;
+    mockAuditCase.hasMapGeometry = true;
+    mockAuditCase.blocksCount = 18;
+    mockAuditCase.fullPlotsCount = 118;
+    mockAuditCase.validHalfPlotsCount = 11;
+    mockAuditCase.landSubdivisionSnapshot = {
+      ...createEmptyLandSubdivisionState(),
+      includeValidHalfPlotsInAllocation: false,
+      nashqadSummary: {
+        workflowMode: 'import_nashqad',
+        blocksCount: 18,
+        fullPlotsCount: 118,
+        halfPlotsCount: 11,
+        totalPlotsAreaSqM: 53352,
+        boundaryAreaSqM: 95700,
+        hasBlocksFile: true,
+      },
+    };
+    const savedAuditMetrics = computeSavedCaseUnifiedMetrics(mockAuditCase);
+    assert(
+      savedAuditMetrics.boundaryAreaSqM === 95700 &&
+        savedAuditMetrics.boundaryAreaHa === 9.57 &&
+        savedAuditMetrics.allPlotsAreaSqM === 53352 &&
+        savedAuditMetrics.divisiblePlotsAreaSqM === 50976 &&
+        savedAuditMetrics.halfPlotsCount === 11,
+      'E10/E11: computeSavedCaseUnifiedMetrics reconciles 95,700 m² (9.57 ha) boundary, 53,352 m² all plots, 50,976 m² divisible full plots, and 11 Half Plots'
+    );
+  }
+
+  // E13: 0-heir validation guard
+  assert(
+    countEnteredHeirs(EMPTY_HEIRS_INPUT) === 0,
+    'E13: countEnteredHeirs returns 0 for EMPTY_HEIRS_INPUT'
+  );
+  assert(
+    countEnteredHeirs({
+      ...EMPTY_HEIRS_INPUT,
+      deceasedGender: 'male',
+      husbandAlive: true,
+    }) === 0,
+    'E13: countEnteredHeirs ignores husbandAlive when deceasedGender is male'
+  );
+  assert(
+    countEnteredHeirs({
+      ...EMPTY_HEIRS_INPUT,
+      deceasedGender: 'male',
+      wivesCount: 1,
+      sonsCount: 2,
+      daughtersCount: 3,
+    }) === 6,
+    'E13: countEnteredHeirs accurately sums entered heirs (1 wife + 2 sons + 3 daughters = 6)'
+  );
 }
 
+/* ------------------------------------------------------------------ */
+/* 14. SAMPLE BLOCK BEARING, LENGTH & WIDTH ALIGNMENT                 */
+/* ------------------------------------------------------------------ */
+console.log('\n14. Waafajinta Bearing-ka, Dhererka & Ballaca ee Block Tusaale');
+{
+  // 14A. North-South (~0°/90°) 4-vertex sample block with tiny +dx on both opposite long edges
+  // Previously frameFromRing cancelled opposite N-S edges when both had tiny dx > 0!
+  const nsSampleGeoJson = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'NS Sample Block' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              // Long edge (88m) runs almost due North-South; short edge (44m) runs East-West (~90° bearing)
+              [500010.0, 1050010.0],
+              [500010.08, 1050098.0],
+              [500054.08, 1050097.96],
+              [500054.0, 1050009.96],
+              [500010.0, 1050010.0],
+            ],
+          ],
+        },
+      },
+    ],
+  });
 
+  const nsMetrics = inspectSampleBlockMetricsFromGeoJson(nsSampleGeoJson, 'ns_sample.geojson');
+  assert(
+    Boolean(
+      nsMetrics &&
+        approxEqual(nsMetrics.lengthM, 88, 0.25) &&
+        approxEqual(nsMetrics.widthM, 44, 0.25) &&
+        (Math.abs(nsMetrics.widthBearingDeg - 90) < 1.0 ||
+          Math.abs(nsMetrics.widthBearingDeg - 270) < 1.0)
+    ),
+    `14A: North-South 4-vertex sample block preserves exact 88×44m & ~90° width bearing without opposite-edge cancellation (got ${nsMetrics?.lengthM}×${nsMetrics?.widthM}m @ ${nsMetrics?.widthBearingDeg}°)`
+  );
+
+  // 14B. Rotated sample block (28° width bearing, 91.6m × 47.0m -> auto-snaps to 90×48m by default -> detects mismatch -> 1-click aligns to exact 91.6×47.0m & 28°)
+  const makeRotatedRectCoords = (
+    cx: number,
+    cy: number,
+    lengthM: number,
+    widthM: number,
+    widthBearingDeg: number
+  ): [number, number][] => {
+    const wRad = (widthBearingDeg * Math.PI) / 180;
+    const vx = Math.sin(wRad);
+    const vy = Math.cos(wRad);
+    // Long axis u perpendicular (+90° compass)
+    const lRad = ((widthBearingDeg + 90) * Math.PI) / 180;
+    const ux = Math.sin(lRad);
+    const uy = Math.cos(lRad);
+    const hl = lengthM / 2;
+    const hw = widthM / 2;
+    const c0: [number, number] = [cx - ux * hl - vx * hw, cy - uy * hl - vy * hw];
+    const c1: [number, number] = [cx + ux * hl - vx * hw, cy + uy * hl - vy * hw];
+    const c2: [number, number] = [cx + ux * hl + vx * hw, cy + uy * hl + vy * hw];
+    const c3: [number, number] = [cx - ux * hl + vx * hw, cy - uy * hl + vy * hw];
+    return [c0, c1, c2, c3, c0];
+  };
+
+  const farmBoundaryLarge = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Xuduudka Beerta Tijaabada' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [500000, 1050000],
+              [500360, 1050000],
+              [500360, 1050280],
+              [500000, 1050280],
+              [500000, 1050000],
+            ],
+          ],
+        },
+      },
+    ],
+  });
+
+  const rotatedSample91x47 = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Block Tusaale 28deg' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [makeRotatedRectCoords(500120, 1050110, 91.6, 47.0, 28)],
+        },
+      },
+    ],
+  });
+
+  // Default runSameeNashqadWorkflow (uploading Xuduud + Block Tusaale) snaps 91.6×47.0 to 90×48m -> triggers hasMismatch === true!
+  const defaultSamee = runSameeNashqadWorkflow({
+    boundaryFileName: 'xuduudka_beerta.geojson',
+    boundaryFileText: farmBoundaryLarge,
+    sampleBlockMode: 'file',
+    sampleBlockFileName: 'block_tusaale.geojson',
+    sampleBlockFileText: rotatedSample91x47,
+  });
+
+  assert(
+    Boolean(
+      defaultSamee.ok &&
+        defaultSamee.summary.sampleBlockAlignment &&
+        defaultSamee.summary.sampleBlockAlignment.hasMismatch === true &&
+        approxEqual(defaultSamee.summary.sampleBlockAlignment.sampleLengthM, 91.6, 0.2) &&
+        approxEqual(defaultSamee.summary.sampleBlockAlignment.sampleWidthM, 47.0, 0.2) &&
+        defaultSamee.summary.sampleBlockAlignment.appliedLengthM === 90 &&
+        defaultSamee.summary.sampleBlockAlignment.appliedWidthM === 48
+    ),
+    '14B: Default Samee Nashqad detects dimension discrepancy when 91.6×47.0m sample block snaps to 90×48m'
+  );
+
+  if (defaultSamee.ok) {
+    // Now click "Waafaji Dherer & Ballac" -> alignAllBlocksToSampleBlock
+    const alignedRes = alignAllBlocksToSampleBlock(defaultSamee.nextState, {
+      exactDimensions: true,
+      swapAxes: false,
+    });
+    assert(
+      Boolean(
+        alignedRes.ok &&
+          alignedRes.summary.sampleBlockAlignment &&
+          alignedRes.summary.sampleBlockAlignment.hasMismatch === false &&
+          alignedRes.summary.sampleBlockAlignment.bearingDiffDeg <= 0.25 &&
+          approxEqual(alignedRes.summary.sampleBlockAlignment.appliedLengthM, 91.6, 0.2) &&
+          approxEqual(alignedRes.summary.sampleBlockAlignment.appliedWidthM, 47.0, 0.2) &&
+          alignedRes.summary.blocksCount > 0
+      ),
+      `14C: alignAllBlocksToSampleBlock aligns all ${alignedRes.ok ? alignedRes.summary.blocksCount : 0} prebuilt blocks to exact sample bearing (28°) & dimensions (91.6×47.0m)`
+    );
+
+    // Also test 90° axis swap (rotates block orientation by 90° from 28° -> 118° while preserving 91.6×47.0m block size)
+    if (alignedRes.ok) {
+      const swappedRes = alignAllBlocksToSampleBlock(alignedRes.nextState, {
+        exactDimensions: true,
+        swapAxes: true,
+      });
+      assert(
+        Boolean(
+          swappedRes.ok &&
+            swappedRes.summary.sampleBlockAlignment &&
+            swappedRes.summary.sampleBlockAlignment.axesSwapped === true &&
+            swappedRes.summary.sampleBlockAlignment.hasMismatch === false &&
+            approxEqual(swappedRes.summary.sampleBlockAlignment.appliedWidthBearingDeg, 118.0, 0.5) &&
+            approxEqual(swappedRes.summary.sampleBlockAlignment.appliedLengthM, 91.6, 0.2) &&
+            approxEqual(swappedRes.summary.sampleBlockAlignment.appliedWidthM, 47.0, 0.2)
+        ),
+        '14D: alignAllBlocksToSampleBlock with swapAxes=true rotates block orientation by 90° (28° -> 118°)'
+      );
+    }
+  }
+
+  // 12E. Multi-file upload ("Soo geli nashqad beer"): Boundary + mismatched Blocks (0°, 80×50m) + Sample Block (28°, 91.6×47.0m)
+  const mismatchedMultiBlocks = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { block: 'R01' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [makeRotatedRectCoords(500080, 1050060, 80, 50, 0)],
+        },
+      },
+      {
+        type: 'Feature',
+        properties: { block: 'R02' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [makeRotatedRectCoords(500180, 1050060, 80, 50, 0)],
+        },
+      },
+    ],
+  });
+
+  const multiInspect = inspectAndClassifyNashqadBeerFiles([
+    { fileName: 'xuduudka_beerta.geojson', fileText: farmBoundaryLarge },
+    { fileName: 'blocks.geojson', fileText: mismatchedMultiBlocks },
+    { fileName: 'block_tusaale.geojson', fileText: rotatedSample91x47 },
+  ]);
+
+  assert(multiInspect.ok === true, '12E.1: Multi-file upload with xuduudka + blocks + block_tusaale parses cleanly');
+  if (multiInspect.ok) {
+    const multiBuilt = buildNashqadBeerState(multiInspect.files);
+    assert(
+      Boolean(
+        multiBuilt.ok &&
+          multiBuilt.summary.sampleBlockAlignment &&
+          multiBuilt.summary.sampleBlockAlignment.hasMismatch === true &&
+          multiBuilt.summary.sampleBlockAlignment.bearingDiffDeg > 20
+      ),
+      `12E.2: buildNashqadBeerState detects bearing mismatch (${multiBuilt.ok ? multiBuilt.summary.sampleBlockAlignment?.bearingDiffDeg : -1}°) between blocks.geojson (0°) and block_tusaale.geojson (28°)`
+    );
+
+    if (multiBuilt.ok) {
+      const multiAligned = alignAllBlocksToSampleBlock(multiBuilt.nextState, {
+        exactDimensions: true,
+        swapAxes: false,
+      });
+      assert(
+        Boolean(
+          multiAligned.ok &&
+            multiAligned.summary.blocksCount > 2 &&
+            multiAligned.summary.sampleBlockAlignment?.hasMismatch === false
+        ),
+        `12E.3: alignAllBlocksToSampleBlock regenerates all ${multiAligned.ok ? multiAligned.summary.blocksCount : 0} farm blocks to match block_tusaale.geojson`
+      );
+    }
+  }
+
+  // 12F. Parametric CAD mode alignment (when prebuiltSubdivision is null and params.rot or L/W differ from sampleCandidates[0])
+  const cadBase = importSimultaneousFarmGeoJsonFiles(createEmptyLandSubdivisionState(), [
+    { fileName: 'xuduudka_beerta.geojson', rawJson: JSON.parse(farmBoundaryLarge) },
+    { fileName: 'block_tusaale.geojson', rawJson: JSON.parse(rotatedSample91x47) },
+  ]);
+  assert(Boolean(cadBase && !cadBase.nextState.prebuiltSubdivision), '12F.1: Simultaneous upload creates parametric CAD state with sampleCandidates');
+  if (cadBase) {
+    const skewedCadState = {
+      ...cadBase.nextState,
+      params: {
+        ...cadBase.nextState.params,
+        L: 110,
+        W: 60,
+        rot: 17,
+      },
+    };
+    const skewedComp = computeLandSubdivision(
+      skewedCadState.boundaryItems[0],
+      skewedCadState.sampleCandidates[0],
+      skewedCadState.params,
+      null
+    );
+    assert(
+      Boolean(
+        skewedComp?.sampleBlockAlignment &&
+          skewedComp.sampleBlockAlignment.hasMismatch === true &&
+          skewedComp.sampleBlockAlignment.bearingDiffDeg > 15
+      ),
+      '12F.2: Parametric CAD computeLandSubdivision detects bearing & dimension mismatch against sampleCandidates[0]'
+    );
+
+    const fixedCad = alignAllBlocksToSampleBlock(skewedCadState, {
+      exactDimensions: true,
+      swapAxes: false,
+    });
+    assert(
+      Boolean(
+        fixedCad.ok &&
+          !fixedCad.nextState.prebuiltSubdivision &&
+          fixedCad.nextState.params.rot === 0 &&
+          fixedCad.summary.sampleBlockAlignment?.hasMismatch === false &&
+          approxEqual(fixedCad.nextState.params.L, 91.6, 0.2) &&
+          approxEqual(fixedCad.nextState.params.W, 47.0, 0.2)
+      ),
+      '12F.3: alignAllBlocksToSampleBlock in Parametric CAD mode resets rot=0 and matches exact L=91.6m, W=47.0m'
+    );
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 15. INDEPENDENT DHERER & BALLAC SEATING + MANUAL BEARING DEGREE    */
+/* ------------------------------------------------------------------ */
+console.log('\n15. Fadhiisinta Gooni-goonida ah ee Dhererka & Ballaca + Bearing Degree Gacanta');
+{
+  const makeObliqueSamplePolygon = (
+    cx: number,
+    cy: number,
+    lengthM: number,
+    lengthBearingDeg: number,
+    widthM: number,
+    widthBearingDeg: number
+  ): [number, number][] => {
+    const lRad = (lengthBearingDeg * Math.PI) / 180;
+    const ux = Math.sin(lRad);
+    const uy = Math.cos(lRad);
+    const wRad = (widthBearingDeg * Math.PI) / 180;
+    const vx = Math.sin(wRad);
+    const vy = Math.cos(wRad);
+    const hl = lengthM / 2;
+    const hw = widthM / 2;
+    const c0: [number, number] = [cx - ux * hl - vx * hw, cy - uy * hl - vy * hw];
+    const c1: [number, number] = [cx + ux * hl - vx * hw, cy + uy * hl - vy * hw];
+    const c2: [number, number] = [cx + ux * hl + vx * hw, cy + uy * hl + vy * hw];
+    const c3: [number, number] = [cx - ux * hl + vx * hw, cy - uy * hl + vy * hw];
+    return [c0, c1, c2, c3, c0];
+  };
+
+  const farmBndOblique = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Beerta Skewed Test' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [500000, 1050000],
+              [500450, 1050000],
+              [500450, 1050380],
+              [500000, 1050380],
+              [500000, 1050000],
+            ],
+          ],
+        },
+      },
+    ],
+  });
+
+  // 15A. Skewed / Parallelogram Block Tusaale: Dherer = 92.0m @ 95° bearing, Ballac = 46.0m @ 14° bearing (81° oblique angle, NOT 90°!)
+  const skewedSampleGeoJson = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Block Tusaale Oblique' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [makeObliqueSamplePolygon(500160, 1050140, 92.0, 95.0, 46.0, 14.0)],
+        },
+      },
+    ],
+  });
+
+  const obliqueMetrics = inspectSampleBlockMetricsFromGeoJson(
+    skewedSampleGeoJson,
+    'oblique_sample.geojson'
+  );
+  assert(
+    Boolean(
+      obliqueMetrics &&
+        approxEqual(obliqueMetrics.lengthM, 92.0, 0.25) &&
+        approxEqual(obliqueMetrics.widthM, 46.0, 0.25) &&
+        approxEqual(obliqueMetrics.lengthBearingDeg % 180, 95.0, 0.3) &&
+        approxEqual(obliqueMetrics.widthBearingDeg % 180, 14.0, 0.3)
+    ),
+    `15A: Parallelogram Block Tusaale extracts true opposite-edge bearings independently (Dherer=${obliqueMetrics?.lengthM}m @ ${obliqueMetrics?.lengthBearingDeg}°, Ballac=${obliqueMetrics?.widthM}m @ ${obliqueMetrics?.widthBearingDeg}°)`
+  );
+
+  // 15B. Start with misaligned blocks (L=100m @ 112°, W=52m @ 22°) + skewed Block Tusaale -> test independent 'length_only'
+  const misalignedBlocks = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { block_id: 'B1' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [makeObliqueSamplePolygon(500140, 1050120, 100.0, 112.0, 52.0, 22.0)],
+        },
+      },
+      {
+        type: 'Feature',
+        properties: { block_id: 'B2' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [makeObliqueSamplePolygon(500260, 1050120, 100.0, 112.0, 52.0, 22.0)],
+        },
+      },
+    ],
+  });
+
+  const inspectedOblique = inspectAndClassifyNashqadBeerFiles([
+    { fileName: 'xuduudka_beerta.geojson', fileText: farmBndOblique },
+    { fileName: 'blocks.geojson', fileText: misalignedBlocks },
+    { fileName: 'block_tusaale.geojson', fileText: skewedSampleGeoJson },
+  ]);
+  assert(Boolean(inspectedOblique.ok), '15B.1: Multi-file upload with skewed Block Tusaale parses cleanly');
+
+  if (inspectedOblique.ok) {
+    const builtInit = buildNashqadBeerState(
+      inspectedOblique.files,
+      createEmptyLandSubdivisionState()
+    );
+    assert(
+      Boolean(
+        builtInit.ok &&
+          builtInit.summary.sampleBlockAlignment?.hasLengthMismatch === true &&
+          builtInit.summary.sampleBlockAlignment?.hasWidthMismatch === true
+      ),
+      '15B.2: Initial state detects BOTH Dherer mismatch and Ballac mismatch independently'
+    );
+
+    if (builtInit.ok) {
+      // Step 1: Seat ONLY Dherer ('length_only') -> Dherer matches 92.0m @ 95°, while Ballac stays at 52.0m @ 22°!
+      const lengthSeated = alignAllBlocksToSampleBlock(builtInit.nextState, {
+        mode: 'length_only',
+      });
+      const lenAlign = lengthSeated.ok ? lengthSeated.summary.sampleBlockAlignment : null;
+      assert(
+        Boolean(
+          lengthSeated.ok &&
+            lenAlign &&
+            lenAlign.isLengthAligned === true &&
+            lenAlign.hasLengthMismatch === false &&
+            approxEqual(lenAlign.appliedLengthM, 92.0, 0.25) &&
+            approxEqual(lenAlign.appliedLengthBearingDeg, 95.0, 0.3) &&
+            lenAlign.hasWidthMismatch === true &&
+            approxEqual(lenAlign.appliedWidthM, 52.0, 0.25) &&
+            approxEqual(lenAlign.appliedWidthBearingDeg, 22.0, 0.3)
+        ),
+        `15B.3: mode='length_only' seats Dherer onto Block Tusaale (${lenAlign?.appliedLengthM}m @ ${lenAlign?.appliedLengthBearingDeg}°) while leaving Ballac untouched (${lenAlign?.appliedWidthM}m @ ${lenAlign?.appliedWidthBearingDeg}°)`
+      );
+
+      // Step 2: Now Dherer matches Block Tusaale! Manually nudge Ballaca bearing degree (22° -> 18° -> 14°) via 'manual_bearing' WITHOUT disturbing Dherer!
+      if (lengthSeated.ok) {
+        const manualStep1 = alignAllBlocksToSampleBlock(lengthSeated.nextState, {
+          mode: 'manual_bearing',
+          manualWidthBearingDeg: 18.0,
+          manualWidthM: 46.0,
+        });
+        const m1 = manualStep1.ok ? manualStep1.summary.sampleBlockAlignment : null;
+        assert(
+          Boolean(
+            manualStep1.ok &&
+              m1 &&
+              m1.isLengthAligned === true &&
+              approxEqual(m1.appliedLengthBearingDeg, 95.0, 0.3) &&
+              approxEqual(m1.appliedWidthBearingDeg, 18.0, 0.3) &&
+              m1.hasWidthMismatch === true
+          ),
+          `15C.1: Manual Ballaca bearing 18.0° keeps Dherer locked at ${m1?.appliedLengthBearingDeg}° (${m1?.appliedLengthM}m) while tilting Ballac to ${m1?.appliedWidthBearingDeg}°`
+        );
+
+        if (manualStep1.ok) {
+          const manualStep2 = alignAllBlocksToSampleBlock(manualStep1.nextState, {
+            mode: 'manual_bearing',
+            manualWidthBearingDeg: 14.0,
+            manualWidthM: 46.0,
+          });
+          const m2 = manualStep2.ok ? manualStep2.summary.sampleBlockAlignment : null;
+          assert(
+            Boolean(
+              manualStep2.ok &&
+                m2 &&
+                m2.isLengthAligned === true &&
+                m2.isWidthAligned === true &&
+                m2.hasMismatch === false &&
+                approxEqual(m2.appliedLengthBearingDeg, 95.0, 0.3) &&
+                approxEqual(m2.appliedWidthBearingDeg, 14.0, 0.3)
+            ),
+            `15C.2: Manual Ballaca bearing 14.0° achieves 100% full sample alignment (Dherer=${m2?.appliedLengthBearingDeg}°, Ballac=${m2?.appliedWidthBearingDeg}°, hasMismatch=${m2?.hasMismatch})`
+          );
+        }
+
+        // Step 3: Also verify 1-click 'width_only' from lengthSeated
+        const widthSeated = alignAllBlocksToSampleBlock(lengthSeated.nextState, {
+          mode: 'width_only',
+        });
+        const wAlign = widthSeated.ok ? widthSeated.summary.sampleBlockAlignment : null;
+        assert(
+          Boolean(
+            widthSeated.ok &&
+              wAlign &&
+              wAlign.isLengthAligned === true &&
+              wAlign.isWidthAligned === true &&
+              wAlign.hasMismatch === false
+          ),
+          '15D: mode="width_only" seats Ballac onto Block Tusaale while keeping Dherer locked'
+        );
+
+        // Step 4: Guard against collinear Dherer & Ballac bearings (< 10° apart)
+        const collinearAttempt = alignAllBlocksToSampleBlock(lengthSeated.nextState, {
+          mode: 'manual_bearing',
+          manualWidthBearingDeg: 93.0, // within 2° of Dherer 95°!
+        });
+        assert(
+          collinearAttempt.ok === false,
+          '15E: Collinear manual bearing (< 10° from locked Dherer) is cleanly rejected with Somali guidance'
+        );
+      }
+    }
+  }
+
+  // 15F. Parametric CAD mode: independent Dherer lock + manual Ballaca bearing degree
+  const cadOblique = importSimultaneousFarmGeoJsonFiles(createEmptyLandSubdivisionState(), [
+    { fileName: 'xuduudka_beerta.geojson', rawJson: JSON.parse(farmBndOblique) },
+    { fileName: 'block_tusaale.geojson', rawJson: JSON.parse(skewedSampleGeoJson) },
+  ]);
+  if (cadOblique) {
+    // Tilt Ballaca manually to 22° while Dherer stays locked at 95°
+    const cadTiltedWidth = alignAllBlocksToSampleBlock(cadOblique.nextState, {
+      mode: 'manual_bearing',
+      manualLengthBearingDeg: 95.0,
+      manualWidthBearingDeg: 22.0,
+      manualLengthM: 92.0,
+      manualWidthM: 46.0,
+    });
+    const cadComp =
+      cadTiltedWidth.ok
+        ? computeLandSubdivision(
+            cadTiltedWidth.nextState.boundaryItems[0],
+            cadTiltedWidth.nextState.sampleCandidates[0],
+            cadTiltedWidth.nextState.params,
+            null
+          )
+        : null;
+    assert(
+      Boolean(
+        cadTiltedWidth.ok &&
+          cadComp?.sampleBlockAlignment &&
+          cadComp.sampleBlockAlignment.isLengthAligned === true &&
+          approxEqual(cadComp.sampleBlockAlignment.appliedLengthBearingDeg, 95.0, 0.3) &&
+          approxEqual(cadComp.sampleBlockAlignment.appliedWidthBearingDeg, 22.0, 0.3) &&
+          cadComp.sampleBlockAlignment.hasWidthMismatch === true
+      ),
+      '15F.1: Parametric CAD mode supports independent customLengthBearingDeg (95°) + manual customWidthBearingDeg (22°)'
+    );
+
+    if (cadTiltedWidth.ok) {
+      const cadFixedWidth = alignAllBlocksToSampleBlock(cadTiltedWidth.nextState, {
+        mode: 'manual_bearing',
+        manualWidthBearingDeg: 14.0,
+        manualWidthM: 46.0,
+      });
+      assert(
+        Boolean(
+          cadFixedWidth.ok &&
+            cadFixedWidth.summary.sampleBlockAlignment?.isLengthAligned === true &&
+            cadFixedWidth.summary.sampleBlockAlignment?.isWidthAligned === true &&
+            cadFixedWidth.summary.sampleBlockAlignment?.hasMismatch === false
+        ),
+        '15F.2: Parametric CAD manual Ballaca bearing seating to 14° aligns Ballac while preserving Dherer 95°'
+      );
+    }
+  }
+}
+
+/* ============================================================================
+ * SECTION 16: SAHANKA AI v2 — 10-YEAR ARCHIVE & HUBINTA 15m / 90x48m (v1.6.0)
+ * ============================================================================ */
+async function runSection16SahankaTests(): Promise<void> {
+  console.log('\n16. Sahanka AI v2 — Raadinta 10 Sano, Hubinta 15m/90×48m & Toosinta Halbeegga');
+
+  // 16A. Deterministic 10-Year Climatology Baseline (10 full years, valid peak & flood risk)
+  const hydro10 = computeOfflineClimatology10Yr(9.56, 44.06);
+  assert(
+    hydro10.yearsAnalyzed === 10 &&
+      hydro10.yearlyBreakdown.length === 10 &&
+      hydro10.avgAnnualRainfallMm > 100 &&
+      hydro10.maxDailyRainfallMm > 15,
+    `16A: 10-year hydrology archive produces 10 full years (${hydro10.startYear}–${hydro10.endYear}, avg ${hydro10.avgAnnualRainfallMm}mm)`
+  );
+
+  // 16B. Non-compliant layout (100×50m blocks + 8m road) is flagged by audit15mAnd90x48mCompliance
+  const synthBnd = buildSurveyBoundaryGeoJsonFromCenter({
+    centerLat: 9.56,
+    centerLon: 44.06,
+    eastWestM: 360,
+    northSouthM: 260,
+    bearingDeg: 0,
+  });
+  const nonCompliantRes = runSameeNashqadWorkflow({
+    boundaryFileName: synthBnd.fileName,
+    boundaryFileText: synthBnd.boundaryGeoJsonText,
+    sampleBlockMode: 'dimensions',
+    blockLengthM: 100,
+    blockWidthM: 50,
+    roadWidthM: 8,
+    plotWidthM: 20,
+    plotDepthM: 25,
+    widthBearingDeg: 0,
+  });
+  assert(nonCompliantRes.ok === true, '16B.1: Built non-standard 100×50m (8m road) test layout');
+
+  if (nonCompliantRes.ok) {
+    const badAudit = audit15mAnd90x48mCompliance(nonCompliantRes.nextState);
+    const blkChk = badAudit.checks.find((c) => c.id === 'block_90x48');
+    const rdChk = badAudit.checks.find((c) => c.id === 'road_15m');
+    const pltChk = badAudit.checks.find((c) => c.id === 'full_plot_432');
+    assert(
+      badAudit.isFullyCompliant === false &&
+        blkChk?.passed === false &&
+        rdChk?.passed === false &&
+        pltChk?.passed === false,
+      `16B.2: audit15mAnd90x48mCompliance accurately flags non-compliant 100×50m / 8m road (${badAudit.passedCount}/${badAudit.totalChecks} passed)`
+    );
+
+    // 16C. 1-Click Auto-Fix (`autoFixToStandard15m90x48`) restores 100% 90×48m + 15m 4-sided road compliance!
+    const fixed = await autoFixToStandard15m90x48(nonCompliantRes.nextState, 0);
+    assert(
+      Boolean(
+        fixed.ok &&
+          fixed.complianceAudit.isFullyCompliant === true &&
+          fixed.complianceAudit.passedCount === 5 &&
+          fixed.complianceAudit.minMeasuredBlockGapM !== null &&
+          approxEqual(fixed.complianceAudit.minMeasuredBlockGapM, 15.0, 0.4)
+      ),
+      `16C: autoFixToStandard15m90x48 achieves 5/5 compliance (90×48m blocks, ${
+        fixed.ok ? fixed.complianceAudit.minMeasuredBlockGapM : null
+      }m road gap, 432 m² plots)`
+    );
+  }
+
+  // 16D. Full Sahanka AI Survey with Wadi <= 30m automatically assigns Heer 3 (`tier_3_basic`)
+  const wadiAcrossCenterGeoJson = JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: 'Dooxa Dhexe' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [44.0585, 9.5600],
+            [44.0615, 9.5600],
+          ],
+        },
+      },
+    ],
+  });
+
+  const sahanRes = await runSahankaAiSurvey({
+    mode: 'auto_10yr',
+    currentState: createEmptyLandSubdivisionState(),
+    coordinateArea: {
+      centerLat: 9.56,
+      centerLon: 44.06,
+      eastWestM: 350,
+      northSouthM: 250,
+    },
+    wadiFile: {
+      fileName: 'dooxa_dhexe.geojson',
+      fileText: wadiAcrossCenterGeoJson,
+    },
+    skipGeminiCall: true,
+  });
+
+  assert(
+    Boolean(
+      sahanRes.ok &&
+        sahanRes.complianceAudit.isFullyCompliant === true &&
+        sahanRes.complianceAudit.wadiRiskPlotsCount > 0 &&
+        sahanRes.complianceAudit.checks.find((c) => c.id === 'wadi_30m_tier3')?.passed === true
+    ),
+    `16D: runSahankaAiSurvey auto_10yr builds 90×48m + 15m layout and assigns Heer 3 to all ${
+      sahanRes.ok ? sahanRes.complianceAudit.wadiRiskPlotsCount : 0
+    } plots within ≤ 30m of Dooxa`
+  );
+}
+
+runSection16SahankaTests()
+  .then(() => {
+    console.log('\n-------------------------------------------------------------------');
+    console.log(` REGRESSION SUMMARY: ${passedCount} passed, ${failedCount} failed`);
+    console.log('-------------------------------------------------------------------');
+
+    if (failedCount > 0) {
+      process.exit(1);
+    }
+  })
+  .catch((err) => {
+    console.error('Unhandled error in Section 16 tests:', err);
+    process.exit(1);
+  });
 

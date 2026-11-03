@@ -3,15 +3,18 @@
 
 @layer base {
   :root {
-    /* Official Dark Navy & Emerald-Green Mobile Design Tokens */
-    --bg-main: #060D18;
-    --bg-secondary: #0B1220;
-    --bg-card: #0F1B2D;
-    --border-subtle: #243449;
-    --accent-emerald: #10B981;
-    --accent-emerald-hover: #059669;
-    --text-primary: #F8FAFC;
-    --text-secondary: #94A3B8;
+    /* Official Dark Navy & Emerald-Green Mobile Design Tokens (WCAG AA Verified) */
+    --bg-main: #060d18;
+    --bg-secondary: #0a1220;
+    --bg-card: #111b2e;
+    --border-subtle: #223250;
+    --accent-emerald: #22c55e;
+    --accent-emerald-hover: #16a34a;
+    --info: #38bdf8;
+    --warning: #facc15;
+    --danger: #f87171;
+    --text-primary: #e8eef7;
+    --text-secondary: #a9b8d0;
   }
 
   body {
@@ -45,20 +48,39 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Dark Navy GIS Map Container & Offline Coordinate Grid */
+/* Horizontal filter chip fade cue (E9) */
+.scroll-fade-right {
+  -webkit-mask-image: linear-gradient(to right, #000 88%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 88%, transparent 100%);
+}
+
+/* Online Satellite/OSM Map Container: warm natural terrain fallback while tiles stream in (E3) */
 .gis-leaflet-map.leaflet-container {
-  background-color: #07101E;
-  background-image:
-    linear-gradient(to right, rgba(36, 52, 73, 0.35) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(36, 52, 73, 0.35) 1px, transparent 1px);
-  background-size: 36px 36px;
+  background-color: #9e845c;
+  background-image: none;
   font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   outline: none;
 }
 
+/* Transparent Leaflet Container when live Google Satellite (@vis.gl/react-google-maps) renders underneath */
+.google-underlay-leaflet-map.leaflet-container {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+
+/* Offline Vector Map Container: dark navy coordinate grid ONLY when Bilaa Khad is selected (E3) */
+.offline-vector-leaflet-map.leaflet-container {
+  background-color: #07101e;
+  background-image:
+    linear-gradient(to right, rgba(34, 50, 80, 0.35) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 50, 80, 0.35) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
 .gis-leaflet-map .leaflet-control-attribution {
-  background: rgba(11, 18, 32, 0.82) !important;
-  color: #94A3B8 !important;
+  background: rgba(10, 18, 32, 0.85) !important;
+  color: #a9b8d0 !important;
   font-size: 10px !important;
   padding: 2px 6px !important;
   border-top-left-radius: 8px;
@@ -66,7 +88,7 @@
 }
 
 .gis-leaflet-map .leaflet-control-attribution a {
-  color: #34D399 !important;
+  color: #22c55e !important;
   text-decoration: none;
 }
 
@@ -182,6 +204,21 @@
   .print-certificate-body {
     padding: 0 !important;
     overflow: visible !important;
+  }
+
+  .pan-zoom-viewport {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .pan-zoom-stage {
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    display: block !important;
   }
 }
 

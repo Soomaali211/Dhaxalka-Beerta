@@ -10,8 +10,8 @@ android {
         applicationId "so.beerta.dhaxalka.gis"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode envVersionCode ? envVersionCode.toInteger() : 106
-        versionName envVersionName ?: "1.3.0"
+        versionCode envVersionCode ? envVersionCode.toInteger() : 112
+        versionName envVersionName ?: "1.6.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

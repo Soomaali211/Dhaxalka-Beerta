@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ArrowLeftRight,
   Check,
   ChevronDown,
   ChevronUp,
@@ -20,16 +21,21 @@ import {
 } from '../types/landSubdivision';
 import {
   InspectedNashqadFile,
+  SampleBlockAxisAlignOptions,
+  alignAllBlocksToSampleBlock,
   buildNashqadBeerState,
   buildPlotsGeoJsonClipboardText,
   copyTextSafelyToClipboard,
   detectWidthBearingFromGeoJson,
   formatCompassDirectionSomali,
   inspectAndClassifyNashqadBeerFiles,
+  inspectSampleBlockMetricsFromGeoJson,
   parseGeoJsonPolygonsStrict,
   runSameeNashqadWorkflow,
   splitPairIntoBoundaryAndSampleBlock,
 } from '../utils/nashqadWorkflowEngine';
+import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
+import { SahankaAiModal } from './SahankaAiModal';
 import {
   ANDROID_SAFE_GIS_ACCEPT,
   readAndNormalizeGisFile,
@@ -37,6 +43,7 @@ import {
 
 interface NashqadFabAndModalsProps {
   subdivisionState: LandSubdivisionState;
+  hidden?: boolean;
   onApplyNashqadState: (
     nextState: LandSubdivisionState,
     summary: NashqadWorkflowSummary
@@ -75,10 +82,15 @@ export const NashqadSummaryCard: React.FC<{
   summary: NashqadWorkflowSummary;
   subdivisionState: LandSubdivisionState;
   onNotify: (title: string, message: string) => void;
+  onAlignToSampleBlock?: (options?: SampleBlockAxisAlignOptions) => void;
   onClose?: () => void;
-}> = ({ summary, subdivisionState, onNotify, onClose }) => {
+}> = ({ summary, subdivisionState, onNotify, onAlignToSampleBlock, onClose }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const sampleAlign =
+    subdivisionState.prebuiltSubdivision?.sampleBlockAlignment ||
+    summary.sampleBlockAlignment ||
+    null;
 
   const handleCopyGeoJson = async () => {
     const txt = buildPlotsGeoJsonClipboardText(subdivisionState);
@@ -97,8 +109,8 @@ export const NashqadSummaryCard: React.FC<{
   };
 
   return (
-    <div className="rounded-2xl bg-[#0B1220] border border-[#243449] shadow-2xl text-[#F8FAFC] w-full max-w-[380px] overflow-hidden">
-      <div className="px-4 py-3 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-2">
+    <div className="rounded-2xl bg-[#0B1220] border border-[#243449] shadow-2xl text-[#F8FAFC] w-full max-w-[360px] max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+      <div className="px-3.5 py-2.5 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-2 shrink-0">
         <span className="text-xs font-extrabold truncate">
           {summary.mode === 'samee_nashqad'
             ? 'Warbixinta Nashqadda Cusub'
@@ -109,7 +121,7 @@ export const NashqadSummaryCard: React.FC<{
             type="button"
             onClick={handleCopyGeoJson}
             title="Koobiyee qoraalka GeoJSON"
-            className="min-h-[30px] px-2.5 py-1 rounded-lg bg-[#0B1220] hover:bg-[#16263D] border border-[#243449] text-[11px] font-bold text-[#F8FAFC] inline-flex items-center gap-1 cursor-pointer"
+            className="min-h-[28px] px-2 py-0.5 rounded-lg bg-[#0B1220] hover:bg-[#16263D] border border-[#243449] text-[10.5px] font-bold text-[#F8FAFC] inline-flex items-center gap-1 cursor-pointer"
           >
             {copied ? (
               <>
@@ -128,7 +140,7 @@ export const NashqadSummaryCard: React.FC<{
               type="button"
               onClick={onClose}
               aria-label="Xidh warbixinta nashqadda"
-              className="min-h-[30px] min-w-[30px] rounded-lg hover:bg-[#0B1220] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
+              className="min-h-[28px] min-w-[28px] rounded-lg hover:bg-[#0B1220] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -137,7 +149,7 @@ export const NashqadSummaryCard: React.FC<{
               type="button"
               onClick={() => setCollapsed((p) => !p)}
               aria-label={collapsed ? 'Fur kaarka tirooyinka' : 'Yaree kaarka tirooyinka'}
-              className="min-h-[30px] min-w-[30px] rounded-lg hover:bg-[#0B1220] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
+              className="min-h-[28px] min-w-[28px] rounded-lg hover:bg-[#0B1220] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
             >
               {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
             </button>
@@ -146,43 +158,53 @@ export const NashqadSummaryCard: React.FC<{
       </div>
 
       {!collapsed && (
-        <div className="p-3 space-y-2.5 text-xs">
-          {/* 4 Core KPI Metrics */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-2 text-xs">
+          {/* Core KPI Metrics with explicit Boundary vs Plots Area labels (E10) */}
           <div className="grid grid-cols-2 gap-2 tabular-nums">
-            <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] px-2.5 py-2">
-              <div className="text-[10.5px] text-[#94A3B8]">Blocks</div>
-              <div className="text-sm font-extrabold text-[#38BDF8] mt-0.5">
+            <div className="rounded-xl bg-[#111b2e] border border-[#223250] px-2.5 py-2">
+              <div className="text-[10.5px] text-[#a9b8d0]">Blocks</div>
+              <div className="text-sm font-extrabold text-[#38bdf8] mt-0.5">
                 {summary.blocksCount.toLocaleString()}
               </div>
             </div>
 
-            <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] px-2.5 py-2">
-              <div className="text-[10.5px] text-[#94A3B8] flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-xs bg-[#10B981] shrink-0" />
-                <span>Plots dhammaystiran</span>
+            <div className="rounded-xl bg-[#111b2e] border border-[#223250] px-2.5 py-2">
+              <div className="text-[10.5px] text-[#a9b8d0] flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#22c55e] shrink-0" />
+                <span>Plots Buuxa</span>
               </div>
-              <div className="text-sm font-extrabold text-[#10B981] mt-0.5">
+              <div className="text-sm font-extrabold text-[#22c55e] mt-0.5">
                 {summary.fullPlotsCount.toLocaleString()}
               </div>
             </div>
 
-            <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] px-2.5 py-2">
-              <div className="text-[10.5px] text-[#94A3B8] flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-xs bg-[#F59E0B] shrink-0" />
-                <span>Half plots</span>
+            <div className="rounded-xl bg-[#111b2e] border border-[#223250] px-2.5 py-2">
+              <div className="text-[10.5px] text-[#a9b8d0] flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-xs bg-[#facc15] shrink-0" />
+                <span>Plots Nus ah (Half)</span>
               </div>
-              <div className="text-sm font-extrabold text-[#F59E0B] mt-0.5">
+              <div className="text-sm font-extrabold text-[#facc15] mt-0.5">
                 {summary.halfPlotsCount.toLocaleString()}
               </div>
             </div>
 
-            <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] px-2.5 py-2">
-              <div className="text-[10.5px] text-[#94A3B8]">Wadarta m²</div>
-              <div className="text-sm font-extrabold text-[#F8FAFC] mt-0.5">
+            <div className="rounded-xl bg-[#111b2e] border border-[#223250] px-2.5 py-2">
+              <div className="text-[10.5px] text-[#a9b8d0]">Wadarta Bedka Plots-ka</div>
+              <div className="text-sm font-extrabold text-[#e8eef7] mt-0.5">
                 {Math.round(summary.totalPlotsAreaSqM).toLocaleString()} m²
               </div>
             </div>
           </div>
+
+          {summary.boundaryAreaSqM > 0 && (
+            <div className="rounded-xl bg-[#111b2e]/90 border border-[#223250] px-2.5 py-1.5 flex items-center justify-between gap-2 text-[11px] tabular-nums">
+              <span className="text-[#a9b8d0]">Bedka Xuduudka Beerta:</span>
+              <strong className="text-[#e8eef7]">
+                {Math.round(summary.boundaryAreaSqM).toLocaleString()} m² (
+                {(summary.boundaryAreaSqM / 10000).toFixed(2)} ha)
+              </strong>
+            </div>
+          )}
 
           {/* Bearing Degree Line when generated via "Samee nashqad" */}
           {summary.widthBearingDeg !== undefined && (
@@ -192,6 +214,14 @@ export const NashqadSummaryCard: React.FC<{
                 {summary.widthBearingDeg}° · {formatCompassDirectionSomali(summary.widthBearingDeg)}
               </strong>
             </div>
+          )}
+
+          {/* Sample Block Independent Dherer & Ballac + Manual Bearing Degree Control */}
+          {sampleAlign && onAlignToSampleBlock && (
+            <SampleBlockAxisControlCard
+              alignment={sampleAlign}
+              onAlign={(opts) => onAlignToSampleBlock(opts)}
+            />
           )}
 
           {/* 90×48m Standard Rule Summary Line */}
@@ -248,13 +278,20 @@ const COMPASS_BEARING_PRESETS: { label: string; deg: number }[] = [
 
 export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
   subdivisionState,
+  hidden = false,
   onApplyNashqadState,
   onNotify,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState<'none' | 'samee_nashqad' | 'soo_geli_nashqad'>(
-    'none'
-  );
+  const [activeModal, setActiveModal] = useState<
+    'none' | 'samee_nashqad' | 'soo_geli_nashqad' | 'sahanka_ai'
+  >('none');
+
+  useEffect(() => {
+    if (hidden) {
+      setIsMenuOpen(false);
+    }
+  }, [hidden]);
 
   // --- Modal 1 ("Samee nashqad") State ---
   const pairGeoJsonInputRef = useRef<HTMLInputElement | null>(null);
@@ -277,11 +314,31 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
   const [blockWidthM, setBlockWidthM] = useState<string>('48');
   const [blockLengthM, setBlockLengthM] = useState<string>('90');
   const [widthBearingDeg, setWidthBearingDeg] = useState<string>('90');
+  const [lengthBearingDeg, setLengthBearingDeg] = useState<string>('');
   const [userEditedBearing, setUserEditedBearing] = useState<boolean>(false);
   const [plotWidthM, setPlotWidthM] = useState<string>('18');
   const [plotDepthM, setPlotDepthM] = useState<string>('24');
   const [roadWidthM, setRoadWidthM] = useState<string>('15');
+  const [matchExactSampleOnCreate, setMatchExactSampleOnCreate] = useState<boolean>(false);
   const [sameeError, setSameeError] = useState<string | null>(null);
+
+  const detectedSampleMetrics = React.useMemo(() => {
+    if (sampleBlockFileData) {
+      return inspectSampleBlockMetricsFromGeoJson(
+        sampleBlockFileData.fileText,
+        sampleBlockFileData.fileName,
+        boundaryFileData?.fileText,
+        boundaryFileData?.fileName
+      );
+    }
+    if (boundaryFileData && boundaryFileData.polygonCount >= 2) {
+      return inspectSampleBlockMetricsFromGeoJson(
+        boundaryFileData.fileText,
+        boundaryFileData.fileName
+      );
+    }
+    return null;
+  }, [sampleBlockFileData, boundaryFileData]);
 
   // --- Modal 2 ("Soo geli nashqad beer" — supports 2, 3, or 20+ GeoJSON files at once) State ---
   const multiBeerInputRef = useRef<HTMLInputElement | null>(null);
@@ -318,16 +375,24 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
     setActiveModal('soo_geli_nashqad');
   };
 
+  const handleOpenSahankaAi = () => {
+    setIsMenuOpen(false);
+    setActiveModal('sahanka_ai');
+  };
+
   const executeAutoSampleGeoJsonSubdivision = (
     bnd: { fileName: string; fileText: string },
-    smp?: { fileName: string; fileText: string } | null
+    smp?: { fileName: string; fileText: string } | null,
+    forceExactOverride?: boolean
   ): boolean => {
+    const useExact = forceExactOverride ?? matchExactSampleOnCreate;
     const res = runSameeNashqadWorkflow({
       boundaryFileName: bnd.fileName,
       boundaryFileText: bnd.fileText,
       sampleBlockMode: 'file',
       sampleBlockFileName: smp?.fileName,
       sampleBlockFileText: smp?.fileText,
+      matchExactSampleBlock: useExact,
       previousState: subdivisionState,
     });
 
@@ -338,10 +403,17 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
 
     onApplyNashqadState(res.nextState, res.summary);
     setActiveModal('none');
-    const is90x48 = Math.round(res.summary.standardPlotAreaSqM) === 432;
+    const is90x48 = Math.round(res.summary.standardPlotAreaSqM) === 432 && !useExact;
+    const alignInfo = res.summary.sampleBlockAlignment;
     onNotify(
-      is90x48 ? 'Nashqad 90×48 m Waa Diyaar' : 'Nashqad Cusub Waa Diyaar',
-      is90x48
+      useExact
+        ? 'Blocks-ka Waa La Waafajiyey Block Tusaale'
+        : is90x48
+        ? 'Nashqad 90×48 m Waa Diyaar'
+        : 'Nashqad Cusub Waa Diyaar',
+      useExact && alignInfo
+        ? `Dherer ${alignInfo.appliedLengthM}m × Ballac ${alignInfo.appliedWidthM}m · Bearing ${alignInfo.appliedWidthBearingDeg}° · ${res.summary.blocksCount} Block · ${res.summary.fullPlotsCount} Plot.`
+        : is90x48
         ? `Waddo 15m (4 dhinac) · ${res.summary.blocksCount} Block · ${res.summary.fullPlotsCount} Plot (18×24m) · ${res.summary.halfPlotsCount} Half plot (18×12m & 9×24m) · ${Math.round(res.summary.totalPlotsAreaSqM).toLocaleString()} m².`
         : `Bearing ${res.summary.widthBearingDeg ?? 0}° · ${res.summary.blocksCount} Block · ${res.summary.fullPlotsCount} Plot dhammaystiran · ${res.summary.halfPlotsCount} Half plot (${Math.round(res.summary.totalPlotsAreaSqM).toLocaleString()} m²).`
     );
@@ -558,6 +630,13 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
       return;
     }
 
+    const parsedLengthBearing =
+      lengthBearingDeg.trim() !== '' ? parseFloat(lengthBearingDeg) : undefined;
+    if (parsedLengthBearing !== undefined && !Number.isFinite(parsedLengthBearing)) {
+      setSameeError('Fadlan geli Bearing-ka Dhererka oo tiro sax ah (0° ilaa 360°).');
+      return;
+    }
+
     const res = runSameeNashqadWorkflow({
       boundaryFileName: boundaryFileData.fileName,
       boundaryFileText: boundaryFileData.fileText,
@@ -565,6 +644,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
       blockWidthM: parseFloat(blockWidthM),
       blockLengthM: parseFloat(blockLengthM),
       widthBearingDeg: parsedBearing,
+      lengthBearingDeg: parsedLengthBearing,
       plotWidthM: parseFloat(plotWidthM),
       plotDepthM: parseFloat(plotDepthM),
       roadWidthM: parseFloat(roadWidthM),
@@ -687,88 +767,121 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
   return (
     <>
       {/* Backdrop when "+" menu is open so outside tap closes it */}
-      {isMenuOpen && (
+      {!hidden && isMenuOpen && (
         <div
-          className="fixed inset-0 z-[1040] bg-black/25"
+          className="fixed inset-0 z-[1040] bg-black/35"
           onClick={() => setIsMenuOpen(false)}
           aria-hidden="true"
         />
       )}
 
-      {/* BOTTOM-CENTER CIRCULAR "+" FLOATING ACTION BUTTON (SOLE UPLOAD ENTRY POINT) */}
-      <div className="fixed bottom-[76px] lg:bottom-5 left-1/2 -translate-x-1/2 z-[1050] flex flex-col items-center">
-        {/* Upward Popover Menu: ONLY TWO CHOICES */}
-        {isMenuOpen && (
-          <div
-            role="menu"
-            aria-label="Xulashooyinka nashqadda beerta"
-            className="mb-3 w-64 rounded-2xl bg-[#0B1220] border border-[#243449] shadow-2xl p-1.5 space-y-1 text-[#F8FAFC]"
+      {/* BOTTOM-CENTER CIRCULAR "+" FLOATING ACTION BUTTON — auto-hidden when sheets/drawers/modals open (E2 & E18) */}
+      {(!hidden || activeModal !== 'none') && !hidden && (
+        <div className="fixed bottom-[76px] lg:bottom-5 left-1/2 -translate-x-1/2 z-[1050] flex flex-col items-center">
+          {/* Upward Popover Menu with clear Somali action titles + 1-line helper subtitles (E18) */}
+          {isMenuOpen && (
+            <div
+              role="menu"
+              aria-label="Xulashooyinka nashqadda beerta"
+              className="mb-3 w-72 sm:w-80 rounded-2xl bg-[#0a1220] border border-[#223250] shadow-2xl p-2 space-y-1.5 text-[#e8eef7]"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleOpenSameeNashqad}
+                className="w-full min-h-[56px] px-3.5 py-2.5 rounded-xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e]/70 flex items-center gap-3 text-left transition-colors cursor-pointer"
+              >
+                <span className="w-9 h-9 rounded-xl bg-[#22c55e]/15 border border-[#22c55e]/35 text-[#22c55e] flex items-center justify-center shrink-0">
+                  <Grid className="w-4 h-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-extrabold text-[#e8eef7]">
+                    Samee nashqad cusub
+                  </span>
+                  <span className="block text-[11px] text-[#a9b8d0] leading-snug mt-0.5">
+                    Ka dhis xuduudka beerta blocks 90×48m &amp; plots
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleOpenSooGeliNashqad}
+                className="w-full min-h-[56px] px-3.5 py-2.5 rounded-xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#38bdf8]/70 flex items-center gap-3 text-left transition-colors cursor-pointer"
+              >
+                <span className="w-9 h-9 rounded-xl bg-[#38bdf8]/15 border border-[#38bdf8]/35 text-[#38bdf8] flex items-center justify-center shrink-0">
+                  <FolderOpen className="w-4 h-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-extrabold text-[#e8eef7]">
+                    Soo geli faylal GIS
+                  </span>
+                  <span className="block text-[11px] text-[#a9b8d0] leading-snug mt-0.5">
+                    Fur GeoJSON, KML ama KMZ diyaarsan
+                  </span>
+                </span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleOpenSahankaAi}
+                className="w-full min-h-[56px] px-3.5 py-2.5 rounded-xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-amber-400/70 flex items-center gap-3 text-left transition-colors cursor-pointer"
+              >
+                <span className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/35 text-amber-300 flex items-center justify-center shrink-0">
+                  <Compass className="w-4 h-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xs font-extrabold text-[#e8eef7]">
+                    Sahanka AI (10 sano &amp; 15m)
+                  </span>
+                  <span className="block text-[11px] text-[#a9b8d0] leading-snug mt-0.5">
+                    Dooxyada 10 sano, Heerarka 1–3 &amp; hubinta 90×48m
+                  </span>
+                </span>
+              </button>
+            </div>
+          )}
+
+          {/* Circular "+" Button that rotates 45° into "×" */}
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen((prev) => !prev)}
+            aria-expanded={isMenuOpen}
+            aria-label={isMenuOpen ? 'Xidh liiska nashqadda' : 'Fur liiska nashqadda iyo soo-gelinta'}
+            className="w-14 h-14 rounded-full bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] shadow-2xl border-2 border-[#0a1220] flex items-center justify-center transition-colors cursor-pointer"
           >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleOpenSameeNashqad}
-              className="w-full min-h-[46px] px-3.5 py-2.5 rounded-xl bg-[#0F1B2D] hover:bg-[#16263D] border border-transparent hover:border-[#22C55E]/60 flex items-center gap-3 text-left transition-colors cursor-pointer"
-            >
-              <span className="w-8 h-8 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/35 text-[#22C55E] flex items-center justify-center shrink-0">
-                <Grid className="w-4 h-4" />
-              </span>
-              <span className="text-xs font-extrabold text-[#F8FAFC]">Samee nashqad</span>
-            </button>
-
-            <button
-              type="button"
-              role="menuitem"
-              onClick={handleOpenSooGeliNashqad}
-              className="w-full min-h-[46px] px-3.5 py-2.5 rounded-xl bg-[#0F1B2D] hover:bg-[#16263D] border border-transparent hover:border-[#38BDF8]/60 flex items-center gap-3 text-left transition-colors cursor-pointer"
-            >
-              <span className="w-8 h-8 rounded-lg bg-[#38BDF8]/15 border border-[#38BDF8]/35 text-[#38BDF8] flex items-center justify-center shrink-0">
-                <FolderOpen className="w-4 h-4" />
-              </span>
-              <span className="text-xs font-extrabold text-[#F8FAFC]">
-                Soo geli nashqad beer
-              </span>
-            </button>
-          </div>
-        )}
-
-        {/* Circular "+" Button that rotates 45° into "×" */}
-        <button
-          type="button"
-          onClick={() => setIsMenuOpen((prev) => !prev)}
-          aria-expanded={isMenuOpen}
-          aria-label={isMenuOpen ? 'Xidh liiska' : 'Fur liiska nashqadda'}
-          className="w-14 h-14 rounded-full bg-[#22C55E] hover:bg-[#16A34A] text-[#030712] shadow-2xl border-2 border-[#0B1220] flex items-center justify-center transition-colors cursor-pointer"
-        >
-          <Plus
-            className={`w-7 h-7 stroke-[2.75] transition-transform duration-200 ${
-              isMenuOpen ? 'rotate-45' : 'rotate-0'
-            }`}
-          />
-        </button>
-      </div>
+            <Plus
+              className={`w-7 h-7 stroke-[2.75] transition-transform duration-200 ${
+                isMenuOpen ? 'rotate-45' : 'rotate-0'
+              }`}
+            />
+          </button>
+        </div>
+      )}
 
       {/* ========================================================================== */}
       {/* MODAL 1: "Samee nashqad" (with Bearing Degree in BOTH block modes!)        */}
       {/* ========================================================================== */}
       {activeModal === 'samee_nashqad' && (
         <div
-          className="fixed inset-0 z-[1100] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1100] bg-black/75 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4"
           onClick={() => setActiveModal('none')}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-[#0B1220] border border-[#243449] shadow-2xl text-[#F8FAFC] overflow-hidden max-h-[92vh] flex flex-col"
+            className="w-full max-w-md rounded-2xl bg-[#0B1220] border border-[#243449] shadow-2xl text-[#F8FAFC] overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[85dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/35 text-[#22C55E] flex items-center justify-center shrink-0">
+            <div className="px-3.5 py-2.5 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-8 h-8 rounded-xl bg-[#22C55E]/15 border border-[#22C55E]/35 text-[#22C55E] flex items-center justify-center shrink-0">
                   <Grid className="w-4 h-4" />
                 </span>
-                <div>
-                  <h2 className="text-sm font-extrabold text-[#F8FAFC]">Samee nashqad</h2>
-                  <p className="text-[11px] text-[#94A3B8]">
-                    Si toos ah uga dhis blocks, plots dhammaystiran iyo half plots gudaha xuduudka
+                <div className="min-w-0">
+                  <h2 className="text-sm font-extrabold text-[#F8FAFC] truncate">Samee nashqad</h2>
+                  <p className="text-[10.5px] text-[#94A3B8] truncate">
+                    Ka dhis blocks, plots buuxa &amp; half plots gudaha xuduudka
                   </p>
                 </div>
               </div>
@@ -776,7 +889,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                 type="button"
                 onClick={() => setActiveModal('none')}
                 aria-label="Xidh daaqadda"
-                className="min-h-[38px] min-w-[38px] rounded-xl hover:bg-[#0B1220] text-[#94A3B8] hover:text-[#F8FAFC] flex items-center justify-center cursor-pointer"
+                className="h-8 w-8 rounded-xl hover:bg-[#0B1220] text-[#94A3B8] hover:text-[#F8FAFC] flex items-center justify-center cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -784,7 +897,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
 
             <form
               onSubmit={handleSubmitSameeNashqad}
-              className="p-5 space-y-4 overflow-y-auto text-xs"
+              className="flex-1 min-h-0 p-3.5 space-y-3 overflow-y-auto overscroll-contain text-xs"
             >
               {/* Hidden inputs with value reset on click & change (Android APK GeoJSON + KML + KMZ safe) */}
               <input
@@ -912,6 +1025,58 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                     </button>
                   </div>
 
+                  {/* Exact Sample Block Alignment Option (Bearing, Dherer & Ballac) */}
+                  <label className="flex items-start gap-2.5 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#22C55E]/60 px-3 py-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={matchExactSampleOnCreate}
+                      onChange={(e) => setMatchExactSampleOnCreate(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded accent-[#22C55E] shrink-0 cursor-pointer"
+                    />
+                    <div className="min-w-0 text-[11px] leading-snug">
+                      <div className="font-bold text-[#F8FAFC]">
+                        Waafaji Blocks-ka oo dhan Block-ga Tusaalaha (Bearing, Dherer &amp; Ballac)
+                      </div>
+                      <div className="text-[#94A3B8] mt-0.5">
+                        Blocks-ka la dhisayo oo dhan waxay yeelanayaan isla xagasha (bearing), dhererka iyo ballaca block-ga tusaalaha ah.
+                      </div>
+                      {detectedSampleMetrics && (
+                        <div className="mt-1 font-bold text-[#38BDF8] tabular-nums">
+                          Block Tusaale: Dherer {detectedSampleMetrics.lengthM}m ({detectedSampleMetrics.lengthBearingDeg}°) × Ballac{' '}
+                          {detectedSampleMetrics.widthM}m ({detectedSampleMetrics.widthBearingDeg}°)
+                        </div>
+                      )}
+                    </div>
+                  </label>
+
+                  {/* Quick align button if a sample block is already loaded in state */}
+                  {(subdivisionState.prebuiltSubdivision?.sampleBlockAlignment ||
+                    subdivisionState.sampleCandidates.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const aligned = alignAllBlocksToSampleBlock(subdivisionState, {
+                          exactDimensions: true,
+                          swapAxes: false,
+                        });
+                        if (!aligned.ok) {
+                          setSameeError(aligned.errorSomali);
+                          return;
+                        }
+                        onApplyNashqadState(aligned.nextState, aligned.summary);
+                        setActiveModal('none');
+                        onNotify(
+                          'Blocks-ka Waa La Waafajiyey',
+                          `Dhammaan blocks-ka beerta waxaa lagu waafajiyey bearing-ka, dhererka iyo ballaca block-ga tusaalaha ah.`
+                        );
+                      }}
+                      className="w-full min-h-[40px] rounded-xl bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 border border-[#38BDF8]/50 px-3 py-2 text-[11px] font-extrabold text-[#38BDF8] flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Compass className="w-3.5 h-3.5 shrink-0" />
+                      <span>Waafaji Blocks-ka Hadda Furan Block-ga Tusaalaha</span>
+                    </button>
+                  )}
+
                   {/* Automatic 90×48m Rule Explanation — Zero Extra Inputs Needed */}
                   <div className="rounded-xl bg-[#0F1B2D]/85 border border-[#243449] px-3.5 py-2.5 space-y-1 text-[11px] text-[#94A3B8] leading-relaxed">
                     <div className="font-bold text-[#22C55E]">
@@ -958,9 +1123,26 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
 
                   {/* 2) Cabbirka Block-ga & Bearing-ka Jihada Ballaca */}
                   <div className="space-y-2.5">
-                    <label className="block font-bold text-[#F8FAFC]">
-                      2. Cabbirka Block-ga &amp; Bearing-ka Jihada Ballaca
-                    </label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="block font-bold text-[#F8FAFC]">
+                        2. Cabbirka Block-ga &amp; Bearing-ka Jihada Ballaca
+                      </label>
+                      {detectedSampleMetrics && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBlockLengthM(String(detectedSampleMetrics.lengthM));
+                            setBlockWidthM(String(detectedSampleMetrics.widthM));
+                            setWidthBearingDeg(String(detectedSampleMetrics.widthBearingDeg));
+                            setLengthBearingDeg(String(detectedSampleMetrics.lengthBearingDeg));
+                            setUserEditedBearing(false);
+                          }}
+                          className="min-h-[26px] px-2 py-0.5 rounded-lg bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 border border-[#38BDF8]/45 text-[10.5px] font-bold text-[#38BDF8] shrink-0 cursor-pointer"
+                        >
+                          Waafaji Block Tusaale
+                        </button>
+                      )}
+                    </div>
 
                     <div className="grid grid-cols-2 gap-2.5">
                       <div>
@@ -1092,6 +1274,27 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                         </div>
                       </div>
 
+                      {/* Optional Independent Bearing for Dhererka (keeps Dherer & Ballac independently seatable) */}
+                      <div className="pt-1.5 border-t border-[#243449]/70 flex items-center justify-between gap-2">
+                        <label
+                          htmlFor="samee-length-bearing"
+                          className="text-[10.5px] font-bold text-[#CBD5E1] min-w-0 truncate"
+                        >
+                          Bearing-ka Dhererka (°) <span className="text-[#94A3B8] font-normal">(gooni u fadhiisi):</span>
+                        </label>
+                        <input
+                          id="samee-length-bearing"
+                          type="number"
+                          min={0}
+                          max={360}
+                          step="any"
+                          placeholder={`${(((liveBearingNum + 90) % 180) + 180) % 180}° (toos)`}
+                          value={lengthBearingDeg}
+                          onChange={(e) => setLengthBearingDeg(e.target.value)}
+                          className="w-28 min-h-[32px] rounded-lg bg-[#0B1220] border border-[#243449] focus:border-[#22C55E] px-2 py-0.5 text-[11px] font-bold text-[#F8FAFC] tabular-nums focus:outline-none shrink-0"
+                        />
+                      </div>
+
                       <div className="flex flex-wrap items-center gap-1 pt-0.5">
                         {COMPASS_BEARING_PRESETS.map((preset) => {
                           const isPresetActive = Math.abs(liveBearingNum - preset.deg) < 0.05;
@@ -1207,22 +1410,22 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
       {/* ========================================================================== */}
       {activeModal === 'soo_geli_nashqad' && (
         <div
-          className="fixed inset-0 z-[1100] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[1100] bg-black/75 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4"
           onClick={() => setActiveModal('none')}
         >
           <div
-            className="w-full max-w-lg rounded-2xl bg-[#0B1220] border border-[#243449] shadow-2xl text-[#F8FAFC] overflow-hidden max-h-[92vh] flex flex-col"
+            className="w-full max-w-md rounded-2xl bg-[#0B1220] border border-[#243449] shadow-2xl text-[#F8FAFC] overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[85dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-xl bg-[#38BDF8]/15 border border-[#38BDF8]/35 text-[#38BDF8] flex items-center justify-center shrink-0">
+            <div className="px-3.5 py-2.5 bg-[#0F1B2D] border-b border-[#243449] flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-8 h-8 rounded-xl bg-[#38BDF8]/15 border border-[#38BDF8]/35 text-[#38BDF8] flex items-center justify-center shrink-0">
                   <FolderOpen className="w-4 h-4" />
                 </span>
-                <div>
-                  <h2 className="text-sm font-extrabold text-[#F8FAFC]">Soo geli nashqad beer</h2>
-                  <p className="text-[11px] text-[#94A3B8]">
-                    Hal mar wada dooro faylal GeoJSON ama KML/KMZ ah (xuduud, blocks, plots, dooxyada iwm.)
+                <div className="min-w-0">
+                  <h2 className="text-sm font-extrabold text-[#F8FAFC] truncate">Soo geli nashqad beer</h2>
+                  <p className="text-[10.5px] text-[#94A3B8] truncate">
+                    Dooro faylal GeoJSON ama KML/KMZ ah (xuduud, blocks, plots)
                   </p>
                 </div>
               </div>
@@ -1230,13 +1433,13 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
                 type="button"
                 onClick={() => setActiveModal('none')}
                 aria-label="Xidh daaqadda"
-                className="min-h-[38px] min-w-[38px] rounded-xl hover:bg-[#0B1220] text-[#94A3B8] hover:text-[#F8FAFC] flex items-center justify-center cursor-pointer"
+                className="h-8 w-8 rounded-xl hover:bg-[#0B1220] text-[#94A3B8] hover:text-[#F8FAFC] flex items-center justify-center cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+            <div className="flex-1 min-h-0 p-3.5 space-y-3 overflow-y-auto overscroll-contain text-xs">
               <input
                 ref={multiBeerInputRef}
                 type="file"
@@ -1362,6 +1565,15 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {activeModal === 'sahanka_ai' && (
+        <SahankaAiModal
+          subdivisionState={subdivisionState}
+          onClose={() => setActiveModal('none')}
+          onApplyNashqadState={onApplyNashqadState}
+          onNotify={onNotify}
+        />
       )}
     </>
   );

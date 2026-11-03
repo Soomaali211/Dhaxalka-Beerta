@@ -36,6 +36,9 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Diyaari Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Aqbal Shatiyada Android SDK (SDK Licenses)
         run: |
           set +o pipefail
@@ -66,8 +69,8 @@ jobs:
         env:
           RUN_NUM: ${{ github.run_number }}
         run: |
-          export APP_VERSION_CODE=$((300 + RUN_NUM))
-          export APP_VERSION_NAME="1.3.${RUN_NUM}"
+          export APP_VERSION_CODE=$((400 + RUN_NUM))
+          export APP_VERSION_NAME="1.4.${RUN_NUM}"
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
           ./gradlew assembleRelease -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" --no-daemon
@@ -91,20 +94,20 @@ jobs:
           cp /tmp/Beerta-iyo-Dhaxalka.apk ./Beerta-iyo-Dhaxalka.apk
           git add -f Beerta-iyo-Dhaxalka.apk
           if ! git diff --staged --quiet; then
-            git commit -m "chore(apk): cusboonaysii Beerta-iyo-Dhaxalka.apk v1.3.${{ github.run_number }} [skip ci]"
+            git commit -m "chore(apk): cusboonaysii Beerta-iyo-Dhaxalka.apk v1.4.${{ github.run_number }} [skip ci]"
             git push origin "HEAD:${{ github.ref_name }}" || echo "::warning::Branch push skipped"
           fi
 
       - name: Soo dhig Faylka Tooska ah ee Beerta-iyo-Dhaxalka.apk qaybta GitHub Releases (Latest)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.3.${{ github.run_number }}
-          name: "Beerta & Dhaxalka — Nooca v1.3.${{ github.run_number }} (APK)"
+          tag_name: v1.4.${{ github.run_number }}
+          name: "Beerta & Dhaxalka — Nooca v1.4.${{ github.run_number }} (APK)"
           overwrite_files: true
           body: |
-            ### Beerta & Dhaxalka — Android APK (`v1.3.${{ github.run_number }}`)
+            ### Beerta & Dhaxalka — Android APK (`v1.4.${{ github.run_number }}`)
             - **Soo Dejinta Tooska ah:** Hoos ka taabo **`Beerta-iyo-Dhaxalka.apk`** (ama toos uga soo dejiso qaybta **`<> Code`** ee bogga hore ee Repo-ga) si aad u rakibto (**Install** ama **Update**).
-            - **Waxa Cusub (v1.3):** Soo gelinta `.geojson` & `.kml`/`.kmz` ee APK-ga, Google Sign-In & Kaydinta Google Drive, Toggle-ka Half-Plots (`Ku Dar` / `Ka Reeb`), iyo Preview Weyn oo Khariidadda Dhaxalka ah.
+            - **Waxa Cusub (v1.4 — Falanqaynta UI/UX E1–E18):** 4 Tab oo hoose (`Khariidad · Xisaabi · Xogta · Soo saar`), Bottom-Sheets moobilka, Hal Isha Xisaabeed oo midaysan (Xuduudka, Plots-ka & Half Plots), Khariidad ballaadhan (≥70%), Stepper-ka 3-da tallaabo, iyo habaynta PDF-ka oo la fududeeyey (`Bog · Cabir · Legend · Cinwaan`).
             - **Xogtaadu way badbaadaysaa:** Haddii nooc hore telefoonka kuugu jiray, toos u taabo **Update** — kiisaskaaga iyo khariidadaha kaydsan ma tirmayaan.
           files: Beerta-iyo-Dhaxalka.apk
           make_latest: true
@@ -112,6 +115,6 @@ jobs:
       - name: Kaydi Nuqulka APK qaybta Actions Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Beerta-iyo-Dhaxalka-v1.3.${{ github.run_number }}-APK
+          name: Beerta-iyo-Dhaxalka-v1.4.${{ github.run_number }}-APK
           path: Beerta-iyo-Dhaxalka.apk
           if-no-files-found: error

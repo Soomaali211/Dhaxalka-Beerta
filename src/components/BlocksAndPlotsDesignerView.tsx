@@ -64,6 +64,7 @@ import {
 import { CartographicPdfDocMode } from './FarmCartographicPdfModal';
 import {
   AlertTriangle,
+  ArrowLeftRight,
   Ban,
   Check,
   CheckCircle2,
@@ -108,9 +109,11 @@ import {
   resolveNearestCityConnectingRoad,
 } from '../utils/demAndRoadTierEngine';
 import {
+  alignAllBlocksToSampleBlock,
   buildPlotsGeoJsonClipboardText,
   copyTextSafelyToClipboard,
 } from '../utils/nashqadWorkflowEngine';
+import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
 
 interface BlocksAndPlotsDesignerViewProps {
   subdivisionState: LandSubdivisionState;
@@ -1396,6 +1399,27 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
               </div>
             )}
 
+            {/* Sample Block Independent Dherer & Ballac + Manual Bearing Degree Card (Prebuilt & Parametric CAD) */}
+            {(() => {
+              const sampleAlign =
+                subdivisionResult?.sampleBlockAlignment ||
+                subdivisionState.prebuiltSubdivision?.sampleBlockAlignment ||
+                subdivisionState.nashqadSummary?.sampleBlockAlignment ||
+                null;
+              if (!sampleAlign) return null;
+              return (
+                <SampleBlockAxisControlCard
+                  alignment={sampleAlign}
+                  onAlign={(opts) => {
+                    onUpdateSubdivisionState((prev) => {
+                      const res = alignAllBlocksToSampleBlock(prev, opts);
+                      return res.ok ? res.nextState : prev;
+                    });
+                  }}
+                />
+              );
+            })()}
+
             {onBackToInteractiveMap && (
               <button
                 type="button"
@@ -2491,57 +2515,66 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
 
           {/* INTERACTIVE CAD / GIS MAP CARD */}
           <section className="bg-[#0B1220] border border-[#243449] rounded-2xl overflow-hidden">
-            {/* Map Primary Controls Row (Scrollable horizontal strips on mobile for zero wrapping clutter) */}
-            <div className="px-3 sm:px-4 py-3 border-b border-[#243449] flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-[#0F1B2D]/70">
-              {/* Color Mode Toggle: Heirs vs Zones vs Tiers vs Excluded vs Half Plots */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+            {/* Map Primary Controls Row: Compact Icon-Only Toolbars + Active Tool Label */}
+            <div className="px-3 py-2 border-b border-[#243449] flex flex-wrap items-center justify-between gap-2 bg-[#0F1B2D]/70">
+              {/* Color Mode Icons: Heirs | Zones | Tiers | Excluded | Half Plots */}
+              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#030712]/65 border border-[#243449]">
                 <button
                   type="button"
                   onClick={() => setMapColorMode('heirs')}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Midabka: Dhaxlayaasha"
+                  aria-label="Midabka: Dhaxlayaasha"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
                     mapColorMode === 'heirs'
                       ? 'bg-[#10B981] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5 shrink-0" />
-                  <span>Dhaxlayaasha</span>
+                  <Users className="w-4 h-4 shrink-0" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setMapColorMode('zones')}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Midabka: Zones (A–D)"
+                  aria-label="Midabka: Zones (A–D)"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
                     mapColorMode === 'zones'
                       ? 'bg-[#10B981] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <Compass className="w-3.5 h-3.5 shrink-0" />
-                  <span>Zones (A–D)</span>
+                  <Compass className="w-4 h-4 shrink-0" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setMapColorMode('tiers')}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Midabka: Heerka (H1–H3)"
+                  aria-label="Midabka: Heerka (H1–H3)"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
                     mapColorMode === 'tiers'
                       ? 'bg-[#10B981] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <Layers className="w-3.5 h-3.5 shrink-0" />
-                  <span>Heerka (H1–H3)</span>
+                  <Layers className="w-4 h-4 shrink-0" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setMapColorMode('excluded')}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  title={`Midabka: Laga Reebay (${fairAllocation?.excludedPlotsCount ?? 0})`}
+                  aria-label={`Midabka: Laga Reebay (${fairAllocation?.excludedPlotsCount ?? 0})`}
+                  className={`relative h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
                     mapColorMode === 'excluded'
                       ? 'bg-rose-600 text-white'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <Ban className="w-3.5 h-3.5 shrink-0" />
-                  <span>Laga Reebay ({fairAllocation?.excludedPlotsCount ?? 0})</span>
+                  <Ban className="w-4 h-4 shrink-0" />
+                  {(fairAllocation?.excludedPlotsCount ?? 0) > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-md bg-rose-500 text-white text-[9px] font-black leading-4 text-center tabular-nums">
+                      {fairAllocation?.excludedPlotsCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -2549,32 +2582,68 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                     setMapColorMode('half_plots');
                     setInteractionTool('inspect');
                   }}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  title={`Midabka: Half Plots (${subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0})`}
+                  aria-label={`Midabka: Half Plots (${subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0})`}
+                  className={`relative h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
                     mapColorMode === 'half_plots'
                       ? 'bg-[#10B981] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <Grid className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    Half Plots ({subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0})
-                  </span>
+                  <Grid className="w-4 h-4 shrink-0" />
+                  {(subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0) > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-md bg-emerald-500 text-[#030712] text-[9px] font-black leading-4 text-center tabular-nums">
+                      {subdivisionResult?.halfPlotSummary?.validHalfPlotsCount}
+                    </span>
+                  )}
                 </button>
               </div>
 
-              {/* Click Interaction Tool Selector */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+              {/* Active Mode & Tool Compact Status */}
+              <div className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold text-[#94A3B8]">
+                <span className="text-[#F8FAFC]">
+                  {mapColorMode === 'heirs'
+                    ? 'Dhaxlayaasha'
+                    : mapColorMode === 'zones'
+                    ? 'Zones (A–D)'
+                    : mapColorMode === 'tiers'
+                    ? 'Heerka (H1–H3)'
+                    : mapColorMode === 'excluded'
+                    ? 'Laga Reebay'
+                    : 'Half Plots'}
+                </span>
+                <span>·</span>
+                <span className="text-[#10B981]">
+                  {interactionTool === 'inspect'
+                    ? 'Kormeer'
+                    : interactionTool === 'mark_exclusion'
+                    ? 'Ka Reeb Dhaxalka'
+                    : interactionTool === 'mark_zone'
+                    ? 'Calaamadi Zone'
+                    : interactionTool === 'mark_tier'
+                    ? 'Calaamadi Heer'
+                    : 'Qoondayn Gacan'}
+                </span>
+              </div>
+
+              {/* Click Interaction Tool Icons */}
+              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#030712]/65 border border-[#243449]">
                 <button
                   type="button"
                   onClick={() => setInteractionTool('inspect')}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Qalabka: Kormeer Plot-ka"
+                  aria-label="Qalabka: Kormeer Plot-ka"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     interactionTool === 'inspect'
                       ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <MousePointerClick className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
-                  <span>Kormeer</span>
+                  <MousePointerClick
+                    className={`w-4 h-4 shrink-0 ${
+                      interactionTool === 'inspect' ? 'text-[#030712]' : 'text-[#10B981]'
+                    }`}
+                  />
                 </button>
                 <button
                   type="button"
@@ -2582,14 +2651,15 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                     setInteractionTool('mark_exclusion');
                     setMapColorMode('excluded');
                   }}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Qalabka: Ka Reeb Dhaxalka"
+                  aria-label="Qalabka: Ka Reeb Dhaxalka"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     interactionTool === 'mark_exclusion'
                       ? 'bg-rose-600 text-white'
-                      : 'bg-rose-950/30 text-rose-300 hover:bg-rose-950/50 border border-rose-500/35'
+                      : 'text-rose-300 hover:bg-rose-950/50'
                   }`}
                 >
-                  <Ban className="w-3.5 h-3.5 shrink-0" />
-                  <span>Ka Reeb Dhaxalka</span>
+                  <Ban className="w-4 h-4 shrink-0" />
                 </button>
                 <button
                   type="button"
@@ -2597,14 +2667,19 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                     setInteractionTool('mark_zone');
                     setMapColorMode('zones');
                   }}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Qalabka: Calaamadi Zone"
+                  aria-label="Qalabka: Calaamadi Zone"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     interactionTool === 'mark_zone'
                       ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <Compass className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span>Zone</span>
+                  <Compass
+                    className={`w-4 h-4 shrink-0 ${
+                      interactionTool === 'mark_zone' ? 'text-[#030712]' : 'text-sky-400'
+                    }`}
+                  />
                 </button>
                 <button
                   type="button"
@@ -2612,14 +2687,19 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                     setInteractionTool('mark_tier');
                     setMapColorMode('tiers');
                   }}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Qalabka: Calaamadi Heerka"
+                  aria-label="Qalabka: Calaamadi Heerka"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     interactionTool === 'mark_tier'
                       ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <Paintbrush className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
-                  <span>Heerka</span>
+                  <Paintbrush
+                    className={`w-4 h-4 shrink-0 ${
+                      interactionTool === 'mark_tier' ? 'text-[#030712]' : 'text-[#10B981]'
+                    }`}
+                  />
                 </button>
                 <button
                   type="button"
@@ -2627,14 +2707,19 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                     setInteractionTool('assign_heir');
                     setMapColorMode('heirs');
                   }}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+                  title="Qalabka: Qoondayn Gacan"
+                  aria-label="Qalabka: Qoondayn Gacan"
+                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
                     interactionTool === 'assign_heir'
                       ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'bg-[#030712]/60 text-[#94A3B8] hover:text-[#F8FAFC] border border-[#243449]'
+                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
                   }`}
                 >
-                  <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Qoondayn Gacan</span>
+                  <UserCheck
+                    className={`w-4 h-4 shrink-0 ${
+                      interactionTool === 'assign_heir' ? 'text-[#030712]' : 'text-amber-400'
+                    }`}
+                  />
                 </button>
               </div>
             </div>
