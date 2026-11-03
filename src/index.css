@@ -222,3 +222,82 @@
   }
 }
 
+
+
+/* =========================================================
+   RESPONSIVE VIEWPORT GUARDS
+   These rules prevent page-level horizontal overflow without
+   hiding or changing the GIS map's own internal interactions.
+   ========================================================= */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+html,
+body {
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Map controls are positioned inside the map wrapper, never against the page. */
+.gis-leaflet-map.leaflet-container {
+  max-width: 100%;
+}
+
+/* Small Android screens: keep controls usable while preventing viewport spill. */
+@media screen and (max-width: 640px) {
+  .leaflet-control-container {
+    max-width: 100%;
+  }
+
+  .leaflet-control {
+    max-width: calc(100vw - 20px);
+  }
+
+  .leaflet-control-attribution {
+    max-width: calc(100vw - 24px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@supports not (overflow: clip) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+
+@media print {
+  html,
+  body,
+  #root {
+    width: auto !important;
+    max-width: none !important;
+    overflow: visible !important;
+  }
+
+  .overflow-x-clip {
+    overflow-x: visible !important;
+  }
+    }
