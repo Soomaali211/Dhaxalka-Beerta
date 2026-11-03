@@ -36,8 +36,14 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+
       - name: Diyaari Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          cmdline-tools-version: 15859902
+          packages: platform-tools
+          accept-android-sdk-licenses: true
+
 
       - name: Aqbal Shatiyada Android SDK (SDK Licenses)
         run: |
