@@ -3344,7 +3344,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           <button
             type="button"
             onClick={() => setShowHalfPlots((prev) => !prev)}
-            className={`pointer-events-auto absolute bottom-3 left-3 z-25 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold shadow-lg backdrop-blur-md border transition-colors cursor-pointer ${
+            className={`pointer-events-auto absolute top-2.5 right-14 z-25 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold shadow-lg backdrop-blur-md border transition-colors cursor-pointer ${
               showHalfPlots
                 ? 'bg-[#0a1220]/90 border-[#facc15]/60 text-[#facc15] hover:bg-[#111b2e]'
                 : 'bg-[#0a1220]/80 border-[#223250] text-[#a9b8d0] hover:text-[#e8eef7]'

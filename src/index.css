@@ -3,18 +3,27 @@
 
 @layer base {
   :root {
-    /* Official Dark Navy & Emerald-Green Mobile Design Tokens (WCAG AA Verified) */
-    --bg-main: #060d18;
-    --bg-secondary: #0a1220;
-    --bg-card: #111b2e;
+    /* Beerta & Dhaxalka UI/UX v2.0 Design System Tokens (WCAG AA Verified) */
+    --bg-canvas: #0B132B;
+    --bg-app: #0F172A;
+    --bg-nav: #0A1220;
+    --bg-main: #0B132B;
+    --bg-secondary: #0A1220;
+    --bg-card: #111B2E;
+    --surface-card: #111B2E;
+    --surface-sheet: #1E293B;
     --border-subtle: #223250;
-    --accent-emerald: #22c55e;
-    --accent-emerald-hover: #16a34a;
-    --info: #38bdf8;
-    --warning: #facc15;
-    --danger: #f87171;
-    --text-primary: #e8eef7;
-    --text-secondary: #a9b8d0;
+    --accent-primary: #22C55E;
+    --accent-emerald: #10B981;
+    --accent-emerald-hover: #16A34A;
+    --highlight: #EAB308;
+    --highlight-alt: #F59E0B;
+    --info: #38BDF8;
+    --warning: #EAB308;
+    --danger: #EF4444;
+    --text-primary: #E8EEF7;
+    --text-secondary: #A9B8D0;
+    --text-muted: #A9B8D0;
   }
 
   body {

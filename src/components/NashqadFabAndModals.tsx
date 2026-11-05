@@ -777,7 +777,7 @@ export const NashqadFabAndModals: React.FC<NashqadFabAndModalsProps> = ({
 
       {/* BOTTOM-CENTER CIRCULAR "+" FLOATING ACTION BUTTON — auto-hidden when sheets/drawers/modals open (E2 & E18) */}
       {(!hidden || activeModal !== 'none') && !hidden && (
-        <div className="fixed bottom-[76px] lg:bottom-5 left-1/2 -translate-x-1/2 z-[1050] flex flex-col items-center">
+        <div className="fixed bottom-[84px] lg:bottom-6 left-3.5 z-[1050] flex flex-col items-start">
           {/* Upward Popover Menu with clear Somali action titles + 1-line helper subtitles (E18) */}
           {isMenuOpen && (
             <div
