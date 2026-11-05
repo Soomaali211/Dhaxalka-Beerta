@@ -639,6 +639,14 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         if (!subdivisionResult.isPrebuiltGeometry && rel === 'full_outside') {
           continue;
         }
+        if (
+          !subdivisionResult.isPrebuiltGeometry &&
+          !p.full &&
+          p.halfPlotValidation?.validationStatus &&
+          p.halfPlotValidation.validationStatus !== 'half_plot_valid'
+        ) {
+          continue;
+        }
         if (!seenIds.has(p.id)) {
           seenIds.add(p.id);
           combined.push(p);

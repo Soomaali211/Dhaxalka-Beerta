@@ -1,6 +1,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   Download,
+  Eye,
+  EyeOff,
   FileText,
   Layers,
   Map as MapIcon,
@@ -84,6 +86,7 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
   const [docMode, setDocMode] = useState<CartographicPdfDocMode>(initialMode);
   const [previewZoom, setPreviewZoom] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [showHalfPlotsInPdf, setShowHalfPlotsInPdf] = useState<boolean>(true);
   const [sheetViewportDims, setSheetViewportDims] = useState<{ w: number; h: number }>({
     w: 960,
     h: 760,
@@ -140,13 +143,14 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
     [subdivisionResult, wadiItemsForEngine, prebuiltSubdivision]
   );
 
-  const allPlots = useMemo(
-    () =>
+  const allPlots = useMemo(() => {
+    const base =
       subdivisionResult.allEvaluatedPlots && subdivisionResult.allEvaluatedPlots.length > 0
         ? subdivisionResult.allEvaluatedPlots
-        : subdivisionResult.plots,
-    [subdivisionResult]
-  );
+        : subdivisionResult.plots;
+    if (showHalfPlotsInPdf) return base;
+    return base.filter((p) => p.full);
+  }, [subdivisionResult, showHalfPlotsInPdf]);
 
   // Compute unified UTM bounding box across boundary, plots, and wadis
   const utmExtents = useMemo(() => {
@@ -487,6 +491,20 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
               </button>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowHalfPlotsInPdf((prev) => !prev)}
+            className={`h-9 px-2.5 inline-flex items-center gap-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
+              showHalfPlotsInPdf
+                ? 'border-[#facc15]/60 bg-[#111b2e] text-[#facc15] hover:bg-[#16243d]'
+                : 'border-[#223250] bg-[#111b2e] text-[#a9b8d0] hover:text-[#e8eef7]'
+            }`}
+            title={showHalfPlotsInPdf ? 'Qari Half Plots-ka PDF-ka' : 'Muuji Half Plots-ka PDF-ka'}
+          >
+            {showHalfPlotsInPdf ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">Half: {showHalfPlotsInPdf ? 'Muuqda' : 'Qarsoon'}</span>
+          </button>
 
           <button
             type="button"
