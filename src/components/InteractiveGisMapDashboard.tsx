@@ -5,6 +5,8 @@ import {
   Check,
   CircleDot,
   Compass,
+  Eye,
+  EyeOff,
   FileText,
   Globe,
   Grid,
@@ -477,8 +479,9 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     useKm: true,
   });
 
-  // Search & Filter (inline in single top bar — no duplicate modal)
+  // Search & Filter
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showHalfPlots, setShowHalfPlots] = useState<boolean>(true);
   const [quickPlotFilter, setQuickPlotFilter] = useState<MapQuickPlotFilter>('all');
 
   // Selected plot & bottom sheet
@@ -1100,6 +1103,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     const q = searchQuery.trim().toLowerCase();
 
     return enrichedPlots.filter((p) => {
+      if (!showHalfPlots && p.isPartialQayb) return false;
       if (cartoStyle === 'nashqad') {
         const nk = p.isPartialQayb ? 'half' : 'dhammaystiran';
         if (hiddenNashqadLegendKeys[nk]) return false;
@@ -1140,6 +1144,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     hiddenPdfLegendKeys,
     hiddenTierLegendKeys,
     hiddenHeirKeys,
+    showHalfPlots,
   ]);
 
   const matchingCases = useMemo(() => {
@@ -3241,260 +3246,24 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   const autoSummary = subdivisionState.autoTierSummary;
 
   return (
-    <div className="relative flex w-full min-w-0 max-w-full flex-col gap-1.5 text-[#e8eef7]">
-      {/* 1. COMPACT 1-ROW UNIFIED TOP BAR (E4: maximizes map canvas height to >=68-72% of viewport) */}
-      <div className="relative z-20 flex min-w-0 max-w-full flex-wrap items-center gap-1.5 sm:gap-2">
-        {/* Search Input */}
-        <div className="relative w-full min-w-0 flex-1 basis-full sm:basis-auto">
-          <Search className="w-4 h-4 text-[#a9b8d0] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Raadi plot, block (R01-C04), Heer 1–3..."
-            className="w-full min-h-[42px] rounded-xl bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] pl-9 pr-8 py-1.5 text-xs sm:text-sm text-[#e8eef7] placeholder:text-[#a9b8d0]/70 focus:outline-none transition-colors"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              aria-label="Nadiifi raadinta"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 min-h-[34px] min-w-[34px] flex items-center justify-center text-[#a9b8d0] hover:text-[#e8eef7] cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-
-          {/* Quick Live Search Results Dropdown */}
-          {searchQuery.trim().length > 0 &&
-            (visiblePlots.length > 0 || matchingCases.length > 0) && (
-              <div className="absolute left-0 right-0 top-[calc(100%+6px)] rounded-xl bg-[#0a1220] border border-[#223250] shadow-2xl overflow-hidden max-h-64 overflow-y-auto z-40 divide-y divide-[#223250]/70">
-                {matchingCases.map((sc) => (
-                  <button
-                    key={sc.id}
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      onSelectSavedCase(sc);
-                    }}
-                    className="w-full px-4 py-2.5 text-left hover:bg-[#111b2e] flex items-center justify-between gap-2 cursor-pointer"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-[#e8eef7] truncate">
-                        {sc.caseName}
-                      </div>
-                      <div className="text-[11px] text-[#a9b8d0] tabular-nums">
-                        {sc.referenceNumber} · {sc.heirCount} dhaxle
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-bold text-[#22c55e] shrink-0">Kiis</span>
-                  </button>
-                ))}
-
-                {visiblePlots.slice(0, 8).map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => handleFocusPlotFromSearch(p)}
-                    className="w-full px-4 py-2.5 text-left hover:bg-[#111b2e] flex items-center justify-between gap-2 cursor-pointer"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-[#e8eef7] truncate">
-                        {p.id}{' '}
-                        <span className="text-[#a9b8d0] font-normal">
-                          · Block {p.blockDisplayName} · Heer {p.blockHeer}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-[#a9b8d0] tabular-nums truncate">
-                        {p.areaSqM} m² · {p.statusText}
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-bold text-[#22c55e] shrink-0">
-                      {p.isPartialQayb ? 'Half' : 'Buuxa'}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-        </div>
-
-        {/* Inline Plot Filter Select */}
-        {currentHasMap && (
-          <select
-            value={quickPlotFilter}
-            onChange={(e) => setQuickPlotFilter(e.target.value as MapQuickPlotFilter)}
-            aria-label="Sifee Plots-ka"
-            className="min-h-[42px] w-auto min-w-0 max-w-[min(148px,48vw)] sm:max-w-none rounded-xl bg-[#111b2e] border border-[#223250] focus:border-[#22c55e] px-2 text-xs font-semibold text-[#e8eef7] focus:outline-none cursor-pointer tabular-nums shrink-0"
-          >
-            <option value="all">Dhammaan ({enrichedPlots.length})</option>
-            <option value="buuxa">
-              Buuxa ({enrichedPlots.filter((p) => p.isFullBuuxa).length})
-            </option>
-            <option value="partial_qayb">
-              Half ({enrichedPlots.filter((p) => p.isPartialQayb).length})
-            </option>
-            <option value="doox">
-              Doox ({enrichedPlots.filter((p) => p.isDoox).length})
-            </option>
-            <option value="assigned">La Siiyey Dhaxal</option>
-          </select>
-        )}
-
-        {/* Icon-Only Map Color Style Switcher (Nashqad | Heerarka | Dhaxalka | PDF) */}
-        {currentHasMap && (
-          <div className="inline-flex items-center gap-0.5 p-1 rounded-xl bg-[#111b2e] border border-[#223250] shrink-0">
-            <button
-              type="button"
-              onClick={() => setCartoStyle('nashqad')}
-              title="Qaabka Midabka: Nashqad"
-              aria-label="Qaabka Midabka: Nashqad"
-              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
-                cartoStyle === 'nashqad'
-                  ? 'bg-[#22c55e] text-[#060d18]'
-                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-              }`}
-            >
-              <Grid className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCartoStyle('heerarka')}
-              title="Qaabka Midabka: Heerarka Dhulka"
-              aria-label="Qaabka Midabka: Heerarka Dhulka"
-              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
-                cartoStyle === 'heerarka'
-                  ? 'bg-[#22c55e] text-[#060d18]'
-                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-              }`}
-            >
-              <Mountain className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCartoStyle('inheritance')}
-              title="Qaabka Midabka: Saamiyada Dhaxalka"
-              aria-label="Qaabka Midabka: Saamiyada Dhaxalka"
-              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
-                cartoStyle === 'inheritance'
-                  ? 'bg-[#22c55e] text-[#060d18]'
-                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCartoStyle('layout11')}
-              title="Qaabka Midabka: PDF Layout"
-              aria-label="Qaabka Midabka: PDF Layout"
-              className={`h-8 w-8 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer ${
-                cartoStyle === 'layout11'
-                  ? 'bg-[#22c55e] text-[#060d18]'
-                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-              }`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Icon-Only PDF & Report Shortcut */}
-        {currentHasMap && subdivisionResult && onOpenCartographicPdfModal && (
-          <button
-            type="button"
-            onClick={() =>
-              onOpenCartographicPdfModal(
-                cartoStyle === 'inheritance'
-                  ? 'inheritance_map'
-                  : cartoStyle === 'heerarka'
-                  ? 'heerarka_report'
-                  : 'layout11'
-              )
-            }
-            className="hidden sm:inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e] text-[#e8eef7] transition-colors shrink-0 cursor-pointer"
-            title="PDF & Warbixin"
-            aria-label="PDF & Warbixin"
-          >
-            <Printer className="w-4 h-4 text-[#22c55e]" />
-          </button>
-        )}
-
-        {/* Icon-Only Subdivision CAD Designer Shortcut */}
-        <button
-          type="button"
-          onClick={onOpenAdvancedCadStudio}
-          className="lg:hidden h-10 w-10 inline-flex items-center justify-center rounded-xl bg-[#111b2e] border border-[#223250] hover:border-[#22c55e]/70 text-[#e8eef7] transition-colors shrink-0 cursor-pointer"
-          title="Naqshadeeyaha CAD"
-          aria-label="Naqshadeeyaha CAD"
-        >
-          <Wrench className="w-4 h-4 text-[#22c55e]" />
-        </button>
-      </div>
-
-      {/* COMPACT 1-ROW UNIFIED METRICS STRIP (E10, E11, E9 — zero conflicting numbers) */}
-      {(currentHasMap || userGpsInfo !== null) && (
-        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-between gap-x-2 gap-y-1 px-1 py-0.5 text-[11.5px] text-[#a9b8d0] tabular-nums">
-          {currentHasMap && (
-            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="whitespace-nowrap">
-                Blocks:{' '}
-                <strong className="text-[#38bdf8]">
-                  {unifiedMetrics.blocksCount.toLocaleString()}
-                </strong>
-              </span>
-              <span className="hidden sm:inline" aria-hidden="true">·</span>
-              <span className="whitespace-nowrap">
-                Buuxa:{' '}
-                <strong className="text-[#22c55e]">
-                  {unifiedMetrics.fullPlotsCount.toLocaleString()}
-                </strong>
-              </span>
-              <span className="hidden sm:inline" aria-hidden="true">·</span>
-              <span className="whitespace-nowrap">
-                Half:{' '}
-                <strong className="text-[#facc15]">
-                  {unifiedMetrics.halfPlotsCount.toLocaleString()}
-                </strong>
-              </span>
-              <span className="hidden sm:inline" aria-hidden="true">·</span>
-              <span className="whitespace-nowrap">
-                Plots:{' '}
-                <strong className="text-[#e8eef7]">
-                  {Math.round(unifiedMetrics.allPlotsAreaSqM).toLocaleString()} m²
-                </strong>
-              </span>
-              {unifiedMetrics.boundaryAreaHa > 0 && (
-                <>
-                  <span className="hidden sm:inline" aria-hidden="true">·</span>
-                  <span className="whitespace-nowrap">
-                    Xuduud:{' '}
-                    <strong className="text-[#e8eef7]">
-                      {unifiedMetrics.boundaryAreaHa.toFixed(2)} ha
-                    </strong>
-                  </span>
-                </>
-              )}
-              {subdivisionState.nashqadSummary && (
-                <button
-                  type="button"
-                  onClick={() => setIsNashqadReportOpen(true)}
-                  className="ml-1 inline-flex items-center gap-1 rounded-lg bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e] px-2 py-0.5 text-[11px] font-bold text-[#22c55e] transition-colors cursor-pointer"
-                >
-                  <FileText className="w-3 h-3 shrink-0" />
-                  <span>Warbixin</span>
-                </button>
-              )}
-            </div>
-          )}
-
-          <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 ml-auto">
+    <div className="relative flex w-full min-w-0 max-w-full flex-col text-[#e8eef7]">
+      {/* FULL-BLEED MOBILE-FIRST INTERACTIVE MAP CANVAS */}
+      <div
+        ref={mapWrapperRef}
+        className={`relative w-full min-w-0 max-w-full h-[calc(100dvh-116px)] min-h-[460px] lg:h-[calc(100dvh-124px)] rounded-none sm:rounded-2xl overflow-hidden shadow-2xl transition-colors ${
+          isPaperMode
+            ? 'border-y sm:border-2 border-[#111827] bg-white'
+            : 'border-y sm:border border-[#223250] bg-[#060d18]'
+        }`}
+      >
+        {/* Floating Active Tool / Selection / GPS Pills (only shown when active) */}
+        {(userGpsInfo || totalSelectedFeaturesCount > 0 || activeMapTool !== 'inspect') && (
+          <div className="pointer-events-auto absolute top-2.5 left-2.5 z-25 flex max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-1.5 text-[11px]">
             {userGpsInfo && (
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500/15 border border-sky-400/50 px-2 py-0.5 text-sky-200 font-semibold">
+              <div className="inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-sky-400/50 px-2.5 py-1 text-sky-200 font-semibold shadow-lg">
                 <LocateFixed className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="block min-w-0 max-w-[min(210px,52vw)] sm:max-w-[340px] truncate">
+                <span className="block min-w-0 max-w-[min(190px,48vw)] truncate">
                   <strong className="text-[#e8eef7]">{userGpsInfo.placeLabel}</strong>
-                  {' · '}
-                  {userGpsInfo.lat.toFixed(5)}°, {userGpsInfo.lng.toFixed(5)}°
                 </span>
                 <button
                   type="button"
@@ -3508,10 +3277,9 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             )}
 
             {totalSelectedFeaturesCount > 0 && openRightPanel !== 'selection' && (
-              <div className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400/15 border border-amber-400/50 px-2 py-0.5 text-amber-300 font-bold">
+              <div className="inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-amber-400/50 px-2.5 py-1 text-amber-300 font-bold shadow-lg">
                 <span>
-                  La xushay:{' '}
-                  <strong className="text-[#facc15]">{totalSelectedFeaturesCount}</strong>
+                  La xushay: <strong className="text-[#facc15]">{totalSelectedFeaturesCount}</strong>
                 </span>
                 <button
                   type="button"
@@ -3525,7 +3293,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             )}
 
             {activeMapTool !== 'inspect' && (
-              <div className="flex items-center gap-2 text-[#22c55e] font-semibold">
+              <div className="inline-flex items-center gap-2 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-[#22c55e]/50 px-2.5 py-1 text-[#22c55e] font-semibold shadow-lg">
                 <span>
                   {activeMapTool === 'map_select_polygon'
                     ? `Geesoole (${polyScreenPts.length} gees)`
@@ -3561,18 +3329,28 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 2. INTERACTIVE FULL-BLEED MAP CANVAS (E4: >=68-72% of mobile viewport height) */}
-      <div
-        ref={mapWrapperRef}
-        className={`relative w-full min-w-0 max-w-full h-[calc(100dvh-168px)] min-h-[430px] lg:h-[calc(100dvh-185px)] rounded-2xl overflow-hidden shadow-2xl transition-colors ${
-          isPaperMode
-            ? 'border-2 border-[#111827] bg-white'
-            : 'border border-[#223250] bg-[#060d18]'
-        }`}
-      >
+        {/* Thumb-Zone Half Plots Show/Hide Toggle */}
+        {currentHasMap && (
+          <button
+            type="button"
+            onClick={() => setShowHalfPlots((prev) => !prev)}
+            className={`pointer-events-auto absolute bottom-3 left-3 z-25 inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold shadow-lg backdrop-blur-md border transition-colors cursor-pointer ${
+              showHalfPlots
+                ? 'bg-[#0a1220]/90 border-[#facc15]/60 text-[#facc15] hover:bg-[#111b2e]'
+                : 'bg-[#0a1220]/80 border-[#223250] text-[#a9b8d0] hover:text-[#e8eef7]'
+            }`}
+            title={showHalfPlots ? 'Qari Half Plots' : 'Muuji Half Plots'}
+          >
+            {showHalfPlots ? (
+              <Eye className="w-3.5 h-3.5 shrink-0" />
+            ) : (
+              <EyeOff className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span>Half Plots: {showHalfPlots ? 'Muuqda' : 'Qarsoon'}</span>
+          </button>
+        )}
         {/* Official Google Satellite & Hybrid Underlay (@vis.gl/react-google-maps) */}
         {isGoogleUnderlayMounted && (
           <GoogleSatelliteUnderlay
