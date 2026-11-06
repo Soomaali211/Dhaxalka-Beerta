@@ -778,104 +778,130 @@ export const FarmCartographicPdfModal: React.FC<FarmCartographicPdfModalProps> =
                   />
                 </g>
 
-                {/* Bottom-Right QGIS Legend (`01_xuduudka_beerta`, `05_dooxyada`, `03_plots [523]`, + categories) */}
-                <g transform={`translate(${l11LegendX}, ${l11LegendY})`}>
-                  <rect
-                    x="-8"
-                    y="-8"
-                    width="192"
-                    height={l11LegendHeight + 12}
-                    fill="#FFFFFF"
-                    fillOpacity="0.96"
-                  />
-
-                  {/* 01_xuduudka_beerta */}
+                {/* Right-Side Automatic_Layout14_Legend_Cusub Panel */}
+                <g transform={`translate(${Math.max(540, l11LegendX - 36)}, 18)`}>
                   <rect
                     x="0"
-                    y="2"
-                    width="24"
-                    height="13"
+                    y="0"
+                    width="228"
+                    height={Math.min(560, 290 + visibleL11LegendRows.length * 18)}
+                    rx="6"
                     fill="#FFFFFF"
-                    stroke={HEERARKA_MAP_COLORS.layout11BoundaryLine}
-                    strokeWidth="1.9"
+                    stroke="#CBD5E1"
+                    strokeWidth="1.1"
                   />
-                  <text
-                    x="32"
-                    y="13"
-                    fontSize="13"
-                    fontFamily="Inter, Arial, sans-serif"
-                    fill="#111827"
-                  >
-                    01_xuduudka_beerta
+                  {/* Dark Navy Header */}
+                  <rect x="0" y="0" width="228" height="42" rx="6" fill="#0F172A" />
+                  <rect x="0" y="34" width="228" height="8" fill="#0F172A" />
+                  <text x="12" y="19" fontSize="13" fontWeight="800" fontFamily="Inter, Arial, sans-serif" fill="#FFFFFF">
+                    LEGEND
+                  </text>
+                  <text x="12" y="33" fontSize="9.5" fontFamily="Inter, Arial, sans-serif" fill="#94A3B8">
+                    Blocks &amp; Plots Designer
                   </text>
 
-                  {/* 05_dooxyada */}
-                  <line
-                    x1="0"
-                    y1="32"
-                    x2="24"
-                    y2="32"
-                    stroke={HEERARKA_MAP_COLORS.layout11DooxyadaLine}
-                    strokeWidth="4.2"
-                  />
-                  <text
-                    x="32"
-                    y="36.5"
-                    fontSize="13"
-                    fontFamily="Inter, Arial, sans-serif"
-                    fill="#111827"
-                  >
-                    05_dooxyada
+                  {/* TIRADA GUDAHA XUDUUDKA BEERTA */}
+                  <text x="12" y="58" fontSize="8.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#475569">
+                    TIRADA GUDAHA XUDUUDKA BEERTA
+                  </text>
+                  <rect x="12" y="64" width="204" height="42" rx="5" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="0.9" />
+                  <text x="46" y="84" textAnchor="middle" fontSize="15" fontWeight="800" fontFamily="Inter, Arial, sans-serif" fill="#0F172A">
+                    {report.totalBlocks}
+                  </text>
+                  <text x="46" y="97" textAnchor="middle" fontSize="7.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#64748B">
+                    BLOCKS
+                  </text>
+                  <text x="114" y="84" textAnchor="middle" fontSize="15" fontWeight="800" fontFamily="Inter, Arial, sans-serif" fill="#0284C7">
+                    {report.totalBuuxaCount}
+                  </text>
+                  <text x="114" y="97" textAnchor="middle" fontSize="7.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#64748B">
+                    PLOTS
+                  </text>
+                  <text x="182" y="84" textAnchor="middle" fontSize="15" fontWeight="800" fontFamily="Inter, Arial, sans-serif" fill="#059669">
+                    {report.totalQaybCount}
+                  </text>
+                  <text x="182" y="97" textAnchor="middle" fontSize="7.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#64748B">
+                    HALF PLOTS
                   </text>
 
-                  {/* 03_plots [523] heading */}
-                  <text
-                    x="0"
-                    y="60"
-                    fontSize="13"
-                    fontFamily="Inter, Arial, sans-serif"
-                    fill="#111827"
-                  >
-                    03_plots [{report.totalPlots}]
+                  {/* CALAAMADSAN (Plots) */}
+                  <text x="12" y="122" fontSize="8.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#475569">
+                    CALAAMADSAN (Plots)
                   </text>
-
-                  {/* Category Swatches */}
-                  {visibleL11LegendRows.map((item, idx) => {
-                    const ry = 70 + idx * L11_LEGEND_ROW_H;
+                  {visibleL11LegendRows.slice(0, 10).map((item, idx) => {
+                    const ry = 130 + idx * 17;
                     return (
-                      <g key={item.key} transform={`translate(0, ${ry})`}>
+                      <g key={item.key} transform={`translate(12, ${ry})`}>
                         <rect
                           x="0"
                           y="0"
-                          width="24"
-                          height="13.5"
+                          width="16"
+                          height="11"
+                          rx="2"
                           fill={item.fillHex}
-                          stroke="#111827"
-                          strokeWidth="0.9"
+                          stroke="#334155"
+                          strokeWidth="0.7"
                         />
-                        {item.hatch && (
-                          <rect
-                            x="0"
-                            y="0"
-                            width="24"
-                            height="13.5"
-                            fill="url(#qgis-layout11-hatch-legend)"
-                            stroke="#111827"
-                            strokeWidth="0.9"
-                          />
-                        )}
-                        <text
-                          x="32"
-                          y="11.5"
-                          fontSize="12.8"
-                          fontFamily="Inter, Arial, sans-serif"
-                          fill="#111827"
-                        >
+                        <text x="22" y="9" fontSize="9.5" fontFamily="Inter, Arial, sans-serif" fill="#1E293B">
                           {item.label}
                         </text>
                       </g>
                     );
                   })}
+
+                  {/* HEERARKA DHULKA (Plots) */}
+                  {(() => {
+                    const baseH = 136 + Math.min(10, visibleL11LegendRows.length) * 17;
+                    return (
+                      <g transform={`translate(12, ${baseH})`}>
+                        <text x="0" y="8" fontSize="8.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#475569">
+                          HEERARKA DHULKA (Plots)
+                        </text>
+                        <rect x="0" y="14" width="16" height="11" rx="2" fill="#F8FAFC" stroke="#22C55E" strokeWidth="1.2" strokeDasharray="3 2" />
+                        <text x="22" y="23" fontSize="9.5" fontFamily="Inter, Arial, sans-serif" fill="#1E293B">
+                          Heerka 1aad
+                        </text>
+                        <text x="204" y="23" textAnchor="end" fontSize="9.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#0F172A">
+                          {report.tierSummaries[1]?.plotsCount ?? 0}
+                        </text>
+
+                        <rect x="0" y="30" width="16" height="11" rx="2" fill="#F8FAFC" stroke="#38BDF8" strokeWidth="1.2" strokeDasharray="3 2" />
+                        <text x="22" y="39" fontSize="9.5" fontFamily="Inter, Arial, sans-serif" fill="#1E293B">
+                          Heerka 2aad
+                        </text>
+                        <text x="204" y="39" textAnchor="end" fontSize="9.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#0F172A">
+                          {report.tierSummaries[2]?.plotsCount ?? 0}
+                        </text>
+
+                        <rect x="0" y="46" width="16" height="11" rx="2" fill="#F8FAFC" stroke="#F59E0B" strokeWidth="1.2" strokeDasharray="3 2" />
+                        <text x="22" y="55" fontSize="9.5" fontFamily="Inter, Arial, sans-serif" fill="#1E293B">
+                          Heerka 3aad
+                        </text>
+                        <text x="204" y="55" textAnchor="end" fontSize="9.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#0F172A">
+                          {report.tierSummaries[3]?.plotsCount ?? 0}
+                        </text>
+
+                        {/* NOOCYADA */}
+                        <text x="0" y="75" fontSize="8.5" fontWeight="700" fontFamily="Inter, Arial, sans-serif" fill="#475569">
+                          NOOCYADA
+                        </text>
+                        <rect x="0" y="81" width="16" height="10" rx="1.5" fill="#FFFFFF" stroke="#0F172A" strokeWidth="1.1" />
+                        <text x="22" y="89.5" fontSize="9" fontFamily="Inter, Arial, sans-serif" fill="#1E293B">
+                          FULL ({report.totalBuuxaCount})
+                        </text>
+
+                        <rect x="0" y="96" width="16" height="10" rx="1.5" fill="#ECFDF5" stroke="#059669" strokeWidth="1.1" />
+                        <text x="22" y="104.5" fontSize="9" fontFamily="Inter, Arial, sans-serif" fill="#1E293B">
+                          HALF_FULL (la tiriyey): {report.totalQaybCount}
+                        </text>
+
+                        <line x1="0" y1="116" x2="16" y2="116" stroke="#EF4444" strokeWidth="1.6" strokeDasharray="3 2" />
+                        <text x="22" y="119.5" fontSize="9" fontFamily="Inter, Arial, sans-serif" fill="#1E293B">
+                          Boundary_Beerta
+                        </text>
+                      </g>
+                    );
+                  })()}
                 </g>
               </svg>
             </div>

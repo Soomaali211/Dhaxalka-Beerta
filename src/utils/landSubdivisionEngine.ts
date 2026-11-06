@@ -279,34 +279,53 @@ function hslToHexColor(hDeg: number, sPct: number, lPct: number): string {
  * Guarantees a 100% unique hex color for every individual heir index (0..N),
  * even for families with 30–60+ heirs, without colliding with Excluded/Unassigned colors.
  */
-export function getDistinctHeirColor(index: number): string {
+export function getDistinctHeirColor(
+  index: number,
+  excludedColors?: Set<string> | string[]
+): string {
   const safeIdx = Math.max(0, Math.floor(index));
-  if (safeIdx < HEIR_PALETTE_HEX.length) {
-    return HEIR_PALETTE_HEX[safeIdx];
+  const blocked = new Set<string>();
+  if (excludedColors) {
+    for (const c of excludedColors) {
+      if (typeof c === 'string' && c.trim()) {
+        blocked.add(c.trim().toUpperCase());
+      }
+    }
   }
-  const used = new Set(HEIR_PALETTE_HEX.map((c) => c.toUpperCase()));
-  for (let i = HEIR_PALETTE_HEX.length; i <= safeIdx; i++) {
-    const extraStep = i - HEIR_PALETTE_HEX.length;
+
+  const availablePalette = HEIR_PALETTE_HEX.filter(
+    (c) => !blocked.has(c.toUpperCase())
+  );
+  if (safeIdx < availablePalette.length) {
+    return availablePalette[safeIdx];
+  }
+
+  const used = new Set<string>([
+    ...HEIR_PALETTE_HEX.map((c) => c.toUpperCase()),
+    ...blocked,
+  ]);
+  for (let i = availablePalette.length; i <= safeIdx; i++) {
+    const extraStep = i - availablePalette.length;
     const lightnessBands = [44, 34, 52, 39];
     const saturationBands = [76, 68, 82, 72];
     let attempt = 0;
     let candidate = '#16A34A';
-    while (attempt < 50) {
+    while (attempt < 80) {
       // Golden-angle progression mapped onto safe hue arc [22°..326°] (avoids red/rose 327°..360°, 0°..21°)
       const rawUnit = ((extraStep + attempt * 0.37) * 0.61803398875) % 1;
       const safeHue = 22 + rawUnit * 304;
       const sat = saturationBands[(extraStep + attempt) % saturationBands.length];
       const light = lightnessBands[Math.floor(extraStep / 3 + attempt) % lightnessBands.length];
       candidate = hslToHexColor(safeHue, sat, light);
-      if (!used.has(candidate)) {
+      if (!used.has(candidate.toUpperCase())) {
         break;
       }
       attempt++;
     }
     if (i === safeIdx) return candidate;
-    used.add(candidate);
+    used.add(candidate.toUpperCase());
   }
-  return HEIR_PALETTE_HEX[0];
+  return availablePalette[0] || '#16A34A';
 }
 
 export const LAND_ALLOCATION_MODE_METADATA: Record<
@@ -4137,7 +4156,13 @@ export function allocatePlotsFairlyToHeirs(
             roleTitleArabic: ind.roleTitleArabic,
             quranicFractionGroup: ind.quranicFractionGroup,
             individualPercentage: ind.individualPercentage,
-            colorHex: getDistinctHeirColor(idx),
+            colorHex: getDistinctHeirColor(
+              idx,
+              [
+                ...Object.values(options?.plotMetadata || {}).map((m) => m.excludedColorHex || ''),
+                ...Object.values(options?.blockMetadata || {}).map((m) => m.excludedColorHex || ''),
+              ].filter(Boolean)
+            ),
             exactTotalPlotsQuota: 0,
             totalWholePlotsAssigned: 0,
             effectiveTotalPlotsReceived: 0,
@@ -4247,11 +4272,23 @@ export function allocatePlotsFairlyToHeirs(
     };
   }
 
+  const excludedColorSet = new Set<string>();
+  for (const m of Object.values(options?.plotMetadata || {})) {
+    if (m.isExcludedFromDivision && m.excludedColorHex) {
+      excludedColorSet.add(m.excludedColorHex.trim().toUpperCase());
+    }
+  }
+  for (const m of Object.values(options?.blockMetadata || {})) {
+    if (m.isExcludedFromDivision && m.excludedColorHex) {
+      excludedColorSet.add(m.excludedColorHex.trim().toUpperCase());
+    }
+  }
+
   const heirKeys = individuals.map((ind) => `${ind.heirGroupId}::${ind.personIndex}`);
   const heirColors: Record<string, string> = {};
   individuals.forEach((ind, idx) => {
     const k = `${ind.heirGroupId}::${ind.personIndex}`;
-    heirColors[k] = getDistinctHeirColor(idx);
+    heirColors[k] = getDistinctHeirColor(idx, excludedColorSet);
   });
 
   const makeEmptyTierBreakdown = (tier: AssetQualityTier): HeirTierPlotBreakdown => ({

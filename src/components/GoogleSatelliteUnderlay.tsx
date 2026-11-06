@@ -45,8 +45,37 @@ const CameraAndStatusSync: React.FC<{
         previousHandler();
       }
     };
+
+    const handleWindowError = (e: ErrorEvent) => {
+      const msg = (e.message || '').toLowerCase();
+      if (
+        msg.includes('google maps') ||
+        msg.includes('referernotallowedmaperror') ||
+        msg.includes('maps.googleapis.com') ||
+        (e.filename && e.filename.includes('maps.googleapis.com'))
+      ) {
+        reportStatus('fallback');
+      }
+    };
+
+    const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
+      const reasonStr = String(e?.reason || '').toLowerCase();
+      if (
+        reasonStr.includes('google maps') ||
+        reasonStr.includes('referernotallowedmaperror') ||
+        reasonStr.includes('maps.googleapis.com')
+      ) {
+        reportStatus('fallback');
+      }
+    };
+
+    window.addEventListener('error', handleWindowError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
     return () => {
       win.gm_authFailure = previousHandler;
+      window.removeEventListener('error', handleWindowError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
 
@@ -129,6 +158,10 @@ export const GoogleSatelliteUnderlay: React.FC<GoogleSatelliteUnderlayProps> = (
       <APIProvider
         apiKey={apiKey}
         solutionChannel="GMP_mcp_codeassist_v1_aistudio"
+        onError={(err) => {
+          console.warn('[GoogleSatelliteUnderlay] Google Maps API error, falling back to Esri Satellite:', err);
+          onStatusChange('fallback');
+        }}
       >
         <Map
           defaultCenter={center}

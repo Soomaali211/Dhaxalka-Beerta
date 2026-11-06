@@ -381,6 +381,8 @@ export interface PlotDetailedMetadata {
   isExcludedFromDivision?: boolean;
   /** Special/custom name for excluded or designated plot (e.g. Masjidka, Ceelka, Waqf, Dugsiga) */
   excludedSpecialName?: string;
+  /** Custom hex color chosen by the user for this excluded plot */
+  excludedColorHex?: string;
   zoneOverride?: string;
   verifiedAreaSqM?: number | null;
   wadiStatus: WadiStatus;
@@ -403,6 +405,8 @@ export interface BlockDetailedMetadata {
   isExcludedFromDivision?: boolean;
   /** Special/custom name for excluded or designated block */
   excludedSpecialName?: string;
+  /** Custom hex color chosen by the user for this excluded block */
+  excludedColorHex?: string;
   zoneId?: string;
   generalCondition?: string;
   notes?: string;

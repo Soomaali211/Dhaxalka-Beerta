@@ -359,7 +359,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     }
     return typeof navigator !== 'undefined' && !navigator.onLine
       ? 'offline_vector'
-      : 'google_satellite';
+      : 'satellite';
   });
 
   const [googleUnderlayStatus, setGoogleUnderlayStatus] = useState<GoogleUnderlayStatus>(() =>
@@ -779,7 +779,8 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           inheritanceFillColor = '#F59E0B';
           heirLegendKeys = ['__shared__'];
         } else if (isExcluded) {
-          inheritanceFillColor = '#F43F5E';
+          inheritanceFillColor =
+            pMeta?.excludedColorHex || bMeta?.excludedColorHex || '#F43F5E';
           heirLegendKeys = ['__excluded__'];
         } else if (assign?.unassignedReason === 'withheld_jajab') {
           ownerDisplay = 'Jajabka Laga Reebay (Tiro Siman)';

@@ -69,6 +69,9 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
   const [onlyVisible, setOnlyVisible] = useState<boolean>(true);
   const [isExportingShp, setIsExportingShp] = useState<boolean>(false);
   const [copiedMode, setCopiedMode] = useState<'geojson' | 'csv' | null>(null);
+  const [selectedExportType, setSelectedExportType] = useState<
+    'map_pdf' | 'heerarka_pdf' | 'excel' | 'geojson' | 'csv'
+  >('map_pdf');
 
   const metrics = computeUnifiedFarmMetrics(subdivisionState, subdivisionResult);
   const hasGisPlots = metrics.hasMap && (metrics.fullPlotsCount > 0 || metrics.halfPlotsCount > 0);
@@ -300,6 +303,60 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* Compact Export Format Selector (Dropdown + Single Primary Action) */}
+      <section className="rounded-2xl bg-[#111b2e] border border-[#223250] p-4 space-y-3">
+        <label
+          htmlFor="compact-export-select"
+          className="block text-xs font-extrabold uppercase tracking-wider text-[#a9b8d0]"
+        >
+          Dooro Nooca Loo Export Garaynayo
+        </label>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          <select
+            id="compact-export-select"
+            value={selectedExportType}
+            onChange={(e) =>
+              setSelectedExportType(
+                e.target.value as 'map_pdf' | 'heerarka_pdf' | 'excel' | 'geojson' | 'csv'
+              )
+            }
+            className="flex-1 min-h-[48px] rounded-xl bg-[#0a1220] border border-[#223250] focus:border-[#22c55e] px-3.5 text-sm font-bold text-[#e8eef7] focus:outline-none cursor-pointer"
+          >
+            {hasGisPlots && (
+              <option value="map_pdf">Khariidadda Muuqaalka (PDF)</option>
+            )}
+            {hasGisPlots && (
+              <option value="heerarka_pdf">Warbixinta Heerarka Beerta (PDF)</option>
+            )}
+            <option value="excel">Jadwal Excel (.xlsx)</option>
+            {hasGisPlots && (
+              <option value="geojson">Faylka GeoJSON (.geojson)</option>
+            )}
+            <option value="csv">Jadwalka CSV (.csv)</option>
+          </select>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedExportType === 'map_pdf' && hasGisPlots) {
+                onOpenCartographicPdfModal('layout11');
+              } else if (selectedExportType === 'heerarka_pdf' && hasGisPlots) {
+                onOpenCartographicPdfModal('heerarka_report');
+              } else if (selectedExportType === 'excel') {
+                onExportExcelWorkbook();
+              } else if (selectedExportType === 'geojson' && hasGisPlots) {
+                handleExportGeoJson();
+              } else {
+                handleExportCsvTable();
+              }
+            }}
+            className="min-h-[48px] px-6 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] text-sm font-extrabold transition-colors cursor-pointer shrink-0"
+          >
+            Soo saar
+          </button>
+        </div>
+      </section>
 
       {/* Section 1: QGIS-Style PDF Print Layouts & Shariah Certificate */}
       <section className="space-y-2.5">

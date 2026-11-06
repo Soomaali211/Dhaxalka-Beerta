@@ -247,14 +247,8 @@ export default function App() {
     )
   );
 
-  // Welcome Splash (Screen 1) — shown once per browser session, reopenable anytime
-  const [showWelcomeSplash, setShowWelcomeSplash] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem(WELCOME_SPLASH_SESSION_KEY) !== '1';
-    } catch {
-      return false;
-    }
-  });
+  // Open directly on the last active case's map (reopenable anytime from drawer)
+  const [showWelcomeSplash, setShowWelcomeSplash] = useState<boolean>(false);
 
   // 3 Primary Destinations + Contextual Sub-Modes
   const [activeDestination, setActiveDestination] = useState<PrimaryDestination>('dashboard');
