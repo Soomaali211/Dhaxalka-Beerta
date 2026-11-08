@@ -81,10 +81,6 @@ import {
 } from '../utils/nashqadWorkflowEngine';
 import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
 import { computeUnifiedFarmMetrics } from '../utils/unifiedMetrics';
-import {
-  GoogleSatelliteUnderlay,
-  GoogleUnderlayStatus,
-} from './GoogleSatelliteUnderlay';
 
 export type BasemapMode =
   | 'google_satellite'
@@ -353,32 +349,35 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
 
   const googleApiKey = ((import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) || '').trim();
 
-  const [basemapMode, setBasemapMode] = useState<BasemapMode>(() => {
+  const [basemapMode, setBasemapModeState] = useState<BasemapMode>(() => {
     if (subdivisionResult?.isPrebuiltGeometry && !subdivisionState.nashqadSummary) {
       return 'paper_pdf';
     }
-    return typeof navigator !== 'undefined' && !navigator.onLine
-      ? 'offline_vector'
-      : 'satellite';
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return 'offline_vector';
+    }
+    try {
+      const saved = localStorage.getItem('beeraha_basemap_mode') as BasemapMode | null;
+      if (
+        saved &&
+        ['google_satellite', 'satellite', 'osm', 'paper_pdf', 'offline_vector'].includes(saved)
+      ) {
+        return saved;
+      }
+    } catch {
+      // Ignore localStorage read errors
+    }
+    return 'google_satellite';
   });
 
-  const [googleUnderlayStatus, setGoogleUnderlayStatus] = useState<GoogleUnderlayStatus>(() =>
-    googleApiKey ? 'loading' : 'fallback'
-  );
-  const [googleMapCam, setGoogleMapCam] = useState<{
-    center: { lat: number; lng: number };
-    zoom: number;
-  }>({
-    center: { lat: 9.621, lng: 44.0585 },
-    zoom: 17,
-  });
-
-  const isGoogleUnderlayMounted =
-    basemapMode === 'google_satellite' &&
-    Boolean(googleApiKey) &&
-    googleUnderlayStatus !== 'fallback';
-  const isGoogleUnderlayLive =
-    isGoogleUnderlayMounted && googleUnderlayStatus === 'ready';
+  const setBasemapMode = useCallback((mode: BasemapMode) => {
+    setBasemapModeState(mode);
+    try {
+      localStorage.setItem('beeraha_basemap_mode', mode);
+    } catch {
+      // Ignore localStorage write errors
+    }
+  }, []);
 
   const [cartoStyle, setCartoStyle] = useState<MapCartographicStyle>(() =>
     subdivisionState.nashqadSummary
@@ -390,7 +389,26 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       : 'heerarka'
   );
 
-  const [showHybridLabels, setShowHybridLabels] = useState<boolean>(true);
+  const [showHybridLabels, setShowHybridLabelsState] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('beeraha_show_hybrid_labels');
+      if (saved !== null) {
+        return saved === 'true';
+      }
+    } catch {
+      // Ignore
+    }
+    return true;
+  });
+
+  const setShowHybridLabels = useCallback((show: boolean) => {
+    setShowHybridLabelsState(show);
+    try {
+      localStorage.setItem('beeraha_show_hybrid_labels', String(show));
+    } catch {
+      // Ignore
+    }
+  }, []);
   const [tileOfflineFallbackNotice, setTileOfflineFallbackNotice] = useState<boolean>(false);
   const [isLoadingTiles, setIsLoadingTiles] = useState<boolean>(false);
   const [currentZoom, setCurrentZoom] = useState<number>(17);
@@ -549,7 +567,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       if (subdivisionState.nashqadSummary) {
         setCartoStyle('nashqad');
         if (basemapMode === 'paper_pdf') {
-          setBasemapMode(isOnline ? 'satellite' : 'offline_vector');
+          setBasemapMode(isOnline ? 'google_satellite' : 'offline_vector');
         }
       } else {
         setCartoStyle('layout11');
@@ -1321,34 +1339,34 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       }
     };
 
-    const syncGoogleCamera = () => {
-      try {
-        const c = map.getCenter();
-        setGoogleMapCam({
-          center: { lat: c.lat, lng: c.lng },
-          zoom: map.getZoom(),
-        });
-      } catch {
-        // Ignore transient camera read
-      }
-    };
-
     map.on('zoomend moveend resize', updateScaleBar);
     map.on('zoomend', handleZoomEnd);
-    map.on('move zoom zoomend moveend resize', syncGoogleCamera);
+
+    // Responsive container observer ensuring Leaflet center and coordinates never drift when UI panels flex
+    let resizeObserver: ResizeObserver | null = null;
+    if (mapContainerRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        if (leafletMapRef.current) {
+          leafletMapRef.current.invalidateSize({ pan: false });
+          updateScaleBar();
+        }
+      });
+      resizeObserver.observe(mapContainerRef.current);
+    }
 
     const resizeTimer = window.setTimeout(() => {
       map.invalidateSize();
       updateScaleBar();
       handleZoomEnd();
-      syncGoogleCamera();
     }, 120);
 
     return () => {
       window.clearTimeout(resizeTimer);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
       map.off('zoomend moveend resize', updateScaleBar);
       map.off('zoomend', handleZoomEnd);
-      map.off('move zoom zoomend moveend resize', syncGoogleCamera);
       map.remove();
       leafletMapRef.current = null;
       tileLayerGroupRef.current = null;
@@ -1356,24 +1374,6 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       userLocationMarkerRef.current = null;
     };
   }, []);
-
-  // Lock integer zoom levels when live Google Satellite raster underlay is active for pixel-exact Web Mercator sync
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map) return;
-    if (isGoogleUnderlayMounted) {
-      map.options.zoomSnap = 1;
-      map.options.zoomDelta = 1;
-      const z = map.getZoom();
-      const rounded = Math.round(z);
-      if (Math.abs(z - rounded) > 0.01) {
-        map.setZoom(rounded, { animate: false });
-      }
-    } else {
-      map.options.zoomSnap = 0.25;
-      map.options.zoomDelta = 0.5;
-    }
-  }, [isGoogleUnderlayMounted]);
 
   // Synchronize Basemap Tile Layers (Google Satellite | Esri Satellite | OpenStreetMap | Paper PDF | Offline Vector)
   useEffect(() => {
@@ -1385,8 +1385,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
 
     if (
       basemapMode === 'offline_vector' ||
-      basemapMode === 'paper_pdf' ||
-      (basemapMode === 'google_satellite' && isGoogleUnderlayLive)
+      basemapMode === 'paper_pdf'
     ) {
       setIsLoadingTiles(false);
       return;
@@ -1413,7 +1412,22 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       osmLayer.on('load', () => setIsLoadingTiles(false));
       osmLayer.on('tileerror', handleTileError);
       tileGroup.addLayer(osmLayer);
-    } else if (basemapMode === 'satellite' || basemapMode === 'google_satellite') {
+    } else if (basemapMode === 'google_satellite') {
+      const googleSatUrl = showHybridLabels
+        ? 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}'
+        : 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+      const googleSatLayer = L.tileLayer(googleSatUrl, {
+        subdomains: ['0', '1', '2', '3'],
+        maxNativeZoom: 20,
+        maxZoom: 22,
+        crossOrigin: true,
+        attribution: '&copy; Google Maps',
+      });
+      googleSatLayer.on('loading', () => setIsLoadingTiles(true));
+      googleSatLayer.on('load', () => setIsLoadingTiles(false));
+      googleSatLayer.on('tileerror', handleTileError);
+      tileGroup.addLayer(googleSatLayer);
+    } else if (basemapMode === 'satellite') {
       const satLayer = L.tileLayer(
         'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         {
@@ -1442,7 +1456,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         tileGroup.addLayer(labelsLayer);
       }
     }
-  }, [basemapMode, showHybridLabels, isGoogleUnderlayLive]);
+  }, [basemapMode, showHybridLabels]);
 
   // Render GIS Vector Layers (Plots, Blocks, Wadis/Dooxyada, City Road Connection, Special Areas, Boundary)
   useEffect(() => {
@@ -1497,7 +1511,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           strokeWeight = 0.85;
           showDiagonalHatch = item.cartoProfile.layout11ShowHatch;
           if (!isPaper && fillColor === '#FFFFFF') {
-            fillOpacity = basemapMode === 'satellite' ? 0.82 : 0.9;
+            fillOpacity = (basemapMode === 'satellite' || basemapMode === 'google_satellite') ? 0.82 : 0.9;
           }
         } else if (cartoStyle === 'heerarka') {
           if (useDynamicQualityTiers) {
@@ -2485,7 +2499,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
 
     // Switch out of blank white Paper PDF mode so real streets/satellite imagery of user's exact location appear
     if (basemapMode === 'paper_pdf') {
-      setBasemapMode(isOnline ? 'satellite' : 'offline_vector');
+      setBasemapMode(isOnline ? 'google_satellite' : 'offline_vector');
       setShowHybridLabels(true);
     }
 
@@ -3360,18 +3374,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             <span>Half Plots: {showHalfPlots ? 'Muuqda' : 'Qarsoon'}</span>
           </button>
         )}
-        {/* Official Google Satellite & Hybrid Underlay (@vis.gl/react-google-maps) */}
-        {isGoogleUnderlayMounted && (
-          <GoogleSatelliteUnderlay
-            apiKey={googleApiKey}
-            center={googleMapCam.center}
-            zoom={googleMapCam.zoom}
-            showHybridLabels={showHybridLabels}
-            onStatusChange={setGoogleUnderlayStatus}
-          />
-        )}
-
-        {/* Leaflet Container (transparent over live Google Satellite; warm terrain fallback for online tiles; dark grid isolated to offline_vector) */}
+        {/* Leaflet Container (crisp paper layout in paper mode; dark grid isolated to offline_vector; solid terrain/satellite for online maps) */}
         <div
           ref={mapContainerRef}
           className={`${
@@ -3379,8 +3382,6 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
               ? 'paper-pdf-leaflet-map'
               : basemapMode === 'offline_vector'
               ? 'offline-vector-leaflet-map'
-              : isGoogleUnderlayLive
-              ? 'gis-leaflet-map google-underlay-leaflet-map'
               : 'gis-leaflet-map'
           } relative w-full min-w-0 max-w-full h-full z-[1]`}
         />
@@ -3992,7 +3993,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                         }`}
                       >
                         <Satellite className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">Google Satellite</span>
+                        <span className="truncate">Google Satellite (Asalka)</span>
                       </button>
 
                       <button
@@ -4068,11 +4069,9 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                       </label>
                     )}
 
-                    {basemapMode === 'google_satellite' && !isGoogleUnderlayLive && (
+                    {basemapMode === 'google_satellite' && (
                       <p className="text-[10px] opacity-70 leading-snug">
-                        {googleApiKey && googleUnderlayStatus === 'loading'
-                          ? 'Google Satellite waa la soo rarayaa...'
-                          : 'Sawir dayax-gacmeed toos ah ayaa shaqaynaya (ku dar VITE_GOOGLE_MAPS_API_KEY si Google Maps uga shaqeeyo).'}
+                        Khariidadda Google Satellite waxay toos ugu xidhan tahay sawirrada dayax-gacmeedka Google Maps oo 100% ku qotoma cabbiraadda dhulka.
                       </p>
                     )}
                   </div>
@@ -4288,16 +4287,16 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                         </div>
                       )}
 
-                    {basemapMode === 'satellite' && (
+                    {(basemapMode === 'satellite' || basemapMode === 'google_satellite') && (
                       <label className="w-full flex items-center justify-between gap-2 font-semibold rounded-md px-1 py-0.5 cursor-pointer select-none">
                         <span className="inline-flex items-center gap-2">
                           <input
                             type="checkbox"
                             checked={showHybridLabels}
-                            onChange={() => setShowHybridLabels((p) => !p)}
+                            onChange={(e) => setShowHybridLabels(e.target.checked)}
                             className="w-3.5 h-3.5 rounded accent-[#16A34A] cursor-pointer shrink-0"
                           />
-                          <span>Magacyada Magaalooyinka (Satellite)</span>
+                          <span>Magacyada Magaalooyinka (Satellite / Hybrid)</span>
                         </span>
                       </label>
                     )}
@@ -4314,7 +4313,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                         const idx = Number(e.target.value);
                         const loc = SOMALI_MAP_LOCATIONS[idx];
                         if (loc) {
-                          if (basemapMode === 'paper_pdf') setBasemapMode('satellite');
+                          if (basemapMode === 'paper_pdf') setBasemapMode('google_satellite');
                           leafletMapRef.current?.flyTo([loc.lat, loc.lng], loc.zoom, {
                             duration: 0.7,
                           });
