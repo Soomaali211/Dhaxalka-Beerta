@@ -22,10 +22,12 @@ import {
   Pentagon,
   Plus,
   Printer,
+  PenTool,
   Route,
   Satellite,
   Search,
   Trash2,
+  Upload,
   Users,
   WifiOff,
   Wrench,
@@ -110,6 +112,7 @@ type ActiveMapPointerTool =
   | 'pick_road_anchor';
 
 interface InteractiveGisMapDashboardProps {
+  activeCaseId?: string;
   currentHasMap: boolean;
   subdivisionState: LandSubdivisionState;
   subdivisionResult: SubdivisionComputationResult | null;
@@ -329,6 +332,7 @@ function makeSafePlotBadgeEl(text: string, isPaper: boolean): HTMLElement {
 }
 
 export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProps> = ({
+  activeCaseId,
   currentHasMap,
   subdivisionState,
   subdivisionResult,
@@ -336,6 +340,8 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   savedCases,
   onSelectTargetScope,
   onSelectSavedCase,
+  onUploadGeoJsonFile,
+  onUploadGeoJsonFiles,
   onUpdateSubdivisionState,
   onOpenCartographicPdfModal,
   onOpenAdvancedCadStudio,
@@ -514,6 +520,9 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   const userLocationMarkerRef = useRef<L.LayerGroup | null>(null);
   const lastFittedSignatureRef = useRef<string>('');
   const lastAutoStyledSourceRef = useRef<string>('');
+  const activeCaseIdRef = useRef<string | undefined>(activeCaseId);
+  activeCaseIdRef.current = activeCaseId;
+  const hasRestoredSavedCameraRef = useRef<boolean>(false);
 
   // Keep latest manual interaction tool in a ref so Leaflet polygon click listeners never go stale
   const interactionStateRef = useRef({
@@ -1284,13 +1293,123 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     ]
   );
 
+  // Helper to load persisted camera or compute optimal initial view
+  const getInitialCamera = useCallback((): {
+    center: [number, number];
+    zoom: number;
+    isSaved: boolean;
+  } => {
+    try {
+      if (activeCaseId) {
+        const caseCamStr = localStorage.getItem(`beeraha_map_camera_${activeCaseId}`);
+        if (caseCamStr) {
+          const parsed = JSON.parse(caseCamStr);
+          if (
+            Number.isFinite(parsed.lat) &&
+            Number.isFinite(parsed.lng) &&
+            Number.isFinite(parsed.zoom)
+          ) {
+            return {
+              center: [parsed.lat, parsed.lng],
+              zoom: parsed.zoom,
+              isSaved: true,
+            };
+          }
+        }
+      }
+      const globalCamStr = localStorage.getItem('beeraha_last_map_view');
+      if (globalCamStr) {
+        const parsed = JSON.parse(globalCamStr);
+        if (
+          Number.isFinite(parsed.lat) &&
+          Number.isFinite(parsed.lng) &&
+          Number.isFinite(parsed.zoom)
+        ) {
+          return {
+            center: [parsed.lat, parsed.lng],
+            zoom: parsed.zoom,
+            isSaved: true,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (
+      subdivisionResult &&
+      subdivisionResult.bring &&
+      subdivisionResult.bring.length >= 3 &&
+      subdivisionResult.inv
+    ) {
+      try {
+        const ring = toLatLngRing(subdivisionResult.bring, subdivisionResult.inv);
+        if (ring.length >= 3) {
+          let sumLat = 0;
+          let sumLng = 0;
+          for (const [lat, lng] of ring) {
+            sumLat += lat;
+            sumLng += lng;
+          }
+          return {
+            center: [sumLat / ring.length, sumLng / ring.length] as [number, number],
+            zoom: 17,
+            isSaved: false,
+          };
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return { center: [9.621, 44.0585] as [number, number], zoom: 17, isSaved: false };
+  }, [activeCaseId, subdivisionResult]);
+
+  // Handle switching activeCaseId while map is mounted
+  const previousCaseIdRef = useRef<string | undefined>(activeCaseId);
+  useEffect(() => {
+    if (previousCaseIdRef.current === activeCaseId) return;
+    const oldCase = previousCaseIdRef.current;
+    previousCaseIdRef.current = activeCaseId;
+    if (!oldCase) return;
+
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    try {
+      if (activeCaseId) {
+        const savedCam = localStorage.getItem(`beeraha_map_camera_${activeCaseId}`);
+        if (savedCam) {
+          const parsed = JSON.parse(savedCam);
+          if (
+            Number.isFinite(parsed.lat) &&
+            Number.isFinite(parsed.lng) &&
+            Number.isFinite(parsed.zoom)
+          ) {
+            map.setView([parsed.lat, parsed.lng], parsed.zoom, { animate: true });
+            return;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    // If no saved camera for this case, reset fit signature so its geometry fits
+    lastFittedSignatureRef.current = '';
+  }, [activeCaseId]);
+
   // Initialize Leaflet Map Instance once
   useEffect(() => {
     if (!mapContainerRef.current || leafletMapRef.current) return;
 
+    const initCam = getInitialCamera();
+    if (initCam.isSaved) {
+      hasRestoredSavedCameraRef.current = true;
+    }
+
     const map = L.map(mapContainerRef.current, {
-      center: [9.621, 44.0585],
-      zoom: 17,
+      center: initCam.center,
+      zoom: initCam.zoom,
       minZoom: 4,
       maxZoom: 22,
       zoomControl: false,
@@ -1339,8 +1458,28 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       }
     };
 
+    const persistCameraOnMoveOrZoom = () => {
+      try {
+        const c = map.getCenter();
+        const z = map.getZoom();
+        if (Number.isFinite(c.lat) && Number.isFinite(c.lng) && Number.isFinite(z)) {
+          const payload = { lat: c.lat, lng: c.lng, zoom: z, time: Date.now() };
+          localStorage.setItem('beeraha_last_map_view', JSON.stringify(payload));
+          if (activeCaseIdRef.current) {
+            localStorage.setItem(
+              `beeraha_map_camera_${activeCaseIdRef.current}`,
+              JSON.stringify(payload)
+            );
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
     map.on('zoomend moveend resize', updateScaleBar);
     map.on('zoomend', handleZoomEnd);
+    map.on('moveend zoomend', persistCameraOnMoveOrZoom);
 
     // Responsive container observer ensuring Leaflet center and coordinates never drift when UI panels flex
     let resizeObserver: ResizeObserver | null = null;
@@ -1367,13 +1506,14 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       }
       map.off('zoomend moveend resize', updateScaleBar);
       map.off('zoomend', handleZoomEnd);
+      map.off('moveend zoomend', persistCameraOnMoveOrZoom);
       map.remove();
       leafletMapRef.current = null;
       tileLayerGroupRef.current = null;
       gisOverlayGroupRef.current = null;
       userLocationMarkerRef.current = null;
     };
-  }, []);
+  }, [getInitialCamera]);
 
   // Synchronize Basemap Tile Layers (Google Satellite | Esri Satellite | OpenStreetMap | Paper PDF | Offline Vector)
   useEffect(() => {
@@ -2126,16 +2266,22 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     }
 
     // Fit map bounds automatically when geometry source changes
-    const fitSignature = `${subdivisionState.boundaryFileName}::${
+    const fitSignature = `${activeCaseIdRef.current || ''}::${subdivisionState.boundaryFileName}::${
       subdivisionState.prebuiltSubdivision?.sourceFileName || ''
     }::${subdivisionState.selectedBoundaryIndex}::${subdivisionState.selectedSampleIndex}::${
       subdivisionState.specialAreaFileName || ''
     }::${enrichedPlots.length}::${subdivisionState.extraOverlayLayers?.length || 0}`;
-    if (allBoundsLatLngs.length >= 3 && lastFittedSignatureRef.current !== fitSignature) {
-      lastFittedSignatureRef.current = fitSignature;
-      const bounds = L.latLngBounds(allBoundsLatLngs);
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [36, 36], maxZoom: 18 });
+
+    if (allBoundsLatLngs.length >= 3) {
+      if (hasRestoredSavedCameraRef.current && lastFittedSignatureRef.current === '') {
+        // Preserves user's exact pan/zoom view when returning to the app without overriding it
+        lastFittedSignatureRef.current = fitSignature;
+      } else if (lastFittedSignatureRef.current !== fitSignature) {
+        lastFittedSignatureRef.current = fitSignature;
+        const bounds = L.latLngBounds(allBoundsLatLngs);
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [36, 36], maxZoom: 18 });
+        }
       }
     }
   }, [
@@ -3279,41 +3425,80 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             : 'border-y sm:border border-[#223250] bg-[#060d18]'
         }`}
       >
-        {/* Floating Active Tool / Selection / GPS Pills (only shown when active) */}
-        {(userGpsInfo || totalSelectedFeaturesCount > 0 || activeMapTool !== 'inspect') && (
-          <div className="pointer-events-auto absolute top-2.5 left-2.5 z-25 flex max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-1.5 text-[11px]">
-            {userGpsInfo && (
-              <div className="inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-sky-400/50 px-2.5 py-1 text-sky-200 font-semibold shadow-lg">
-                <LocateFixed className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="block min-w-0 max-w-[min(190px,48vw)] truncate">
-                  <strong className="text-[#e8eef7]">{userGpsInfo.placeLabel}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleClearUserGps}
-                  aria-label="Xidh calaamadda GPS"
-                  className="ml-0.5 rounded hover:bg-sky-400/20 p-0.5 text-sky-300 hover:text-white cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            )}
+        {/* TOP CONTROLS: PROMINENT IMPORT FILE BUTTON + STATUS PILLS */}
+        <div className="pointer-events-auto absolute top-2.5 left-2.5 z-25 flex max-w-[calc(100%-4.5rem)] flex-wrap items-center gap-2">
+          {/* Prominent Import Button */}
+          <label
+            title="Soo Geli Fayl (GeoJSON, KML, CAD)"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] font-black text-xs shadow-xl active:scale-95 transition-all cursor-pointer shrink-0"
+          >
+            <Upload className="w-4 h-4 shrink-0 stroke-[2.5]" />
+            <span className="hidden xs:inline">Soo Geli Fayl</span>
+            <span className="xs:hidden">Fayl</span>
+            <input
+              type="file"
+              accept=".geojson,.json,.kml,.kmz,.dxf"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const fileList = e.target.files;
+                if (!fileList || fileList.length === 0) return;
+                const files = Array.from(fileList);
+                if (onUploadGeoJsonFiles) {
+                  onUploadGeoJsonFiles(files);
+                } else if (onUploadGeoJsonFile && files[0]) {
+                  onUploadGeoJsonFile(files[0]);
+                }
+                e.target.value = '';
+              }}
+            />
+          </label>
 
-            {totalSelectedFeaturesCount > 0 && openRightPanel !== 'selection' && (
-              <div className="inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-amber-400/50 px-2.5 py-1 text-amber-300 font-bold shadow-lg">
-                <span>
-                  La xushay: <strong className="text-[#facc15]">{totalSelectedFeaturesCount}</strong>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleClearSelection}
-                  className="inline-flex items-center gap-1 rounded bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 px-1.5 py-0.5 text-[10.5px] font-extrabold text-rose-200 cursor-pointer transition-colors"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Nadiifi</span>
-                </button>
-              </div>
-            )}
+          {/* Quick Jump to CAD Studio Design */}
+          {onOpenAdvancedCadStudio && (
+            <button
+              type="button"
+              onClick={onOpenAdvancedCadStudio}
+              title="Fur CAD Studio si aad wax uga beddesho beerta iyo qaybinta"
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-[#223250] hover:border-[#22c55e] text-[#e8eef7] hover:text-[#22c55e] text-xs font-bold shadow-lg transition-colors cursor-pointer shrink-0"
+            >
+              <PenTool className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />
+              <span>CAD Studio</span>
+            </button>
+          )}
+
+          {userGpsInfo && (
+            <div className="inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-sky-400/50 px-2.5 py-1 text-sky-200 font-semibold shadow-lg text-[11px]">
+              <LocateFixed className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="block min-w-0 max-w-[min(160px,36vw)] truncate">
+                <strong className="text-[#e8eef7]">{userGpsInfo.placeLabel}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleClearUserGps}
+                aria-label="Xidh calaamadda GPS"
+                className="ml-0.5 rounded hover:bg-sky-400/20 p-0.5 text-sky-300 hover:text-white cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {totalSelectedFeaturesCount > 0 && (
+            <div className="inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-amber-400/50 px-2.5 py-1 text-amber-300 font-bold shadow-lg text-[11px]">
+              <span>
+                La xushay: <strong className="text-[#facc15]">{totalSelectedFeaturesCount}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="inline-flex items-center gap-1 rounded bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 px-1.5 py-0.5 text-[10.5px] font-extrabold text-rose-200 cursor-pointer transition-colors"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Nadiifi</span>
+              </button>
+            </div>
+          )}
 
             {activeMapTool !== 'inspect' && (
               <div className="inline-flex items-center gap-2 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-[#22c55e]/50 px-2.5 py-1 text-[#22c55e] font-semibold shadow-lg">
@@ -3352,7 +3537,6 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
               </div>
             )}
           </div>
-        )}
 
         {/* Thumb-Zone Half Plots Show/Hide Toggle */}
         {currentHasMap && (
@@ -3618,40 +3802,6 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             }`}
           />
 
-          {/* 0. XULO (Icon-Only Selection Tool + Corner Badge) */}
-          {currentHasMap && (
-            <button
-              type="button"
-              onClick={() =>
-                setOpenRightPanel((prev) =>
-                  prev === 'selection' ? null : 'selection'
-                )
-              }
-              aria-expanded={openRightPanel === 'selection'}
-              aria-label="Qalabka Xulashada Khariidadda"
-              title="Qalabka Xulashada Khariidadda"
-              className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl border shadow-md flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
-                openRightPanel === 'selection' ||
-                activeMapTool === 'map_select_polygon' ||
-                activeMapTool === 'map_select_freehand' ||
-                activeMapTool === 'map_select_radius'
-                  ? 'bg-[#facc15] border-[#facc15] text-[#060d18]'
-                  : totalSelectedFeaturesCount > 0
-                  ? 'bg-[#0a1220]/95 border-[#facc15] text-[#facc15]'
-                  : isPaperMode
-                  ? 'bg-white/95 border-slate-300 text-slate-900 hover:border-amber-500'
-                  : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#facc15]'
-              }`}
-            >
-              <MousePointerClick className="w-4 h-4 shrink-0" />
-              {totalSelectedFeaturesCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-md bg-[#facc15] text-[#060d18] text-[9px] font-black leading-4 text-center tabular-nums shadow">
-                  {totalSelectedFeaturesCount}
-                </span>
-              )}
-            </button>
-          )}
-
           {/* 1. LAKABYO (Icon-Only Layers & Basemaps) */}
           <button
             type="button"
@@ -3672,24 +3822,24 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             <Layers className="w-4 h-4 shrink-0" />
           </button>
 
-          {/* 2. HEERAR (Icon-Only Land Quality Tiers) */}
+          {/* 2. FURAHA (Icon-Only Legends) */}
           <button
             type="button"
             onClick={() =>
-              setOpenRightPanel((prev) => (prev === 'tiers' ? null : 'tiers'))
+              setOpenRightPanel((prev) => (prev === 'legends' ? null : 'legends'))
             }
-            aria-expanded={openRightPanel === 'tiers'}
-            aria-label="Heerarka Dhulka (DEM & Gacanta)"
-            title="Heerarka Dhulka (DEM & Gacanta)"
+            aria-expanded={openRightPanel === 'legends'}
+            aria-label="Furaha Sumadaha Khariidadda"
+            title="Furaha Sumadaha Khariidadda"
             className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border shadow-md flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
-              openRightPanel === 'tiers'
+              openRightPanel === 'legends'
                 ? 'bg-[#22c55e] border-[#22c55e] text-[#060d18]'
                 : isPaperMode
                 ? 'bg-white/95 border-slate-300 text-slate-900 hover:border-emerald-600'
                 : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#22c55e]'
             }`}
           >
-            <Mountain className="w-4 h-4 shrink-0" />
+            <Users className="w-4 h-4 shrink-0" />
           </button>
 
           {/* 3. FURAHA (Icon-Only Legends) */}
@@ -3730,22 +3880,10 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                 {/* Sticky Compact Panel Header */}
                 <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-current/10 shrink-0">
                   <div className="inline-flex items-center gap-1.5 text-xs font-extrabold truncate">
-                    {openRightPanel === 'selection' && (
-                      <>
-                        <MousePointerClick className="w-3.5 h-3.5 text-[#facc15] shrink-0" />
-                        <span className="truncate">Qalabka Xulashada</span>
-                      </>
-                    )}
                     {openRightPanel === 'layers' && (
                       <>
                         <Layers className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />
                         <span className="truncate">Lakabyada Khariidadda</span>
-                      </>
-                    )}
-                    {openRightPanel === 'tiers' && (
-                      <>
-                        <Mountain className="w-3.5 h-3.5 text-[#22c55e] shrink-0" />
-                        <span className="truncate">Heerarka Dhulka (1–3)</span>
                       </>
                     )}
                     {openRightPanel === 'legends' && (

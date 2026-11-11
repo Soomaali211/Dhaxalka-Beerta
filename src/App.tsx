@@ -250,11 +250,51 @@ export default function App() {
   // Open directly on the last active case's map (reopenable anytime from drawer)
   const [showWelcomeSplash, setShowWelcomeSplash] = useState<boolean>(false);
 
-  // 3 Primary Destinations + Contextual Sub-Modes
-  const [activeDestination, setActiveDestination] = useState<PrimaryDestination>('dashboard');
-  const [dashboardMode, setDashboardMode] = useState<DashboardSubMode>('interactive_map');
-  const [calculateMode, setCalculateMode] = useState<CalculateSubMode>('calculator');
-  const [listDataMode, setListDataMode] = useState<ListDataCategoryTab>('cases');
+  // 3 Primary Destinations + Contextual Sub-Modes with LocalStorage Persistence
+  const [activeDestination, setActiveDestination] = useState<PrimaryDestination>(() => {
+    try {
+      const saved = localStorage.getItem('beeraha_active_destination') as PrimaryDestination | null;
+      if (saved && ['dashboard', 'calculate', 'list_data', 'export'].includes(saved)) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'dashboard';
+  });
+  const [dashboardMode, setDashboardMode] = useState<DashboardSubMode>(() => {
+    try {
+      const saved = localStorage.getItem('beeraha_dashboard_mode') as DashboardSubMode | null;
+      if (saved && ['interactive_map', 'cad_designer', 'overview'].includes(saved)) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'interactive_map';
+  });
+  const [calculateMode, setCalculateMode] = useState<CalculateSubMode>(() => {
+    try {
+      const saved = localStorage.getItem('beeraha_calculate_mode') as CalculateSubMode | null;
+      if (saved && ['calculator', 'results', 'inheritance_tree'].includes(saved)) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'calculator';
+  });
+  const [listDataMode, setListDataMode] = useState<ListDataCategoryTab>(() => {
+    try {
+      const saved = localStorage.getItem('beeraha_list_data_mode') as ListDataCategoryTab | null;
+      if (saved && ['cases', 'plots', 'blocks', 'heirs'].includes(saved)) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'cases';
+  });
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
   // Selected GIS Scope (Plot / Block / All Farm) synced between Map (Screen 6) & Calculator (Screen 5)
@@ -349,6 +389,39 @@ export default function App() {
     safePersistJsonToLocalStorage(SAVED_CASES_STORAGE_KEY, savedCases);
   }, [savedCases]);
 
+  // Persist Active Navigation Destination & Sub-Modes
+  useEffect(() => {
+    try {
+      localStorage.setItem('beeraha_active_destination', activeDestination);
+    } catch {
+      // ignore
+    }
+  }, [activeDestination]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('beeraha_dashboard_mode', dashboardMode);
+    } catch {
+      // ignore
+    }
+  }, [dashboardMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('beeraha_calculate_mode', calculateMode);
+    } catch {
+      // ignore
+    }
+  }, [calculateMode]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('beeraha_list_data_mode', listDataMode);
+    } catch {
+      // ignore
+    }
+  }, [listDataMode]);
+
   // Modals
   const [isHeirConfigOpen, setIsHeirConfigOpen] = useState<boolean>(false);
   const [isAssetsConfigOpen, setIsAssetsConfigOpen] = useState<boolean>(false);
@@ -402,12 +475,10 @@ export default function App() {
     (tab: LegacyTab) => {
       switch (tab) {
         case 'land_designer':
-          setActiveDestination('dashboard');
-          setDashboardMode('interactive_map');
+          setActiveDestination('cad_designer');
           break;
         case 'dashboard':
           setActiveDestination('dashboard');
-          setDashboardMode('overview');
           break;
         case 'calculator':
           setActiveDestination('calculate');
@@ -1613,20 +1684,24 @@ export default function App() {
 
   const sectionTitle =
     activeDestination === 'dashboard'
-      ? 'Beerta & Dhaxalka'
+      ? 'Khariidadda Beerta'
       : activeDestination === 'calculate'
-      ? 'Xisaabi Dhaxalka'
+      ? 'Dhaxal Xisaabinta'
+      : activeDestination === 'cad_designer'
+      ? 'CAD Studio Design'
       : activeDestination === 'list_data'
       ? 'Xogta & Kiisaska'
       : 'Soo saar & Daabacaad';
 
   const sectionSubtitle =
     activeDestination === 'dashboard'
-      ? 'Maaraynta Beerta & GIS'
+      ? 'Muuqaalka Khariidadda & Soo Gelinta Faylka'
       : activeDestination === 'calculate'
-      ? `${activeCaseMeta.referenceNumber} · Faraa'idka`
+      ? `${activeCaseMeta.referenceNumber} · Xisaabinta Faraa'idka`
+      : activeDestination === 'cad_designer'
+      ? 'Naqshadeynta & Qaybinta Dhulka'
       : activeDestination === 'list_data'
-      ? `${savedCases.length} Kiis · ${currentPlotsCount} Buuxa`
+      ? `${savedCases.length} Kiis · Diiwaanka & Settings`
       : `${currentPlotsCount} Buuxa · ${currentHalfPlotsCount} Half`;
 
   // SCREEN 1: FULL-SCREEN WELCOME / SPLASH VIEW
@@ -1641,8 +1716,7 @@ export default function App() {
     );
   }
 
-  const isFullBleedMapActive =
-    activeDestination === 'dashboard' && dashboardMode === 'interactive_map';
+  const isFullBleedMapActive = activeDestination === 'dashboard';
 
   return (
     <div className="w-full min-w-0 max-w-full min-h-screen bg-[#060d18] text-[#e8eef7] flex flex-col lg:flex-row font-sans selection:bg-[#22c55e]/30 overflow-x-clip">
@@ -1730,69 +1804,6 @@ export default function App() {
           onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
         />
 
-        {/* Contextual Workspace Mode Bar (Dashboard sub-modes only — E14 removes duplicate Calculate sub-header) */}
-        {activeDestination === 'dashboard' && (
-          <div
-            className={`border-b border-[#223250] bg-[#0a1220]/90 px-4 sm:px-6 lg:px-8 py-2 no-print ${
-              isFullBleedMapActive ? 'hidden lg:block' : ''
-            }`}
-          >
-            <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#111b2e] border border-[#223250] overflow-x-auto no-scrollbar">
-                <button
-                  type="button"
-                  onClick={() => setDashboardMode('interactive_map')}
-                  className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    dashboardMode === 'interactive_map'
-                      ? 'bg-[#22c55e] text-[#060d18]'
-                      : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-                  }`}
-                >
-                  <Map className="w-3.5 h-3.5 shrink-0" />
-                  <span>Khariidad</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDashboardMode('cad_designer')}
-                  className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    dashboardMode === 'cad_designer'
-                      ? 'bg-[#22c55e] text-[#060d18]'
-                      : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-                  }`}
-                >
-                  <Wrench className="w-3.5 h-3.5 shrink-0" />
-                  <span>Naqshadeeyaha</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDashboardMode('overview')}
-                  className={`min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    dashboardMode === 'overview'
-                      ? 'bg-[#22c55e] text-[#060d18]'
-                      : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-                  }`}
-                >
-                  <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
-                  <span>Dulmarka</span>
-                </button>
-              </div>
-
-              {/* Inline Contextual Summary Metadata */}
-              <div className="hidden md:flex items-center gap-2 text-xs text-[#a9b8d0] font-mono tabular-nums">
-                <span>{currentHeirCount} Dhaxle</span>
-                <span aria-hidden="true">·</span>
-                <span>
-                  {currentHasMap
-                    ? `${currentPlotsCount} Buuxa · ${currentHalfPlotsCount} Half · ${Math.round(
-                        unifiedFarmMetrics.allPlotsAreaSqM
-                      ).toLocaleString()} m²`
-                    : 'Bilaa khariidad'}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Main Workspace Content */}
         <main
           className={
@@ -1801,9 +1812,10 @@ export default function App() {
               : 'flex-1 w-full min-w-0 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 pb-24 lg:pb-10'
           }
         >
-          {/* 1A. SCREEN 2 & SCREEN 6: INTERACTIVE GIS MAP DASHBOARD (OSM + SATELLITE + OFFLINE) */}
-          {activeDestination === 'dashboard' && dashboardMode === 'interactive_map' && (
+          {/* 1. SCREEN 2: INTERACTIVE GIS MAP DASHBOARD (Pure Map + Labels + Import) */}
+          {activeDestination === 'dashboard' && (
             <InteractiveGisMapDashboard
+              activeCaseId={activeCaseId}
               currentHasMap={currentHasMap}
               subdivisionState={subdivisionState}
               subdivisionResult={subdivisionResult}
@@ -1822,7 +1834,7 @@ export default function App() {
               onOpenCartographicPdfModal={(mode) =>
                 setCartoPdfModal({ isOpen: true, mode })
               }
-              onOpenAdvancedCadStudio={() => setDashboardMode('cad_designer')}
+              onOpenAdvancedCadStudio={() => setActiveDestination('cad_designer')}
               onOpenPlotInListData={(plotId) => {
                 setMapInspectedPlotId(plotId);
                 setActiveDestination('list_data');
@@ -1857,8 +1869,8 @@ export default function App() {
             />
           )}
 
-          {/* 1B. ENGINEERING CAD STUDIO & SUBDIVISION PARAMETERS */}
-          {activeDestination === 'dashboard' && dashboardMode === 'cad_designer' && (
+          {/* 2. SCREEN 3: ENGINEERING CAD STUDIO & SUBDIVISION (Qaybinta Dhulka & Naqshada) */}
+          {activeDestination === 'cad_designer' && (
             <BlocksAndPlotsDesignerView
               subdivisionState={subdivisionState}
               subdivisionResult={subdivisionResult}
@@ -1892,7 +1904,7 @@ export default function App() {
                 navigateLegacyTab('results');
               }}
               onNavigateToCalculator={() => navigateLegacyTab('calculator')}
-              onBackToInteractiveMap={() => setDashboardMode('interactive_map')}
+              onBackToInteractiveMap={() => setActiveDestination('dashboard')}
               onNotify={showToast}
             />
           )}

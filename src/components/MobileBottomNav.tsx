@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Calculator, TableProperties, Download } from 'lucide-react';
+import { Home, Calculator, PenTool, TableProperties } from 'lucide-react';
 import { PrimaryDestination } from './MobileTopAppBar';
 
 interface MobileBottomNavProps {
@@ -23,14 +23,14 @@ const NAV_TABS: {
     icon: Calculator,
   },
   {
-    id: 'list_data',
-    label: 'Xogta',
-    icon: TableProperties,
+    id: 'cad_designer',
+    label: 'CAD Studio',
+    icon: PenTool,
   },
   {
-    id: 'export',
-    label: 'Soo saar',
-    icon: Download,
+    id: 'list_data',
+    label: 'Xog & Kiisas',
+    icon: TableProperties,
   },
 ];
 

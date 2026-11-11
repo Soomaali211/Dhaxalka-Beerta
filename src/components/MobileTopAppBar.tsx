@@ -10,7 +10,7 @@ import {
 import { Currency } from '../types/inheritance';
 import { BrandCubeLogo } from './BrandCubeLogo';
 
-export type PrimaryDestination = 'dashboard' | 'calculate' | 'list_data' | 'export';
+export type PrimaryDestination = 'dashboard' | 'calculate' | 'cad_designer' | 'list_data' | 'export';
 
 interface MobileTopAppBarProps {
   activeDestination: PrimaryDestination;

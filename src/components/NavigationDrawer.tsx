@@ -47,27 +47,27 @@ interface NavigationDrawerProps {
 const PRIMARY_DESTINATIONS: {
   id: PrimaryDestination;
   label: string;
-  icon: typeof Home;
+  icon: typeof Map;
 }[] = [
   {
     id: 'dashboard',
-    label: 'Khariidad',
-    icon: Home,
+    label: 'Khariidad & Dayax-gacmeed',
+    icon: Map,
   },
   {
     id: 'calculate',
-    label: 'Xisaabi Dhaxalka',
+    label: 'Dhaxal Xisaabin',
     icon: Calculator,
   },
   {
-    id: 'list_data',
-    label: 'Xogta & Kiisaska',
-    icon: TableProperties,
+    id: 'cad_designer',
+    label: 'CAD Studio Design',
+    icon: Wrench,
   },
   {
-    id: 'export',
-    label: 'Soo saar & PDF',
-    icon: Download,
+    id: 'list_data',
+    label: 'Xogta, Kiisaska & Settings',
+    icon: TableProperties,
   },
 ];
 
@@ -91,6 +91,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onOpenPresetsModal,
   onOpenQuranicModal,
   onOpenBackupRestoreModal,
+  onOpenExportModal,
   onOpenWelcomeSplash,
 }) => {
   const handleNavigate = (dest: PrimaryDestination) => {
@@ -165,61 +166,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           );
         })}
 
-        {/* Dashboard Sub-Views Switcher */}
-        {onSelectDashboardSubMode && (
-          <div className="pt-2 pl-3 space-y-1">
-            <button
-              type="button"
-              onClick={() => {
-                onSelectDestination('dashboard');
-                onSelectDashboardSubMode('interactive_map');
-                onClose();
-              }}
-              className={`w-full min-h-[42px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                activeDestination === 'dashboard' && dashboardSubMode === 'interactive_map'
-                  ? 'text-[#22c55e] bg-[#111b2e]'
-                  : 'text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e]/60'
-              }`}
-            >
-              <Map className="w-4 h-4 shrink-0" />
-              <span>Khariidadda &amp; Dayax-gacmeedka</span>
-            </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                onSelectDestination('dashboard');
-                onSelectDashboardSubMode('cad_designer');
-                onClose();
-              }}
-              className={`w-full min-h-[42px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                activeDestination === 'dashboard' && dashboardSubMode === 'cad_designer'
-                  ? 'text-[#22c55e] bg-[#111b2e]'
-                  : 'text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e]/60'
-              }`}
-            >
-              <Wrench className="w-4 h-4 shrink-0" />
-              <span>Naqshadeeyaha &amp; Half-Plots</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                onSelectDestination('dashboard');
-                onSelectDashboardSubMode('overview');
-                onClose();
-              }}
-              className={`w-full min-h-[42px] flex items-center gap-2.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                activeDestination === 'dashboard' && dashboardSubMode === 'overview'
-                  ? 'text-[#22c55e] bg-[#111b2e]'
-                  : 'text-[#a9b8d0] hover:text-[#e8eef7] hover:bg-[#111b2e]/60'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4 shrink-0" />
-              <span>Dulmarka Hantida &amp; Kiisaska</span>
-            </button>
-          </div>
-        )}
 
         {/* Fadhi & Active Case Status Callout with Unified Metrics (E10 & E11) */}
         {activeCase && (
@@ -322,6 +269,18 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
           >
             <BookOpen className="w-4 h-4 text-[#22C55E] shrink-0" />
             <span className="truncate">Aayadaha Faraa&apos;idka</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              onOpenExportModal();
+              onClose();
+            }}
+            className="w-full min-h-[44px] flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-semibold text-[#F8FAFC] hover:bg-[#0F1B2D] transition-colors cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-[#22C55E] shrink-0" />
+            <span className="truncate">Soo saar &amp; PDF</span>
           </button>
 
           <div className="md:hidden px-3.5 pt-2 flex items-center justify-between gap-2">
