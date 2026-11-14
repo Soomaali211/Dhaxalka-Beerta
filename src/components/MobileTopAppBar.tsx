@@ -33,6 +33,7 @@ interface MobileTopAppBarProps {
   onChangeCurrency: (currency: Currency) => void;
   onOpenExportModal: () => void;
   onOpenBackupRestore: () => void;
+  isApkMobileMode?: boolean;
 }
 
 export const MobileTopAppBar: React.FC<MobileTopAppBarProps> = ({
@@ -53,10 +54,15 @@ export const MobileTopAppBar: React.FC<MobileTopAppBarProps> = ({
   onChangeCurrency,
   onOpenExportModal,
   onOpenBackupRestore,
+  isApkMobileMode = false,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-[#0a1220]/95 backdrop-blur-md border-b border-[#223250] pt-safe no-print">
-      <div className="h-14 px-3 sm:px-5 lg:px-7 flex items-center justify-between gap-2">
+      <div
+        className={`h-14 px-3 ${
+          isApkMobileMode ? '' : 'sm:px-5 lg:px-7 '
+        }flex items-center justify-between gap-2`}
+      >
         {/* Left Zone: Back or Hamburger Menu + Brand Cube + Title/Subtitle */}
         <div className="flex items-center gap-2 min-w-0">
           {showBackButton && onBack ? (
@@ -72,7 +78,9 @@ export const MobileTopAppBar: React.FC<MobileTopAppBarProps> = ({
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="lg:hidden min-h-[48px] min-w-[48px] -ml-1 rounded-2xl bg-[#111b2e] border border-[#223250] flex flex-col items-center justify-center gap-0.5 text-[#e8eef7] hover:border-[#22c55e]/60 active:scale-95 transition-all cursor-pointer shrink-0"
+              className={`${
+                isApkMobileMode ? '' : 'lg:hidden '
+              }min-h-[48px] min-w-[48px] -ml-1 rounded-2xl bg-[#111b2e] border border-[#223250] flex flex-col items-center justify-center gap-0.5 text-[#e8eef7] hover:border-[#22c55e]/60 active:scale-95 transition-all cursor-pointer shrink-0`}
               aria-label="Fur liiska Fadhiga iyo Kiisaska"
             >
               <Menu className="w-4 h-4" />
@@ -151,7 +159,9 @@ export const MobileTopAppBar: React.FC<MobileTopAppBarProps> = ({
             value={currency}
             onChange={(e) => onChangeCurrency(e.target.value as Currency)}
             aria-label="Dooro Lacagta"
-            className="hidden md:block min-h-[42px] bg-[#111b2e] border border-[#223250] rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[#e8eef7] focus:outline-none focus:border-[#22c55e] cursor-pointer"
+            className={`${
+              isApkMobileMode ? 'hidden' : 'hidden md:block'
+            } min-h-[42px] bg-[#111b2e] border border-[#223250] rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[#e8eef7] focus:outline-none focus:border-[#22c55e] cursor-pointer`}
           >
             <option value="USD">USD ($)</option>
             <option value="SOS">Sh.So</option>
@@ -166,25 +176,33 @@ export const MobileTopAppBar: React.FC<MobileTopAppBarProps> = ({
             onClick={onOpenBackupRestore}
             title="Google Drive & Kaydka Xogta"
             aria-label="Google Drive & Kaydka Xogta"
-            className="min-h-[48px] min-w-[48px] px-2.5 sm:px-3 inline-flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 rounded-2xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e]/70 text-xs font-bold text-[#e8eef7] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className={`min-h-[48px] min-w-[48px] px-2.5 ${
+              isApkMobileMode ? 'flex-col' : 'sm:px-3 flex-col sm:flex-row sm:gap-1.5'
+            } inline-flex items-center justify-center gap-0.5 rounded-2xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e]/70 text-xs font-bold text-[#e8eef7] transition-colors whitespace-nowrap shrink-0 cursor-pointer`}
           >
             <Cloud className="w-4 h-4 text-[#22c55e]" />
-            <span className="text-[9px] sm:text-xs font-bold leading-none text-[#a9b8d0] sm:text-[#e8eef7]">
+            <span
+              className={`text-[9px] ${
+                isApkMobileMode ? 'text-[#a9b8d0]' : 'sm:text-xs text-[#a9b8d0] sm:text-[#e8eef7]'
+              } font-bold leading-none`}
+            >
               Drive
             </span>
           </button>
 
-          {/* Desktop Export Trigger (Mobile uses 4th Bottom Nav tab "Soo saar") */}
-          <button
-            type="button"
-            onClick={onOpenExportModal}
-            title="Soo saar (GeoJSON, PDF, CSV, Excel)"
-            aria-label="Doorashooyinka Soo-saarista"
-            className="hidden lg:flex min-h-[44px] px-3.5 rounded-2xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e]/70 items-center justify-center gap-1.5 text-xs font-bold text-[#e8eef7] transition-colors shrink-0 cursor-pointer"
-          >
-            <Share className="w-4 h-4 text-[#22c55e]" />
-            <span>Soo saar</span>
-          </button>
+          {/* Desktop Export Trigger (Mobile uses Bottom Nav "Xog & Dejin" or Drawer) */}
+          {!isApkMobileMode && (
+            <button
+              type="button"
+              onClick={onOpenExportModal}
+              title="Soo saar (GeoJSON, PDF, CSV, Excel)"
+              aria-label="Doorashooyinka Soo-saarista"
+              className="hidden lg:flex min-h-[44px] px-3.5 rounded-2xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e]/70 items-center justify-center gap-1.5 text-xs font-bold text-[#e8eef7] transition-colors shrink-0 cursor-pointer"
+            >
+              <Share className="w-4 h-4 text-[#22c55e]" />
+              <span>Soo saar</span>
+            </button>
+          )}
         </div>
       </div>
     </header>

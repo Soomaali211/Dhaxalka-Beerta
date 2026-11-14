@@ -2532,23 +2532,28 @@ export function getEffectivePlotMetadata(
 export function getEffectiveBlockExclusion(
   blockId: string,
   blockMetadata: Record<string, BlockDetailedMetadata>
-): { isExcluded: boolean; specialName: string } {
+): { isExcluded: boolean; specialName: string; colorHex?: string } {
   const bm = blockMetadata[blockId];
   const isExcluded = Boolean(bm?.isExcludedFromDivision);
   const specialName =
     bm?.excludedSpecialName?.trim() ||
     bm?.blockName?.trim() ||
-    (isExcluded ? 'Block Laga Reebay' : '');
-  return { isExcluded, specialName };
+    '';
+  const colorHex = bm?.excludedColorHex?.trim() || undefined;
+  return { isExcluded, specialName, colorHex };
 }
 
 export function getEffectivePlotExclusion(
   plot: { id: string; block: string },
   plotMetadata: Record<string, PlotDetailedMetadata>,
   blockMetadata: Record<string, BlockDetailedMetadata>
-): { isExcluded: boolean; scope: 'block' | 'plot'; specialName: string } {
+): { isExcluded: boolean; scope: 'block' | 'plot'; specialName: string; colorHex?: string } {
   const pm = plotMetadata[plot.id];
   const bm = blockMetadata[plot.block];
+  const resolvedColor =
+    pm?.excludedColorHex?.trim() ||
+    bm?.excludedColorHex?.trim() ||
+    undefined;
 
   if (pm?.isExcludedFromDivision === true) {
     return {
@@ -2559,7 +2564,8 @@ export function getEffectivePlotExclusion(
         pm.parcelNumberOrName?.trim() ||
         bm?.excludedSpecialName?.trim() ||
         bm?.blockName?.trim() ||
-        'Plot Laga Reebay',
+        '',
+      colorHex: resolvedColor,
     };
   }
 
@@ -2568,6 +2574,7 @@ export function getEffectivePlotExclusion(
       isExcluded: false,
       scope: 'plot',
       specialName: pm.excludedSpecialName?.trim() || pm.parcelNumberOrName?.trim() || '',
+      colorHex: undefined,
     };
   }
 
@@ -2580,7 +2587,8 @@ export function getEffectivePlotExclusion(
         pm?.parcelNumberOrName?.trim() ||
         bm.excludedSpecialName?.trim() ||
         bm.blockName?.trim() ||
-        'Block Laga Reebay',
+        '',
+      colorHex: resolvedColor,
     };
   }
 
@@ -2588,6 +2596,7 @@ export function getEffectivePlotExclusion(
     isExcluded: false,
     scope: 'plot',
     specialName: pm?.excludedSpecialName?.trim() || pm?.parcelNumberOrName?.trim() || '',
+    colorHex: undefined,
   };
 }
 
@@ -3892,6 +3901,7 @@ export function allocatePlotsFairlyToHeirs(
       excludedBlocks.push({
         blockId: b.id,
         specialName: bExcl.specialName,
+        colorHex: bExcl.colorHex,
         zoneId: bZone,
         plotsCount: b.plots.length,
         areaSqM: +bArea.toFixed(1),
@@ -3904,7 +3914,7 @@ export function allocatePlotsFairlyToHeirs(
   const excludedPlots: ExcludedPlotSummary[] = [];
   const excludedPlotMetaById: Record<
     string,
-    { scope: 'block' | 'plot'; specialName: string }
+    { scope: 'block' | 'plot'; specialName: string; colorHex?: string }
   > = {};
 
   subdivision.plots.forEach((p) => {
@@ -3915,12 +3925,14 @@ export function allocatePlotsFairlyToHeirs(
       excludedPlotMetaById[p.id] = {
         scope: pExcl.scope,
         specialName: pExcl.specialName,
+        colorHex: pExcl.colorHex,
       };
       excludedPlots.push({
         plotId: p.id,
         blockId: p.block,
         zoneId: z,
         specialName: pExcl.specialName,
+        colorHex: pExcl.colorHex,
         excludedScope: pExcl.scope,
         areaSqM: +calcArea.toFixed(1),
         notes: plotMetadata[p.id]?.notes || blockMetadata[p.block]?.notes,
@@ -3930,9 +3942,10 @@ export function allocatePlotsFairlyToHeirs(
     }
   });
 
-  // Collect eligible Half-Plots (0.5 Plot) on the map
+  // Collect eligible Half-Plots (0.5 Plot) on the map + any partial/jajab plot with manual override or exclusion
   const fullPlotIdsSet = new Set(subdivision.plots.map((p) => p.id));
   const rawHalfPlotsOnMap: GeneratedPlot[] = [];
+  const rawManualExtraPartialPlots: GeneratedPlot[] = [];
   const seenHalfIds = new Set<string>();
 
   if (subdivision.allEvaluatedPlots && subdivision.allEvaluatedPlots.length > 0) {
@@ -3942,9 +3955,15 @@ export function allocatePlotsFairlyToHeirs(
       const isEligibleHalf = subdivision.isPrebuiltGeometry
         ? hpVal?.boundaryRelation !== 'full_outside'
         : hpVal?.validationStatus === 'half_plot_valid' || (ep.nHalfCounted || 0) > 0;
+      const hasManualAction =
+        Boolean(manualPlotHeirOverrides[ep.id]) ||
+        plotMetadata[ep.id]?.isExcludedFromDivision !== undefined;
       if (isEligibleHalf) {
         seenHalfIds.add(ep.id);
         rawHalfPlotsOnMap.push(ep);
+      } else if (hasManualAction && hpVal?.boundaryRelation !== 'full_outside') {
+        seenHalfIds.add(ep.id);
+        rawManualExtraPartialPlots.push(ep);
       }
     }
   } else if (subdivision.validHalfPlots && subdivision.validHalfPlots.length > 0) {
@@ -3956,7 +3975,7 @@ export function allocatePlotsFairlyToHeirs(
   }
 
   const divisibleHalfPlotsCandidate: GeneratedPlot[] = [];
-  rawHalfPlotsOnMap.forEach((hp) => {
+  [...rawHalfPlotsOnMap, ...rawManualExtraPartialPlots].forEach((hp) => {
     const pExcl = getEffectivePlotExclusion(hp, plotMetadata, blockMetadata);
     if (pExcl.isExcluded) {
       const z = getEffectivePlotZone(hp, blockZones, plotMetadata, blockMetadata);
@@ -3967,22 +3986,33 @@ export function allocatePlotsFairlyToHeirs(
       excludedPlotMetaById[hp.id] = {
         scope: pExcl.scope,
         specialName: pExcl.specialName,
+        colorHex: pExcl.colorHex,
       };
       excludedPlots.push({
         plotId: hp.id,
         blockId: hp.block,
         zoneId: z,
         specialName: pExcl.specialName,
+        colorHex: pExcl.colorHex,
         excludedScope: pExcl.scope,
         areaSqM: +calcArea.toFixed(1),
         notes: plotMetadata[hp.id]?.notes || blockMetadata[hp.block]?.notes,
       });
-    } else {
+    } else if (
+      rawHalfPlotsOnMap.some((x) => x.id === hp.id) ||
+      Boolean(manualPlotHeirOverrides[hp.id])
+    ) {
       divisibleHalfPlotsCandidate.push(hp);
     }
   });
 
-  const divisibleHalfPlots: GeneratedPlot[] = includeHalfPlots ? divisibleHalfPlotsCandidate : [];
+  const manuallyOverriddenHalfPlots = includeHalfPlots
+    ? []
+    : divisibleHalfPlotsCandidate.filter((hp) => Boolean(manualPlotHeirOverrides[hp.id]));
+  const manuallyOverriddenHalfIds = new Set(manuallyOverriddenHalfPlots.map((hp) => hp.id));
+  const divisibleHalfPlots: GeneratedPlot[] = includeHalfPlots
+    ? divisibleHalfPlotsCandidate
+    : manuallyOverriddenHalfPlots;
   const divisiblePoolPlots: GeneratedPlot[] = [...divisiblePlots, ...divisibleHalfPlots];
   const effectivePoolPlotUnits = sumPlotUnits(divisiblePoolPlots);
 
@@ -4068,6 +4098,13 @@ export function allocatePlotsFairlyToHeirs(
       (!p.full
         ? p.halfPlotValidation?.expectedRule.targetAreaSqM ?? +(defaultPlotAreaSqM * 0.5).toFixed(2)
         : defaultPlotAreaSqM);
+    const isDooxa90 = Boolean(
+      meta.isWithinDooxa90m ||
+        (meta.wadiDistanceM != null && meta.wadiDistanceM <= 90) ||
+        meta.wadiStatus === 'cuts_through' ||
+        meta.wadiStatus === 'partial' ||
+        meta.wadiStatus === 'nearby'
+    );
 
     return {
       plotId: p.id,
@@ -4077,6 +4114,8 @@ export function allocatePlotsFairlyToHeirs(
       tier: t,
       tierLabelSomali: TIER_METADATA[t].shortSomali,
       wadiStatus: meta.wadiStatus,
+      wadiDistanceM: meta.wadiDistanceM ?? null,
+      isWithinDooxa90m: isDooxa90,
       wadiLabelSomali: WADI_STATUS_METADATA[meta.wadiStatus].shortSomali,
       siteQuality: meta.siteQuality,
       siteQualityLabelSomali: SITE_QUALITY_METADATA[meta.siteQuality].labelSomali,
@@ -4093,8 +4132,8 @@ export function allocatePlotsFairlyToHeirs(
     };
   };
 
-  // Record all EXCLUDED plots (full + half) into plotAssignments so map & tables display their special names clearly
-  [...subdivision.plots, ...rawHalfPlotsOnMap].forEach((p) => {
+  // Record all EXCLUDED plots (full + half + manual jajab) into plotAssignments so map & tables display their special names clearly
+  [...subdivision.plots, ...rawHalfPlotsOnMap, ...rawManualExtraPartialPlots].forEach((p) => {
     const exMeta = excludedPlotMetaById[p.id];
     if (exMeta) {
       plotAssignments[p.id] = {
@@ -4104,13 +4143,15 @@ export function allocatePlotsFairlyToHeirs(
         isExcluded: true,
         excludedScope: exMeta.scope,
         excludedSpecialName: exMeta.specialName,
+        excludedColorHex: exMeta.colorHex,
       };
     }
   });
 
-  // When Half-Plots are excluded from inheritance division, record them explicitly as withheld_half_plot
+  // When Half-Plots are excluded from inheritance division, record untouched ones explicitly as withheld_half_plot
   if (!includeHalfPlots) {
     divisibleHalfPlotsCandidate.forEach((hp) => {
+      if (manuallyOverriddenHalfIds.has(hp.id)) return;
       plotAssignments[hp.id] = {
         ...buildPlotRecordBase(hp),
         assignmentType: 'unassigned',
@@ -4120,14 +4161,14 @@ export function allocatePlotsFairlyToHeirs(
     });
   }
 
-  const validHalfPlotsIncludedCount = includeHalfPlots ? divisibleHalfPlots.length : 0;
+  const validHalfPlotsIncludedCount = divisibleHalfPlots.length;
 
   // Count half-plots / boundary-clipped partial plots excluded from division
   const withheldHalfPlotsCount = includeHalfPlots
     ? 0
     : (() => {
         if (divisibleHalfPlotsCandidate.length > 0) {
-          return divisibleHalfPlotsCandidate.length;
+          return Math.max(0, divisibleHalfPlotsCandidate.length - manuallyOverriddenHalfIds.size);
         }
         if (subdivision.htmlHalvesCounted && subdivision.htmlHalvesCounted.length > 0) {
           return subdivision.htmlHalvesCounted.length;
@@ -4896,6 +4937,9 @@ export function allocatePlotsFairlyToHeirs(
           const vB = plotMetadata[pB.id]?.verifiedPrice ?? targetPerPlotVal;
           return Math.abs(vA - targetPerPlotVal) - Math.abs(vB - targetPerPlotVal);
         });
+      } else {
+        // Order plots contiguously along block rows/columns to build neat clustered runs (Ilma Cige style)
+        bucket.sort((pA, pB) => (pA.r - pB.r) || (pA.c - pB.c) || (pA.no - pB.no));
       }
 
       const takenPlots = bucket.splice(0, takeCount);
@@ -6147,7 +6191,13 @@ export function buildPlotRegisterCSV(
         escCsv(TIER_METADATA[bTier].shortSomali),
         '',
         '',
-        escCsv(bExcl.isExcluded ? `Laga Reebay: ${bExcl.specialName}` : 'Block La Qaybinayo'),
+        escCsv(
+          bExcl.isExcluded
+            ? bExcl.specialName
+              ? `Laga Reebay: ${bExcl.specialName}`
+              : 'Laga Reebay Dhaxalka'
+            : 'Block La Qaybinayo'
+        ),
         bExcl.isExcluded ? 'Block Laga Reebay' : '-',
         bExcl.isExcluded ? 'Excluded' : 'Block',
         bExcl.isExcluded
@@ -6401,4 +6451,264 @@ export async function downloadAllGisPackageZip(
     ? `${extraState.caseMeta.referenceNumber}_`
     : '';
   triggerBrowserDownload(`${refPrefix}Beerta_Dhaxalka_GIS_Package.zip`, content);
+}
+
+// ── Quota Guard & Ilma Cige Simple PDF Data Builders ─────────────────────────────────────────
+
+export interface HeirPlotQuotaStatus {
+  heirKey: string;
+  personName: string;
+  currentReceived: number;
+  exactQuota: number;
+  roundedTarget: number;
+  addingPlotUnits: number;
+  projectedTotal: number;
+  isAlreadyFull: boolean;
+  willExceedQuota: boolean;
+  overagePlots: number;
+}
+
+export function checkHeirPlotQuotaStatus(
+  heir: IndividualHeirPlotAllocation,
+  addingPlotUnits = 1
+): HeirPlotQuotaStatus {
+  const currentReceived = +heir.effectiveTotalPlotsReceived.toFixed(2);
+  const exactQuota = +heir.exactTotalPlotsQuota.toFixed(4);
+  const roundedTarget = Math.max(1, Math.round(exactQuota));
+  const projectedTotal = +(currentReceived + addingPlotUnits).toFixed(2);
+  const isAlreadyFull = currentReceived >= roundedTarget - 1e-4;
+  const willExceedQuota = projectedTotal > roundedTarget + 1e-4;
+  const overagePlots = Math.max(0, +(projectedTotal - roundedTarget).toFixed(2));
+  return {
+    heirKey: heir.heirKey,
+    personName: heir.personName,
+    currentReceived,
+    exactQuota,
+    roundedTarget,
+    addingPlotUnits,
+    projectedTotal,
+    isAlreadyFull,
+    willExceedQuota,
+    overagePlots,
+  };
+}
+
+export interface SimplePdfBlockColumnMarker {
+  columnLetter: string;
+  utmX: number;
+  lon: number;
+  blockIds: string[];
+}
+
+export interface SimplePdfContiguousCluster {
+  blockId: string;
+  plotIds: string[];
+}
+
+export interface SimplePdfCustomExcludedGroup {
+  name: string;
+  colorHex: string;
+  plotIds: string[];
+  areaSqM: number;
+}
+
+export interface SimplePdfPerHeirSheetData {
+  heirIndex: number; // 1-based (#1..N)
+  heir: IndividualHeirPlotAllocation;
+  exactByTier: {
+    tier_1_prime: number;
+    tier_2_standard: number;
+    tier_3_basic: number;
+    total: number;
+  };
+  assignedByTier: {
+    tier_1_prime: number;
+    tier_2_standard: number;
+    tier_3_basic: number;
+    total: number;
+  };
+  plotIdsByTier: {
+    tier_1_prime: string[];
+    tier_2_standard: string[];
+    tier_3_basic: string[];
+  };
+  dooxa90mPlotIds: string[];
+  clusters: SimplePdfContiguousCluster[];
+  clustersCount: number;
+  blocksTouchedCount: number;
+}
+
+export interface SimpleInheritancePdfDataset {
+  columns: SimplePdfBlockColumnMarker[];
+  heirSheets: SimplePdfPerHeirSheetData[];
+  heirIndexByKey: Record<string, number>;
+  jajabPlotIds: string[];
+  customExcludedGroups: SimplePdfCustomExcludedGroup[];
+  dooxa90mAllPlotIds: string[];
+}
+
+export function computeSimpleHeirPdfData(
+  subdivision: SubdivisionComputationResult,
+  allocation: FairLandAllocationResult,
+  subdivisionState: LandSubdivisionState
+): SimpleInheritancePdfDataset {
+  const blockById: Record<string, GeneratedBlock> = {};
+  const plotById: Record<string, GeneratedPlot> = {};
+  subdivision.blocks.forEach((b) => {
+    blockById[b.id] = b;
+  });
+  subdivision.plots.forEach((p) => {
+    plotById[p.id] = p;
+  });
+  (subdivision.allEvaluatedPlots || []).forEach((p) => {
+    if (!plotById[p.id]) plotById[p.id] = p;
+  });
+
+  // Group blocks west-to-east into grid columns labeled A, B, C...
+  const uniqueCols = Array.from(new Set(subdivision.blocks.map((b) => b.C))).sort((a, b) => a - b);
+  const columns: SimplePdfBlockColumnMarker[] = uniqueCols.map((cVal, idx) => {
+    const colBlocks = subdivision.blocks.filter((b) => b.C === cVal);
+    const avgUtmX =
+      colBlocks.reduce((s, b) => s + b.centerUtm[0], 0) / Math.max(1, colBlocks.length);
+    const avgUtmY =
+      colBlocks.reduce((s, b) => s + b.centerUtm[1], 0) / Math.max(1, colBlocks.length);
+    const wgs = subdivision.inv([avgUtmX, avgUtmY]);
+    const letter =
+      idx < 26
+        ? String.fromCharCode(65 + idx)
+        : `A${String.fromCharCode(65 + (idx - 26))}`;
+    return {
+      columnLetter: letter,
+      utmX: avgUtmX,
+      lon: wgs[0],
+      blockIds: colBlocks.map((b) => b.id),
+    };
+  });
+
+  const heirIndexByKey: Record<string, number> = {};
+  allocation.heirAllocations.forEach((h, i) => {
+    heirIndexByKey[h.heirKey] = i + 1;
+  });
+
+  const dooxa90mAllPlotIds: string[] = [];
+  const jajabPlotIds: string[] = [];
+  const excludedGroupMap = new Map<string, SimplePdfCustomExcludedGroup>();
+
+  Object.values(allocation.plotAssignments).forEach((rec) => {
+    if (rec.isWithinDooxa90m) {
+      dooxa90mAllPlotIds.push(rec.plotId);
+    }
+    if (
+      rec.assignmentType === 'unassigned' &&
+      (rec.unassignedReason === 'withheld_jajab' || rec.unassignedReason === 'withheld_half_plot')
+    ) {
+      jajabPlotIds.push(rec.plotId);
+    }
+    if (rec.assignmentType === 'excluded' || rec.isExcluded) {
+      const label =
+        rec.excludedSpecialName?.trim() ||
+        subdivisionState.plotMetadata[rec.plotId]?.excludedSpecialName?.trim() ||
+        subdivisionState.blockMetadata[rec.blockId]?.excludedSpecialName?.trim() ||
+        'Dhul aan ku jirin dhaxalka';
+      const color =
+        rec.excludedColorHex ||
+        subdivisionState.plotMetadata[rec.plotId]?.excludedColorHex ||
+        subdivisionState.blockMetadata[rec.blockId]?.excludedColorHex ||
+        '#94A3B8';
+      const key = `${label}::${color}`;
+      const existing = excludedGroupMap.get(key);
+      if (existing) {
+        existing.plotIds.push(rec.plotId);
+        existing.areaSqM = +(existing.areaSqM + (rec.areaSqM || 0)).toFixed(1);
+      } else {
+        excludedGroupMap.set(key, {
+          name: label,
+          colorHex: color,
+          plotIds: [rec.plotId],
+          areaSqM: +(rec.areaSqM || 0).toFixed(1),
+        });
+      }
+    }
+  });
+
+  const heirSheets: SimplePdfPerHeirSheetData[] = allocation.heirAllocations.map((heir, idx) => {
+    const heirDooxa90 = heir.allWholePlotIds.filter(
+      (pid) => Boolean(allocation.plotAssignments[pid]?.isWithinDooxa90m)
+    );
+
+    // Build contiguous clusters: group by block & row, split every 5 consecutive plots max (Ilma Cige style)
+    const byBlock = new Map<string, GeneratedPlot[]>();
+    heir.allWholePlotIds.forEach((pid) => {
+      const pl = plotById[pid];
+      if (!pl) return;
+      const arr = byBlock.get(pl.block) || [];
+      arr.push(pl);
+      byBlock.set(pl.block, arr);
+    });
+
+    const clusters: SimplePdfContiguousCluster[] = [];
+    Array.from(byBlock.keys())
+      .sort()
+      .forEach((bid) => {
+        const pls = (byBlock.get(bid) || []).slice().sort((a, b) => a.r - b.r || a.c - b.c || a.no - b.no);
+        let currentRun: GeneratedPlot[] = [];
+        pls.forEach((pl) => {
+          if (currentRun.length === 0) {
+            currentRun = [pl];
+          } else {
+            const prev = currentRun[currentRun.length - 1];
+            const isContiguousSameRow = pl.r === prev.r && Math.abs(pl.c - prev.c) <= 1;
+            const isContiguousNextRow = pl.c === prev.c && Math.abs(pl.r - prev.r) <= 1;
+            if ((isContiguousSameRow || isContiguousNextRow) && currentRun.length < 5) {
+              currentRun.push(pl);
+            } else {
+              clusters.push({ blockId: bid, plotIds: currentRun.map((x) => x.id) });
+              currentRun = [pl];
+            }
+          }
+        });
+        if (currentRun.length > 0) {
+          clusters.push({ blockId: bid, plotIds: currentRun.map((x) => x.id) });
+        }
+      });
+
+    const t1Assigned = heir.byTier.tier_1_prime.assignedWholePlotIds.length;
+    const t2Assigned = heir.byTier.tier_2_standard.assignedWholePlotIds.length;
+    const t3Assigned = heir.byTier.tier_3_basic.assignedWholePlotIds.length;
+
+    return {
+      heirIndex: idx + 1,
+      heir,
+      exactByTier: {
+        tier_1_prime: +heir.byTier.tier_1_prime.exactQuotaPlots.toFixed(2),
+        tier_2_standard: +heir.byTier.tier_2_standard.exactQuotaPlots.toFixed(2),
+        tier_3_basic: +heir.byTier.tier_3_basic.exactQuotaPlots.toFixed(2),
+        total: +heir.exactTotalPlotsQuota.toFixed(2),
+      },
+      assignedByTier: {
+        tier_1_prime: t1Assigned,
+        tier_2_standard: t2Assigned,
+        tier_3_basic: t3Assigned,
+        total: +(heir.effectiveTotalPlotsReceived).toFixed(2),
+      },
+      plotIdsByTier: {
+        tier_1_prime: heir.byTier.tier_1_prime.assignedWholePlotIds,
+        tier_2_standard: heir.byTier.tier_2_standard.assignedWholePlotIds,
+        tier_3_basic: heir.byTier.tier_3_basic.assignedWholePlotIds,
+      },
+      dooxa90mPlotIds: heirDooxa90,
+      clusters,
+      clustersCount: clusters.length,
+      blocksTouchedCount: heir.assignedBlockIds.length,
+    };
+  });
+
+  return {
+    columns,
+    heirSheets,
+    heirIndexByKey,
+    jajabPlotIds,
+    customExcludedGroups: Array.from(excludedGroupMap.values()),
+    dooxa90mAllPlotIds,
+  };
 }

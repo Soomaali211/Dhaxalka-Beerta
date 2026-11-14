@@ -8,10 +8,13 @@ import {
   installAndroidApkRuntimeBridge,
   isNativeAndroidApkRuntime,
   purgeStaleServiceWorkersInNativeApk,
+  shouldForceApkMobileLayout,
+  syncApkMobileModeDocumentClass,
 } from './utils/androidApkBridge';
 
 // Activate native PDF print, GPS permission & file export bridge inside Android APK
 installAndroidApkRuntimeBridge();
+syncApkMobileModeDocumentClass(shouldForceApkMobileLayout());
 
 if (isNativeAndroidApkRuntime()) {
   // Native APK serves bundled assets locally; purge stale SW precaches so APK updates always apply immediately

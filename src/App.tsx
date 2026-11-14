@@ -39,6 +39,7 @@ import { PresetsModal } from './components/PresetsModal';
 import { OfficialCertificateModal } from './components/OfficialCertificateModal';
 import { QuranicProofsModal } from './components/QuranicProofsModal';
 import { SavedCasesModal } from './components/SavedCasesModal';
+import { SimpleInheritancePdfModal } from './components/SimpleInheritancePdfModal';
 
 import {
   CaseExportMetadata,
@@ -46,6 +47,7 @@ import {
   LandSubdivisionState,
 } from './types/landSubdivision';
 import {
+  DEFAULT_SUBDIVISION_PARAMS,
   HtmlGeoJsonSlot,
   LAND_ALLOCATION_MODE_METADATA,
   allocatePlotsFairlyToHeirs,
@@ -85,7 +87,14 @@ import {
 } from './utils/undoRedoEngine';
 import { ValidatedBackupPreview } from './utils/backupRestoreEngine';
 import { computeUnifiedFarmMetrics, countEnteredHeirs } from './utils/unifiedMetrics';
-import { safePersistJsonToLocalStorage } from './utils/androidApkBridge';
+import {
+  getStoredApkMobileModePreference,
+  isNativeAndroidApkRuntime,
+  safePersistJsonToLocalStorage,
+  saveApkMobileModePreference,
+  shouldForceApkMobileLayout,
+  syncApkMobileModeDocumentClass,
+} from './utils/androidApkBridge';
 
 import {
   CheckCircle2,
@@ -250,11 +259,11 @@ export default function App() {
   // Open directly on the last active case's map (reopenable anytime from drawer)
   const [showWelcomeSplash, setShowWelcomeSplash] = useState<boolean>(false);
 
-  // 3 Primary Destinations + Contextual Sub-Modes with LocalStorage Persistence
+  // 4 Primary Destinations + Contextual Sub-Modes with LocalStorage Persistence
   const [activeDestination, setActiveDestination] = useState<PrimaryDestination>(() => {
     try {
       const saved = localStorage.getItem('beeraha_active_destination') as PrimaryDestination | null;
-      if (saved && ['dashboard', 'calculate', 'list_data', 'export'].includes(saved)) {
+      if (saved && ['dashboard', 'calculate', 'cad_designer', 'list_data', 'export'].includes(saved)) {
         return saved;
       }
     } catch {
@@ -287,7 +296,10 @@ export default function App() {
   const [listDataMode, setListDataMode] = useState<ListDataCategoryTab>(() => {
     try {
       const saved = localStorage.getItem('beeraha_list_data_mode') as ListDataCategoryTab | null;
-      if (saved && ['cases', 'plots', 'blocks', 'heirs'].includes(saved)) {
+      if (
+        saved &&
+        ['cases', 'plots', 'blocks', 'heirs', 'excel', 'settings', 'export'].includes(saved)
+      ) {
         return saved;
       }
     } catch {
@@ -296,6 +308,26 @@ export default function App() {
     return 'cases';
   });
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const isNativeApk = useMemo(() => isNativeAndroidApkRuntime(), []);
+  const [apkMobileModePref, setApkMobileModePref] = useState<boolean | null>(() =>
+    getStoredApkMobileModePreference()
+  );
+  const isApkMobileMode = useMemo(
+    () => shouldForceApkMobileLayout(apkMobileModePref, isNativeApk),
+    [apkMobileModePref, isNativeApk]
+  );
+
+  useEffect(() => {
+    syncApkMobileModeDocumentClass(isApkMobileMode);
+  }, [isApkMobileMode]);
+
+  const handleToggleApkMobileModePref = useCallback(
+    (nextPref: boolean | null) => {
+      saveApkMobileModePreference(nextPref);
+      setApkMobileModePref(nextPref);
+    },
+    []
+  );
 
   // Selected GIS Scope (Plot / Block / All Farm) synced between Map (Screen 6) & Calculator (Screen 5)
   const [selectedTargetScope, setSelectedTargetScope] = useState<string>('all_farm');
@@ -431,6 +463,7 @@ export default function App() {
   const [isSavedCasesOpen, setIsSavedCasesOpen] = useState<boolean>(false);
   const [isBackupRestoreOpen, setIsBackupRestoreOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [isSimplePdfOpen, setIsSimplePdfOpen] = useState<boolean>(false);
   const [cartoPdfModal, setCartoPdfModal] = useState<{
     isOpen: boolean;
     mode: CartographicPdfDocMode;
@@ -1690,7 +1723,7 @@ export default function App() {
       : activeDestination === 'cad_designer'
       ? 'CAD Studio Design'
       : activeDestination === 'list_data'
-      ? 'Xogta & Kiisaska'
+      ? 'Xogta, Kiisaska & Settings'
       : 'Soo saar & Daabacaad';
 
   const sectionSubtitle =
@@ -1701,7 +1734,7 @@ export default function App() {
       : activeDestination === 'cad_designer'
       ? 'Naqshadeynta & Qaybinta Dhulka'
       : activeDestination === 'list_data'
-      ? `${savedCases.length} Kiis · Diiwaanka & Settings`
+      ? `${savedCases.length} Kiis · Diiwaan · Settings · Export`
       : `${currentPlotsCount} Buuxa · ${currentHalfPlotsCount} Half`;
 
   // SCREEN 1: FULL-SCREEN WELCOME / SPLASH VIEW
@@ -1719,13 +1752,21 @@ export default function App() {
   const isFullBleedMapActive = activeDestination === 'dashboard';
 
   return (
-    <div className="w-full min-w-0 max-w-full min-h-screen bg-[#060d18] text-[#e8eef7] flex flex-col lg:flex-row font-sans selection:bg-[#22c55e]/30 overflow-x-clip">
+    <div
+      className={`w-full min-w-0 max-w-full min-h-screen bg-[#060d18] text-[#e8eef7] flex flex-col ${
+        isApkMobileMode ? '' : 'lg:flex-row '
+      }font-sans selection:bg-[#22c55e]/30 overflow-x-clip`}
+    >
       {/* OFFLINE STATUS BANNER */}
       <OfflineIndicator />
 
       {/* TOAST NOTIFICATION (Dark Navy & Emerald) */}
       {notification && (
-        <div className="fixed top-16 lg:top-5 right-4 z-50 max-w-sm w-[calc(100%-2rem)] bg-[#111b2e] border border-[#223250] rounded-2xl shadow-2xl p-3.5 flex items-start gap-3 no-print">
+        <div
+          className={`fixed top-16 ${
+            isApkMobileMode ? '' : 'lg:top-5 '
+          }right-4 z-50 max-w-sm w-[calc(100%-2rem)] bg-[#111b2e] border border-[#223250] rounded-2xl shadow-2xl p-3.5 flex items-start gap-3 no-print`}
+        >
           <div className="w-8 h-8 rounded-xl bg-[#22c55e]/15 text-[#22c55e] flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-4 h-4" />
           </div>
@@ -1773,6 +1814,7 @@ export default function App() {
         onOpenBackupRestoreModal={() => setIsBackupRestoreOpen(true)}
         onOpenExportModal={() => setIsExportModalOpen(true)}
         onOpenWelcomeSplash={() => setShowWelcomeSplash(true)}
+        isApkMobileMode={isApkMobileMode}
       />
 
       {/* MAIN WORKSPACE COLUMN */}
@@ -1802,13 +1844,18 @@ export default function App() {
           onChangeCurrency={setCurrency}
           onOpenExportModal={() => setIsExportModalOpen(true)}
           onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
+          isApkMobileMode={isApkMobileMode}
         />
 
         {/* Main Workspace Content */}
         <main
           className={
             isFullBleedMapActive
-              ? 'flex-1 w-full min-w-0 max-w-full relative pb-16 lg:pb-0'
+              ? isApkMobileMode
+                ? 'flex-1 w-full min-w-0 max-w-full relative pb-16'
+                : 'flex-1 w-full min-w-0 max-w-full relative pb-16 lg:pb-0'
+              : isApkMobileMode
+              ? 'flex-1 w-full min-w-0 max-w-2xl mx-auto px-3 py-3 pb-24'
               : 'flex-1 w-full min-w-0 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 pb-24 lg:pb-10'
           }
         >
@@ -1875,37 +1922,20 @@ export default function App() {
               subdivisionState={subdivisionState}
               subdivisionResult={subdivisionResult}
               fairAllocation={fairLandAllocation}
-              inheritanceResult={calculationResult}
-              heirsInput={heirsInput}
               currency={currency}
               activeCaseMeta={activeCaseMeta}
               savedCasesForGeometryLink={savedCases.filter(
                 (c) => c.id !== activeCaseId && c.hasMapGeometry
               )}
               onExplicitLinkGeometryFromCase={handleExplicitLinkGeometryFromCase}
-              onUploadGeoJsonFiles={handleGeoJsonFilesUploadFromDashboard}
-              onUploadHtmlGeoJsonSlot={handleHtmlGeoJsonSlotUpload}
               onSelectBoundaryIndex={handleSelectBoundaryIndex}
               onSelectSampleIndex={handleSelectSampleIndex}
-              onOpenCartographicPdfModal={(mode) =>
-                setCartoPdfModal({ isOpen: true, mode })
-              }
               onUpdateSubdivisionState={setSubdivisionState}
               onSyncAndLinkToEstate={handleSyncAndLinkSubdivisionToEstate}
-              onUpdateHeirsInput={setHeirsInput}
-              onNavigateToResults={() => {
-                if (
-                  !subdivisionState.isLinkedToEstate &&
-                  subdivisionResult &&
-                  subdivisionResult.plots.length > 0
-                ) {
-                  handleSyncAndLinkSubdivisionToEstate();
-                }
-                navigateLegacyTab('results');
-              }}
               onNavigateToCalculator={() => navigateLegacyTab('calculator')}
               onBackToInteractiveMap={() => setActiveDestination('dashboard')}
               onNotify={showToast}
+              isApkMobileMode={isApkMobileMode}
             />
           )}
 
@@ -1939,16 +1969,8 @@ export default function App() {
               assets={assets}
               deductions={deductions}
               currency={currency}
-              linkedLandAllocation={linkedLandAllocation}
-              allocationMode={subdivisionState.allocationMode}
-              onChangeAllocationMode={handleChangeLandAllocationMode}
-              includeValidHalfPlots={Boolean(subdivisionState.includeValidHalfPlotsInAllocation)}
-              onToggleIncludeHalfPlots={handleToggleIncludeHalfPlots}
               subdivisionResult={currentHasMap ? subdivisionResult : null}
               currentHasMap={currentHasMap}
-              selectedTargetScope={selectedTargetScope}
-              onSelectTargetScope={setSelectedTargetScope}
-              onSyncFullFarmGis={handleSyncAndLinkSubdivisionToEstate}
               onChangeCurrency={setCurrency}
               onUpdateHeirs={setHeirsInput}
               onUpdateAssets={(nextAssets) => {
@@ -1960,7 +1982,6 @@ export default function App() {
               }}
               onUpdateDeductions={setDeductions}
               onOpenDetailedAssetsModal={() => setIsAssetsConfigOpen(true)}
-              onOpenLandDesigner={() => navigateLegacyTab('land_designer')}
               onCalculateAndViewResults={() => navigateLegacyTab('results')}
               onSaveCaseRecord={handleSaveCurrentCase}
               onClearCase={handleResetCurrentCaseInputs}
@@ -1973,33 +1994,23 @@ export default function App() {
               result={calculationResult}
               heirsInput={heirsInput}
               currency={currency}
-              linkedLandAllocation={linkedLandAllocation}
-              allocationMode={subdivisionState.allocationMode}
-              onChangeAllocationMode={handleChangeLandAllocationMode}
-              includeValidHalfPlots={Boolean(subdivisionState.includeValidHalfPlotsInAllocation)}
-              onToggleIncludeHalfPlots={handleToggleIncludeHalfPlots}
               onUpdateHeirsInput={setHeirsInput}
               onBackToCalculator={() => navigateLegacyTab('calculator')}
               onOpenAssetsModal={() => setIsAssetsConfigOpen(true)}
-              onOpenLandDesigner={() => navigateLegacyTab('land_designer')}
               onSaveCaseRecord={handleSaveCurrentCase}
               onPrintCertificate={() => setIsCertificateOpen(true)}
-              onPrintInheritanceMapPdf={
-                currentHasMap && subdivisionResult
-                  ? () => setCartoPdfModal({ isOpen: true, mode: 'inheritance_map' })
-                  : undefined
-              }
               onExportExcel={handleExportExcel}
             />
           )}
 
-          {/* 3. SCREEN 7 & SCREEN 8: LIST DATA DESTINATION */}
+          {/* 3. SCREEN 7 & SCREEN 8: QAYBTA 4 — XOGTA, KIISASKA, SETTINGS & EXPORT */}
           {activeDestination === 'list_data' && (
             <ListDataView
               activeCategory={listDataMode}
               onChangeCategory={setListDataMode}
               savedCases={savedCases}
               activeCase={activeCase}
+              activeCaseMeta={activeCaseMeta}
               heirsInput={heirsInput}
               assets={assets}
               deductions={deductions}
@@ -2009,7 +2020,92 @@ export default function App() {
               subdivisionState={subdivisionState}
               subdivisionResult={subdivisionResult}
               fairLandAllocation={fairLandAllocation}
+              visibleCount={
+                mapVisibleStats.totalCount > 0 ? mapVisibleStats.visibleCount : currentPlotsCount
+              }
+              totalCount={
+                mapVisibleStats.totalCount > 0 ? mapVisibleStats.totalCount : currentPlotsCount
+              }
+              visiblePlotIds={mapVisibleStats.visibleIds}
               onUpdateHeirsInput={setHeirsInput}
+              onChangeCurrency={setCurrency}
+              onChangeAllocationMode={handleChangeLandAllocationMode}
+              onToggleIncludeHalfPlots={handleToggleIncludeHalfPlots}
+              onToggleNonAdjacentBlocks={(enforce) => {
+                setSubdivisionState((prev) => ({
+                  ...prev,
+                  enforceNonAdjacentBlocks: enforce,
+                  approvalStatus:
+                    prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+                  auditHistory: [
+                    ...(prev.auditHistory || []),
+                    createAuditEntry(
+                      'auto_proposal',
+                      enforce
+                        ? 'Kala-fogaynta Block-yada (Non-Adjacent) waa la shiday.'
+                        : 'Kala-fogaynta Block-yada (Non-Adjacent) waa la damiyey.'
+                    ),
+                  ],
+                }));
+              }}
+              onRestoreCanonicalDimensions={() => {
+                setSubdivisionState((prev) => ({
+                  ...prev,
+                  params: {
+                    ...prev.params,
+                    L: DEFAULT_SUBDIVISION_PARAMS.L,
+                    W: DEFAULT_SUBDIVISION_PARAMS.W,
+                    pw: DEFAULT_SUBDIVISION_PARAMS.pw,
+                    pd: DEFAULT_SUBDIVISION_PARAMS.pd,
+                    rU: DEFAULT_SUBDIVISION_PARAMS.rU,
+                    rV: DEFAULT_SUBDIVISION_PARAMS.rV,
+                    linkRoads: true,
+                  },
+                  approvalStatus:
+                    prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+                  auditHistory: [
+                    ...(prev.auditHistory || []),
+                    createAuditEntry(
+                      'metadata_update',
+                      'Cabirrada rasmiga ah (Block 90×48m · Waddo 15m · Plot 18×24m) waa la soo celiyey.'
+                    ),
+                  ],
+                }));
+                showToast(
+                  'Halbeegga Rasmiga ah Waa La Soo Celiyey',
+                  'Block 90×48m · Waddo 15m · Plot 18×24m waa la dejiyey.'
+                );
+              }}
+              onCompactAuditLogs={() => {
+                setSubdivisionState((prev) => ({
+                  ...prev,
+                  auditHistory: (prev.auditHistory || []).slice(-10),
+                  halfPlotValidationHistory: (prev.halfPlotValidationHistory || []).slice(-5),
+                }));
+                setSavedCases((prev) =>
+                  prev.map((c) => ({
+                    ...c,
+                    changeHistory: (c.changeHistory || []).slice(0, 15),
+                  }))
+                );
+                showToast(
+                  'Taariikhda Kaydka Waa La Koobay',
+                  'Diiwaannada hore waa la koobay iyadoo xogta muhiimka ah la ilaaliyey.'
+                );
+              }}
+              onResetCurrentCaseInputs={handleResetCurrentCaseInputs}
+              onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
+              onOpenPresetsModal={() => setIsPresetsOpen(true)}
+              onOpenQuranicModal={() => setIsQuranicOpen(true)}
+              onOpenSimplePdfModal={
+                currentHasMap && subdivisionResult && fairLandAllocation
+                  ? () => setIsSimplePdfOpen(true)
+                  : undefined
+              }
+              onOpenCartographicPdfModal={(mode) =>
+                setCartoPdfModal({ isOpen: true, mode })
+              }
+              onNotify={showToast}
               onOpenCase={handleSelectSavedCase}
               onCreateNewCase={handleCreateManagedCase}
               onSaveActiveCaseUpdates={handleSaveActiveCaseMetadataUpdates}
@@ -2026,10 +2122,13 @@ export default function App() {
               onPrintCertificate={() => setIsCertificateOpen(true)}
               inspectedPlotIdFromMap={mapInspectedPlotId}
               onClearInspectedPlotFromMap={() => setMapInspectedPlotId(null)}
+              isApkMobileMode={isApkMobileMode}
+              isNativeApk={isNativeApk}
+              onToggleApkMobileModePref={handleToggleApkMobileModePref}
             />
           )}
 
-          {/* 4. DEDICATED EXPORT & PRINT LAYOUT HUB (④ Soo saar — E17, E8, E10, E11) */}
+          {/* 4. DEDICATED EXPORT & PRINT LAYOUT HUB */}
           {activeDestination === 'export' && (
             <ExportHubView
               visibleCount={
@@ -2044,6 +2143,11 @@ export default function App() {
               fairAllocation={fairLandAllocation}
               activeCaseMeta={activeCaseMeta}
               onExportLayoutPdf={() => setIsCertificateOpen(true)}
+              onOpenSimplePdfModal={
+                currentHasMap && subdivisionResult && fairLandAllocation
+                  ? () => setIsSimplePdfOpen(true)
+                  : undefined
+              }
               onOpenCartographicPdfModal={(mode) =>
                 setCartoPdfModal({ isOpen: true, mode })
               }
@@ -2056,13 +2160,14 @@ export default function App() {
         </main>
       </div>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (Khariidad | Xisaabi | Xogta) */}
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
       <MobileBottomNav
         activeDestination={activeDestination}
         onSelectDestination={(dest) => {
           setActiveDestination(dest);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
+        isApkMobileMode={isApkMobileMode}
       />
 
       {/* SCREEN 4: UNIFIED EXPORT OPTIONS SHEET / MODAL */}
@@ -2079,6 +2184,11 @@ export default function App() {
         activeCaseMeta={activeCaseMeta}
         onClose={() => setIsExportModalOpen(false)}
         onExportLayoutPdf={() => setIsCertificateOpen(true)}
+        onOpenSimplePdfModal={
+          currentHasMap && subdivisionResult && fairLandAllocation
+            ? () => setIsSimplePdfOpen(true)
+            : undefined
+        }
         onOpenCartographicPdfModal={(mode) =>
           setCartoPdfModal({ isOpen: true, mode })
         }
@@ -2086,6 +2196,18 @@ export default function App() {
         onExportInheritanceCsv={handleExportCSV}
         onNotify={showToast}
       />
+
+      {/* SIMPLE PDF MODAL (QAABKA ILMA CIGE — A4 MASTER + PER-HEIR) */}
+      {currentHasMap && subdivisionResult && fairLandAllocation && (
+        <SimpleInheritancePdfModal
+          isOpen={isSimplePdfOpen}
+          onClose={() => setIsSimplePdfOpen(false)}
+          subdivisionResult={subdivisionResult}
+          subdivisionState={subdivisionState}
+          fairAllocation={fairLandAllocation}
+          activeCaseMeta={activeCaseMeta}
+        />
+      )}
 
       {/* CARTOGRAPHIC PDF MODAL (Khariidadda Dhaxalka PDF, Automatic_Layout11 & 4-Page Warbixinta Heerarka Beerta) */}
       {currentHasMap && subdivisionResult && (

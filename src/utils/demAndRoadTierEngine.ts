@@ -514,6 +514,7 @@ export function computeAutomaticDemAndRoadTiers(params: {
   demSampler: DemSampler;
   cityRoad: DetectedCityRoad | null;
   wadiItems?: ParsedGeoItem[];
+  dooxaBufferMeters?: number;
   existingPlotMetadata?: Record<string, PlotDetailedMetadata>;
   existingBlockMetadata?: Record<string, BlockDetailedMetadata>;
 }): AutomaticTierComputationOutput {
@@ -522,6 +523,7 @@ export function computeAutomaticDemAndRoadTiers(params: {
     demSampler,
     cityRoad,
     wadiItems = [],
+    dooxaBufferMeters = 90,
     existingPlotMetadata = {},
     existingBlockMetadata = {},
   } = params;
@@ -545,6 +547,7 @@ export function computeAutomaticDemAndRoadTiers(params: {
     slopePct: number;
     roughnessM: number;
     wadiDistM: number;
+    isWithinDooxa90m: boolean;
     wadiStatus: WadiStatus;
     roadDistM: number;
     terrainRawPenalty: number; // 0 = perfectly flat/uniform, 1+ = gullied/steep
@@ -606,7 +609,7 @@ export function computeAutomaticDemAndRoadTiers(params: {
       elevMean = zs.reduce((s, v) => s + v, 0) / zs.length;
     }
 
-    // 2. Wadi / Gully (`Dooxyada` / `Jeexjeexa`) intersection & proximity
+    // 2. Wadi / Gully (`Dooxyada` / `<=90m dooxa` buffer corridor) intersection & proximity
     let wadiDistM = Infinity;
     for (const wl of wadiLinesUtm) {
       const d = polygonToPolylineDistanceUtm(q.rect, wl);
@@ -615,16 +618,25 @@ export function computeAutomaticDemAndRoadTiers(params: {
 
     const existingWadi = existingPlotMetadata[q.id]?.wadiStatus;
     let wadiStatus: WadiStatus = 'none';
+    let isWithinDooxa90m = false;
     if (wadiLinesUtm.length > 0) {
+      isWithinDooxa90m = wadiDistM <= dooxaBufferMeters;
       if (wadiDistM <= 0.5) wadiStatus = 'cuts_through';
       else if (wadiDistM <= 10) wadiStatus = 'partial';
-      else if (wadiDistM <= 28) wadiStatus = 'nearby';
+      else if (wadiDistM <= dooxaBufferMeters) wadiStatus = 'nearby';
       else wadiStatus = 'none';
     } else if (existingWadi && existingWadi !== 'unverified') {
       wadiStatus = existingWadi;
-      if (existingWadi === 'cuts_through') wadiDistM = 0;
-      else if (existingWadi === 'partial') wadiDistM = 6;
-      else if (existingWadi === 'nearby') wadiDistM = 20;
+      if (existingWadi === 'cuts_through') {
+        wadiDistM = 0;
+        isWithinDooxa90m = true;
+      } else if (existingWadi === 'partial') {
+        wadiDistM = 6;
+        isWithinDooxa90m = true;
+      } else if (existingWadi === 'nearby') {
+        wadiDistM = Math.min(dooxaBufferMeters, 45);
+        isWithinDooxa90m = true;
+      }
     }
 
     // 3. Nearest City-Connecting Road distance
@@ -650,11 +662,11 @@ export function computeAutomaticDemAndRoadTiers(params: {
     const roughPen = Math.min(1, roughnessM / 1.2); // >=1.2m local incision -> 1.0
     const wadiPen =
       wadiStatus === 'cuts_through'
-        ? 0.95
+        ? 0.98
         : wadiStatus === 'partial'
-        ? 0.62
-        : wadiStatus === 'nearby'
-        ? 0.25
+        ? 0.85
+        : isWithinDooxa90m
+        ? 0.72
         : 0;
 
     const terrainRawPenalty = Math.min(1.25, Math.max(slopePen * 0.72 + roughPen * 0.48, wadiPen));
@@ -665,6 +677,7 @@ export function computeAutomaticDemAndRoadTiers(params: {
       slopePct,
       roughnessM,
       wadiDistM,
+      isWithinDooxa90m,
       wadiStatus,
       roadDistM,
       terrainRawPenalty,
@@ -691,20 +704,20 @@ export function computeAutomaticDemAndRoadTiers(params: {
     plotScoreById[rec.plot.id] = compositePenalty;
   }
 
-  // Helper to classify a penalty + terrain flatness/gullying into Heer 1 / Heer 2 / Heer 3
+  // Helper to classify a penalty + terrain flatness/gullying/dooxa <=90m into Heer 1 / Heer 2 / Heer 3
   const classifyIntoTier = (
     compositePen: number,
     terrainPen: number,
-    isCutByWadi: boolean,
-    isPartialWadi: boolean,
+    isCutOrNearDooxa90m: boolean,
+    isPartialOrSteep: boolean,
     adaptiveT1Max: number,
     adaptiveT2Max: number
   ): AssetQualityTier => {
-    // Hard domain rule: gullied / jeexjeex / steep land becomes Heer 3 (or Heer 2 if mild), NEVER Heer 1!
-    if (isCutByWadi || terrainPen >= 0.68) {
+    // Hard domain rule: plots within <=90m dooxa OR steep/gullied terrain become Heer 3 (never Heer 1)
+    if (isCutOrNearDooxa90m || terrainPen >= 0.68) {
       return 'tier_3_basic';
     }
-    if (isPartialWadi || terrainPen >= 0.36) {
+    if (isPartialOrSteep || terrainPen >= 0.36) {
       return compositePen >= adaptiveT2Max ? 'tier_3_basic' : 'tier_2_standard';
     }
     // Flat, uniform terrain (`Dhul isku siman`): Heer 1 if near/well-connected to road, Heer 2/3 if very remote
@@ -753,6 +766,7 @@ export function computeAutomaticDemAndRoadTiers(params: {
     const avgComp =
       bPlots.reduce((s, r) => s + (plotScoreById[r.plot.id] || 0), 0) / bPlots.length;
     const avgTerr = bPlots.reduce((s, r) => s + r.terrainRawPenalty, 0) / bPlots.length;
+    const nearDooxaCount = bPlots.filter((r) => r.isWithinDooxa90m).length;
     const cutCount = bPlots.filter((r) => r.wadiStatus === 'cuts_through').length;
     const partCount = bPlots.filter((r) => r.wadiStatus === 'partial').length;
     const avgSlope = bPlots.reduce((s, r) => s + r.slopePct, 0) / bPlots.length;
@@ -761,8 +775,9 @@ export function computeAutomaticDemAndRoadTiers(params: {
     const bTier = classifyIntoTier(
       avgComp,
       avgTerr,
-      cutCount >= Math.max(2, Math.ceil(bPlots.length * 0.35)),
-      cutCount > 0 || partCount >= 2,
+      nearDooxaCount >= Math.max(2, Math.ceil(bPlots.length * 0.5)) ||
+        cutCount >= Math.max(2, Math.ceil(bPlots.length * 0.35)),
+      cutCount > 0 || partCount >= 2 || nearDooxaCount > 0,
       adaptiveT1Max,
       adaptiveT2Max
     );
@@ -779,15 +794,17 @@ export function computeAutomaticDemAndRoadTiers(params: {
           ? `Dhul isku siman (${avgSlope.toFixed(1)}% slope)${roadLinesUtm.length > 0 ? ` · ${Math.round(avgRoad)}m u jira waddada` : ''}`
           : bTier === 'tier_2_standard'
           ? `Dhul dhexdhexaad ah (${avgSlope.toFixed(1)}% slope)${roadLinesUtm.length > 0 ? ` · ${Math.round(avgRoad)}m waddada` : ''}`
+          : nearDooxaCount > 0
+          ? `Dooxa ≤${dooxaBufferMeters}m / Jeexjeex (${avgSlope.toFixed(1)}% slope)`
           : `Dhul jeexjeex / foorar leh (${avgSlope.toFixed(1)}% slope)`,
     };
 
-    // Per-plot precision: override plots inside the block whose flatness/gullying differs from block average
+    // Per-plot precision: override plots inside the block whose <=90m dooxa / flatness differs from block average
     for (const rec of bPlots) {
       const pTier = classifyIntoTier(
         plotScoreById[rec.plot.id] || 0,
         rec.terrainRawPenalty,
-        rec.wadiStatus === 'cuts_through',
+        rec.isWithinDooxa90m || rec.wadiStatus === 'cuts_through',
         rec.wadiStatus === 'partial',
         adaptiveT1Max,
         adaptiveT2Max
@@ -818,6 +835,8 @@ export function computeAutomaticDemAndRoadTiers(params: {
           wadiLinesUtm.length > 0
             ? rec.wadiStatus
             : updatedPlotMetadata[rec.plot.id]?.wadiStatus || 'none',
+        wadiDistanceM: Number.isFinite(rec.wadiDistM) ? Math.round(rec.wadiDistM) : null,
+        isWithinDooxa90m: rec.isWithinDooxa90m,
         siteQuality,
       };
     }

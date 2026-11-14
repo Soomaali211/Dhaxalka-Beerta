@@ -9,9 +9,11 @@ import {
   SavedInheritanceCase,
 } from '../types/inheritance';
 import {
+  CaseExportMetadata,
   FairLandAllocationResult,
   GeneratedBlock,
   GeneratedPlot,
+  LandAllocationMode,
   LandSubdivisionState,
   SubdivisionComputationResult,
 } from '../types/landSubdivision';
@@ -24,6 +26,8 @@ import {
 } from '../utils/unifiedMetrics';
 import { CaseManagementView } from './CaseManagementView';
 import { ExcelSpreadsheetView } from './ExcelSpreadsheetView';
+import { ExportHubView } from './ExportHubView';
+import { SystemSettingsPanel } from './SystemSettingsPanel';
 import {
   ArrowLeft,
   ArrowUpDown,
@@ -36,19 +40,28 @@ import {
   MapPin,
   Plus,
   Search,
+  Settings,
   ShieldAlert,
   SlidersHorizontal,
   Users,
   X,
 } from 'lucide-react';
 
-export type ListDataCategoryTab = 'cases' | 'blocks' | 'plots' | 'heirs' | 'excel';
+export type ListDataCategoryTab =
+  | 'cases'
+  | 'blocks'
+  | 'plots'
+  | 'heirs'
+  | 'excel'
+  | 'settings'
+  | 'export';
 
 interface ListDataViewProps {
   activeCategory: ListDataCategoryTab;
   onChangeCategory: (cat: ListDataCategoryTab) => void;
   savedCases: SavedInheritanceCase[];
   activeCase: SavedInheritanceCase | null;
+  activeCaseMeta?: CaseExportMetadata;
   heirsInput: HeirsInput;
   assets: EstateAssetItem[];
   deductions: EstateDeductionItem[];
@@ -58,7 +71,25 @@ interface ListDataViewProps {
   subdivisionState: LandSubdivisionState;
   subdivisionResult: SubdivisionComputationResult | null;
   fairLandAllocation: FairLandAllocationResult | null;
+  visibleCount?: number;
+  totalCount?: number;
+  visiblePlotIds?: Set<string> | null;
   onUpdateHeirsInput: (updated: HeirsInput) => void;
+  onChangeCurrency: (currency: Currency) => void;
+  onChangeAllocationMode: (mode: LandAllocationMode) => void;
+  onToggleIncludeHalfPlots: (include: boolean) => void;
+  onToggleNonAdjacentBlocks: (enforce: boolean) => void;
+  onRestoreCanonicalDimensions: () => void;
+  onCompactAuditLogs: () => void;
+  onResetCurrentCaseInputs: () => void;
+  onOpenBackupRestore: () => void;
+  onOpenPresetsModal: () => void;
+  onOpenQuranicModal: () => void;
+  onOpenSimplePdfModal?: () => void;
+  onOpenCartographicPdfModal: (
+    mode: 'layout11' | 'heerarka_report' | 'inheritance_map'
+  ) => void;
+  onNotify: (title: string, message: string) => void;
   onOpenCase: (caseRecord: SavedInheritanceCase) => void;
   onCreateNewCase: (params: {
     caseName: string;
@@ -96,6 +127,9 @@ interface ListDataViewProps {
   onPrintCertificate: () => void;
   inspectedPlotIdFromMap?: string | null;
   onClearInspectedPlotFromMap?: () => void;
+  isApkMobileMode?: boolean;
+  isNativeApk?: boolean;
+  onToggleApkMobileModePref?: (nextPref: boolean | null) => void;
 }
 
 type BlockFilterMode = 'all' | 'divisible' | 'excluded' | 'full_inside' | 'clipped';
@@ -118,6 +152,7 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
   onChangeCategory,
   savedCases,
   activeCase,
+  activeCaseMeta,
   heirsInput,
   assets,
   deductions,
@@ -127,7 +162,23 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
   subdivisionState,
   subdivisionResult,
   fairLandAllocation,
+  visibleCount,
+  totalCount,
+  visiblePlotIds,
   onUpdateHeirsInput,
+  onChangeCurrency,
+  onChangeAllocationMode,
+  onToggleIncludeHalfPlots,
+  onToggleNonAdjacentBlocks,
+  onRestoreCanonicalDimensions,
+  onCompactAuditLogs,
+  onResetCurrentCaseInputs,
+  onOpenBackupRestore,
+  onOpenPresetsModal,
+  onOpenQuranicModal,
+  onOpenSimplePdfModal,
+  onOpenCartographicPdfModal,
+  onNotify,
   onOpenCase,
   onCreateNewCase,
   onSaveActiveCaseUpdates,
@@ -144,6 +195,9 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
   onPrintCertificate,
   inspectedPlotIdFromMap,
   onClearInspectedPlotFromMap,
+  isApkMobileMode = false,
+  isNativeApk = false,
+  onToggleApkMobileModePref,
 }) => {
   // Cases Screen 8 / Screen 7 Mode Controls
   const [casesSubView, setCasesSubView] = useState<'list' | 'case_details' | 'full_manager'>('list');
@@ -546,74 +600,40 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
 
   return (
     <div className="space-y-4 text-[#e8eef7]">
-      {/* SEGMENTED CATEGORY TABS IN PURE SOMALI (Kiisas | Blocks | Plots | Dhaxlayaal + Jadwal — E15) */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 bg-[#111b2e] border border-[#223250] rounded-xl p-1 grid grid-cols-4 gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              onChangeCategory('cases');
-              setCasesSubView('list');
-            }}
-            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
-              activeCategory === 'cases'
-                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
-                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-            }`}
-          >
-            Kiisas
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onChangeCategory('blocks')}
-            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
-              activeCategory === 'blocks'
-                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
-                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-            }`}
-          >
-            Blocks
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onChangeCategory('plots')}
-            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
-              activeCategory === 'plots'
-                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
-                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-            }`}
-          >
-            Plots
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onChangeCategory('heirs')}
-            className={`min-h-[42px] flex items-center justify-center rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
-              activeCategory === 'heirs'
-                ? 'bg-[#22c55e] text-[#060d18] shadow-sm'
-                : 'text-[#a9b8d0] hover:text-[#e8eef7]'
-            }`}
-          >
-            Dhaxlayaal
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => onChangeCategory('excel')}
-          title="Jadwalka Xogta"
-          className={`min-h-[50px] px-3 rounded-xl border inline-flex items-center justify-center gap-1.5 text-xs font-extrabold transition-colors shrink-0 cursor-pointer ${
-            activeCategory === 'excel'
-              ? 'bg-[#22c55e] border-[#22c55e] text-[#060d18]'
-              : 'bg-[#111b2e] border-[#223250] text-[#a9b8d0] hover:text-[#e8eef7]'
-          }`}
-        >
-          <FileSpreadsheet className="w-4 h-4 shrink-0" />
-          <span className="hidden sm:inline">Jadwal</span>
-        </button>
+      {/* SEGMENTED CATEGORY TABS IN PURE SOMALI (Kiisas | Blocks | Plots | Dhaxlayaal | Jadwal | Settings | Soo saar) */}
+      <div className="bg-[#111b2e] border border-[#223250] rounded-xl p-1 flex items-center gap-1 overflow-x-auto no-scrollbar scroll-fade-right">
+        {(
+          [
+            { id: 'cases', label: 'Kiisas' },
+            { id: 'blocks', label: 'Blocks' },
+            { id: 'plots', label: 'Plots' },
+            { id: 'heirs', label: 'Dhaxlayaal' },
+            { id: 'excel', label: 'Jadwal', icon: FileSpreadsheet },
+            { id: 'settings', label: 'Settings', icon: Settings },
+            { id: 'export', label: 'Soo saar', icon: Download },
+          ] as const
+        ).map((tab) => {
+          const isActive = activeCategory === tab.id;
+          const Icon = 'icon' in tab ? tab.icon : null;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                onChangeCategory(tab.id);
+                if (tab.id === 'cases') setCasesSubView('list');
+              }}
+              className={`min-h-[44px] flex-1 min-w-[82px] px-3 py-2 flex items-center justify-center gap-1.5 rounded-lg text-xs font-extrabold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isActive
+                  ? 'bg-[#22c55e] text-[#060d18]'
+                  : 'text-[#a9b8d0] hover:text-[#e8eef7]'
+              }`}
+            >
+              {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* TAB 1: KIISAS (Saved Cases List + Case Details + Full Case Manager) */}
@@ -707,17 +727,18 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
                         }`}
                       >
                         <div className="min-w-0 space-y-1.5">
-                          <div className="flex flex-wrap items-start gap-2">
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                             <h3 className="text-sm font-extrabold text-[#e8eef7] line-clamp-2 leading-snug">
                               {sc.referenceNumber} — {sc.caseName}
                             </h3>
-                            {isCurrent && (
-                              <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#22c55e]/15 text-[#22c55e] shrink-0">
-                                Furan
-                              </span>
-                            )}
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs font-mono-numbers tabular-nums">
+                            {isCurrent && (
+                              <>
+                                <span className="text-[#22c55e] font-extrabold">Furan</span>
+                                <span className="text-[#a9b8d0]">·</span>
+                              </>
+                            )}
                             <span className="text-[#22c55e] font-bold">
                               {sc.heirCount} dhaxle
                             </span>
@@ -1815,17 +1836,66 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
         </div>
       )}
 
+      {/* TAB 6: SYSTEM SETTINGS & GOVERNANCE */}
+      {activeCategory === 'settings' && (
+        <SystemSettingsPanel
+          currency={currency}
+          activeCase={activeCase}
+          savedCasesCount={savedCases.length}
+          currentHasMap={currentHasMap}
+          subdivisionState={subdivisionState}
+          onChangeCurrency={onChangeCurrency}
+          onChangeAllocationMode={onChangeAllocationMode}
+          onToggleIncludeHalfPlots={onToggleIncludeHalfPlots}
+          onToggleNonAdjacentBlocks={onToggleNonAdjacentBlocks}
+          onRestoreCanonicalDimensions={onRestoreCanonicalDimensions}
+          onOpenBackupRestore={onOpenBackupRestore}
+          onOpenPresetsModal={onOpenPresetsModal}
+          onOpenQuranicModal={onOpenQuranicModal}
+          onStartNewBlankCase={onStartNewBlankCase}
+          onResetCurrentCaseInputs={onResetCurrentCaseInputs}
+          onCompactAuditLogs={onCompactAuditLogs}
+          isApkMobileMode={isApkMobileMode}
+          isNativeApk={isNativeApk}
+          onToggleApkMobileModePref={onToggleApkMobileModePref}
+        />
+      )}
+
+      {/* TAB 7: UNIFIED EXPORT & PRINT HUB */}
+      {activeCategory === 'export' && (
+        <ExportHubView
+          visibleCount={visibleCount ?? plotsSummary.divisibleFullCount}
+          totalCount={totalCount ?? plotsSummary.divisibleFullCount}
+          visiblePlotIds={visiblePlotIds}
+          subdivisionState={subdivisionState}
+          subdivisionResult={currentHasMap ? subdivisionResult : null}
+          fairAllocation={fairLandAllocation}
+          activeCaseMeta={activeCaseMeta}
+          onExportLayoutPdf={onPrintCertificate}
+          onOpenSimplePdfModal={onOpenSimplePdfModal}
+          onOpenCartographicPdfModal={onOpenCartographicPdfModal}
+          onExportExcelWorkbook={onExportExcel}
+          onExportInheritanceCsv={onExportCSV}
+          onOpenBackupRestore={onOpenBackupRestore}
+          onNotify={onNotify}
+        />
+      )}
+
       {/* DETAIL MODAL / BOTTOM SHEET: BLOCK */}
       {inspectedBlock && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className={`fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end ${
+            isApkMobileMode ? '' : 'sm:items-center sm:p-4 '
+          }justify-center p-0`}
           onClick={() => setInspectedBlockId(null)}
         >
           <div
-            className="w-full sm:max-w-lg bg-[#0F1B2D] border-t sm:border border-[#243449] rounded-t-3xl sm:rounded-2xl p-5 space-y-4 shadow-2xl"
+            className={`w-full ${
+              isApkMobileMode ? 'rounded-t-3xl pb-safe' : 'sm:max-w-lg sm:border sm:rounded-2xl rounded-t-3xl'
+            } bg-[#0F1B2D] border-t border-[#243449] p-5 space-y-4 shadow-2xl`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto sm:hidden" />
+            <div className={`w-10 h-1.5 bg-[#243449] rounded-full mx-auto ${isApkMobileMode ? '' : 'sm:hidden'}`} />
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="text-xs font-semibold text-[#10B981]">Faahfaahinta Block-ga</span>
@@ -1902,14 +1972,18 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
       {/* DETAIL MODAL / BOTTOM SHEET: PLOT */}
       {inspectedPlot && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className={`fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end ${
+            isApkMobileMode ? '' : 'sm:items-center sm:p-4 '
+          }justify-center p-0`}
           onClick={() => setInspectedPlotId(null)}
         >
           <div
-            className="w-full sm:max-w-lg bg-[#0F1B2D] border-t sm:border border-[#243449] rounded-t-3xl sm:rounded-2xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className={`w-full ${
+              isApkMobileMode ? 'rounded-t-3xl pb-safe' : 'sm:max-w-lg sm:border sm:rounded-2xl rounded-t-3xl'
+            } bg-[#0F1B2D] border-t border-[#243449] p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto sm:hidden" />
+            <div className={`w-10 h-1.5 bg-[#243449] rounded-full mx-auto ${isApkMobileMode ? '' : 'sm:hidden'}`} />
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="text-xs font-semibold text-[#10B981]">
@@ -1992,14 +2066,18 @@ export const ListDataView: React.FC<ListDataViewProps> = ({
       {/* DETAIL MODAL / BOTTOM SHEET: HEIR */}
       {inspectedHeir && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
+          className={`fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-end ${
+            isApkMobileMode ? '' : 'sm:items-center sm:p-4 '
+          }justify-center p-0`}
           onClick={() => setInspectedHeirKey(null)}
         >
           <div
-            className="w-full sm:max-w-lg bg-[#0F1B2D] border-t sm:border border-[#243449] rounded-t-3xl sm:rounded-2xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+            className={`w-full ${
+              isApkMobileMode ? 'rounded-t-3xl pb-safe' : 'sm:max-w-lg sm:border sm:rounded-2xl rounded-t-3xl'
+            } bg-[#0F1B2D] border-t border-[#243449] p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto sm:hidden" />
+            <div className={`w-10 h-1.5 bg-[#243449] rounded-full mx-auto ${isApkMobileMode ? '' : 'sm:hidden'}`} />
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="text-xs font-semibold text-[#10B981]">

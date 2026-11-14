@@ -415,14 +415,18 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
           .map((c) => effectiveHeirNameByKey[c.heirKey] || c.personName)
           .join(' & ');
       } else if (isExcluded) {
-        categoryKey = '__excluded__';
-        fillHex = '#FDA4AF';
-        strokeHex = '#BE123C';
         heirLabel =
-          pMeta?.excludedSpecialName ||
-          bMeta?.excludedSpecialName ||
-          assign?.excludedSpecialName ||
+          pMeta?.excludedSpecialName?.trim() ||
+          bMeta?.excludedSpecialName?.trim() ||
+          assign?.excludedSpecialName?.trim() ||
           'Danguud';
+        fillHex =
+          pMeta?.excludedColorHex ||
+          bMeta?.excludedColorHex ||
+          assign?.excludedColorHex ||
+          '#FDA4AF';
+        strokeHex = '#475569';
+        categoryKey = `__excl__:${heirLabel}::${fillHex}`;
       } else if (!hasFaraidHeirs && cartoProfile?.namedCategory) {
         const cat = cartoProfile.namedCategory;
         categoryKey = `named:${cat}`;
@@ -574,17 +578,21 @@ export const InheritanceMapPdfComposer: React.FC<InheritanceMapPdfComposerProps>
       });
     }
 
-    if ((countsByKey['__excluded__']?.count || 0) > 0) {
-      rows.push({
-        key: '__excluded__',
-        kind: 'symbol_box',
-        label: 'Danguud / Laga Reebay Qaybinta',
-        subDetail: `${countsByKey['__excluded__'].count} Plot`,
-        colorHex: '#FDA4AF',
-        strokeHex: '#BE123C',
-        visible: !hiddenLegendKeys['__excluded__'],
-      });
-    }
+    Object.entries(countsByKey).forEach(([k, stat]) => {
+      if (k.startsWith('__excl__:') && stat.count > 0) {
+        const rest = k.slice('__excl__:'.length);
+        const [exclName, exclColor] = rest.split('::');
+        rows.push({
+          key: k,
+          kind: 'symbol_box',
+          label: exclName || 'Dhul aan ku jirin dhaxalka',
+          subDetail: `${stat.count} Plot`,
+          colorHex: exclColor || '#FDA4AF',
+          strokeHex: '#475569',
+          visible: !hiddenLegendKeys[k],
+        });
+      }
+    });
 
     if ((countsByKey['__withheld_jajab__']?.count || 0) > 0) {
       rows.push({

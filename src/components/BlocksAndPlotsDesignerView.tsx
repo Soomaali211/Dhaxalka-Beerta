@@ -1,21 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import {
-  AssetQualityTier,
-  Currency,
-  HeirsInput,
-  InheritanceCalculationResult,
-  SavedInheritanceCase,
-} from '../types/inheritance';
+import { AssetQualityTier, Currency, SavedInheritanceCase } from '../types/inheritance';
 import {
   CaseExportMetadata,
   FairLandAllocationResult,
   GeneratedPlot,
-  HalfPlotValidationStatus,
   LandAllocationMode,
   LandSubdivisionState,
-  PendingBulkMetadataImport,
   PlotDetailedMetadata,
-  PrebuiltGeoJsonSubdivision,
   SiteQualityRating,
   SubdivisionComputationResult,
   SubdivisionParams,
@@ -27,22 +18,16 @@ import {
   buildHalfPlotValidationSnapshot,
 } from '../utils/halfPlotGeometryEngine';
 import {
-  HtmlGeoJsonSlot,
   LAND_ALLOCATION_MODE_METADATA,
   SITE_QUALITY_METADATA,
   TIER_METADATA,
   WADI_STATUS_METADATA,
   applyHtmlBoundarySelectionChange,
-  applyHtmlGeoJsonSlotImport,
-  applyHtmlUseSample,
   buildAutoBlockZones,
   buildRowBasedBlockTiers,
+  checkHeirPlotQuotaStatus,
+  HeirPlotQuotaStatus,
   createAuditEntry,
-  downloadAllGisPackageZip,
-  downloadSampleBlocksAndPlotsCSV,
-  downloadSubdivisionCSV,
-  downloadSubdivisionGeoJSON,
-  downloadSubdivisionShapefileZip,
   formatPlotQtyCompact,
   getDistinctHeirColor,
   getEffectiveBlockExclusion,
@@ -51,52 +36,28 @@ import {
   getEffectivePlotTier,
   getEffectivePlotZone,
   getZoneDisplayMeta,
-  parseGeoJsonItems,
-  pickBestBoundaryIndex,
-  prepareBulkMetadataImportFromCSV,
-  prepareBulkMetadataImportFromRecords,
 } from '../utils/landSubdivisionEngine';
-import { getEditableGroupKeyForShareId, updateHeirPersonName } from '../utils/heirNameUtils';
 import {
-  BottomTableTab,
-  GisBottomRegistersSection,
-} from './GisBottomRegistersSection';
-import { CartographicPdfDocMode } from './FarmCartographicPdfModal';
-import {
-  AlertTriangle,
-  ArrowLeftRight,
   Ban,
   Check,
   CheckCircle2,
+  CheckSquare,
   ChevronDown,
-  ChevronUp,
   Compass,
-  Download,
-  FileJson,
-  FileSpreadsheet,
-  FolderArchive,
+  Eye,
+  EyeOff,
+  FileText,
   Grid,
-  Info,
+  GripHorizontal,
   Layers,
   Link2,
+  Loader2,
   MapPin,
   Maximize2,
   MousePointerClick,
-  Paintbrush,
-  Printer,
-  RotateCcw,
-  ShieldAlert,
-  SlidersHorizontal,
-  Sparkles,
-  Eye,
-  EyeOff,
-  GripHorizontal,
-  Lasso,
-  Loader2,
   Mountain,
-  Tag,
-  Upload,
-  UserCheck,
+  Paintbrush,
+  RotateCcw,
   Users,
   X,
   ZoomIn,
@@ -108,37 +69,30 @@ import {
   computeAutomaticDemAndRoadTiers,
   resolveNearestCityConnectingRoad,
 } from '../utils/demAndRoadTierEngine';
-import {
-  alignAllBlocksToSampleBlock,
-  buildPlotsGeoJsonClipboardText,
-  copyTextSafelyToClipboard,
-} from '../utils/nashqadWorkflowEngine';
+import { alignAllBlocksToSampleBlock } from '../utils/nashqadWorkflowEngine';
 import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
+import { CadQuotaPermissionModal } from './CadQuotaPermissionModal';
+import { SimpleInheritancePdfModal } from './SimpleInheritancePdfModal';
 
 interface BlocksAndPlotsDesignerViewProps {
   subdivisionState: LandSubdivisionState;
   subdivisionResult: SubdivisionComputationResult | null;
   fairAllocation: FairLandAllocationResult | null;
-  inheritanceResult: InheritanceCalculationResult;
-  heirsInput: HeirsInput;
   currency: Currency;
   activeCaseMeta?: CaseExportMetadata;
   savedCasesForGeometryLink?: SavedInheritanceCase[];
   onExplicitLinkGeometryFromCase?: (sourceCase: SavedInheritanceCase) => void;
-  onUploadGeoJsonFiles?: (files: File[]) => void;
-  onUploadHtmlGeoJsonSlot?: (file: File, slot: HtmlGeoJsonSlot) => void;
   onSelectBoundaryIndex?: (idx: number) => void;
   onSelectSampleIndex?: (idx: number) => void;
-  onOpenCartographicPdfModal?: (mode: CartographicPdfDocMode) => void;
   onBackToInteractiveMap?: () => void;
   onUpdateSubdivisionState: (updater: (prev: LandSubdivisionState) => LandSubdivisionState) => void;
   onSyncAndLinkToEstate: () => void;
-  onUpdateHeirsInput: (updated: HeirsInput) => void;
-  onNavigateToResults: () => void;
   onNavigateToCalculator: () => void;
   onNotify: (title: string, message: string) => void;
+  isApkMobileMode?: boolean;
 }
 
+type StudioDockStep = 'shabakad' | 'heer_aag' | 'qaybi' | 'pdf_xidh';
 type MapColorMode = 'heirs' | 'zones' | 'tiers' | 'excluded' | 'half_plots';
 type MapInteractionTool =
   | 'inspect'
@@ -147,13 +101,17 @@ type MapInteractionTool =
   | 'mark_zone'
   | 'assign_heir';
 
-const SPECIAL_EXCLUSION_PRESETS = [
-  'Masjidka',
-  'Ceelka Biyaha',
-  'Dugsiga',
-  'Dhul Waqf ah',
-  'Waddo / Marin Guud',
-  'Guri Gaar ah',
+const SPECIAL_EXCLUSION_PRESETS = ['Danguud'];
+
+const CUSTOM_EXCLUDED_COLOR_CHOICES = [
+  '#94A3B8',
+  '#64748B',
+  '#F43F5E',
+  '#F97316',
+  '#EAB308',
+  '#8B5CF6',
+  '#14B8A6',
+  '#EC4899',
 ];
 
 interface ViewBoxRect {
@@ -167,26 +125,30 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
   subdivisionState,
   subdivisionResult,
   fairAllocation,
-  heirsInput,
   currency,
   activeCaseMeta,
   savedCasesForGeometryLink = [],
   onExplicitLinkGeometryFromCase,
   onSelectBoundaryIndex,
   onSelectSampleIndex,
-  onOpenCartographicPdfModal,
   onBackToInteractiveMap,
   onUpdateSubdivisionState,
   onSyncAndLinkToEstate,
-  onUpdateHeirsInput,
-  onNavigateToResults,
   onNavigateToCalculator,
   onNotify,
+  isApkMobileMode = false,
 }) => {
   const [mapColorMode, setMapColorMode] = useState<MapColorMode>('heirs');
   const [interactionTool, setInteractionTool] = useState<MapInteractionTool>('inspect');
+  const [activeStudioSheet, setActiveStudioSheet] = useState<StudioDockStep | null>(null);
+  const [showViewModePopover, setShowViewModePopover] = useState<boolean>(false);
+  const [qaybiPaintMode, setQaybiPaintMode] = useState<'heir' | 'custom_name'>('heir');
+  const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
+  const [selectedBatchPlotIds, setSelectedBatchPlotIds] = useState<string[]>([]);
+  const [showSimplePdfModal, setShowSimplePdfModal] = useState<boolean>(false);
+
   const [activeTierBrush, setActiveTierBrush] = useState<AssetQualityTier>('tier_1_prime');
-  const [tierBrushScope, setTierBrushScope] = useState<'block' | 'plot' | 'freehand'>('block');
+  const [tierBrushScope, setTierBrushScope] = useState<'block' | 'plot' | 'freehand'>('plot');
   const [tierEvalMode, setTierEvalMode] = useState<'automatic' | 'manual'>('automatic');
   const [isRunningAutoDem, setIsRunningAutoDem] = useState<boolean>(false);
   const [cadLassoSvgPts, setCadLassoSvgPts] = useState<[number, number][]>([]);
@@ -196,10 +158,23 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
   const [selectedHeirKeyForBrush, setSelectedHeirKeyForBrush] = useState<string>('');
   const [highlightedHeirKey, setHighlightedHeirKey] = useState<string | null>(null);
 
-  // Exclusion marking brush state
+  // Clean Default Exclusion Brush (empty name unless user types or taps Danguud)
   const [exclusionBrushScope, setExclusionBrushScope] = useState<'plot' | 'block'>('plot');
   const [exclusionBrushMode, setExclusionBrushMode] = useState<'exclude' | 'include'>('exclude');
-  const [exclusionBrushSpecialName, setExclusionBrushSpecialName] = useState<string>('Masjidka');
+  const [exclusionBrushSpecialName, setExclusionBrushSpecialName] = useState<string>('');
+  const [exclusionBrushColorHex, setExclusionBrushColorHex] = useState<string>('#94A3B8');
+
+  // Unified Inspector Card & Quota Permission State
+  const [inspectorScope, setInspectorScope] = useState<'plot' | 'block'>('plot');
+  const [inspectorAssignMode, setInspectorAssignMode] = useState<'heir' | 'custom_name'>('heir');
+  const [customNameDraft, setCustomNameDraft] = useState<string>('');
+  const [customColorDraft, setCustomColorDraft] = useState<string>('#94A3B8');
+  const [pendingQuotaAction, setPendingQuotaAction] = useState<{
+    targetDescription: string;
+    heirKey: string;
+    quotaStatus: HeirPlotQuotaStatus;
+    applyFn: () => void;
+  } | null>(null);
 
   const [showBlockLabels, setShowBlockLabels] = useState<boolean>(true);
   const [showAllPlotLabels, setShowAllPlotLabels] = useState<boolean>(false);
@@ -209,12 +184,11 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
   const [showQualityDots, setShowQualityDots] = useState<boolean>(false);
   const [showOutsidePlotsOverlay, setShowOutsidePlotsOverlay] = useState<boolean>(true);
 
-  // Mobile-first UX drawer/popover toggles
-  const [showMobileControls, setShowMobileControls] = useState<boolean>(false);
+  // Canvas-First UX overlays
   const [showMapLayerPopover, setShowMapLayerPopover] = useState<boolean>(false);
-  const [isCadLegendsExpanded, setIsCadLegendsExpanded] = useState<boolean>(true);
+  const [isCadLegendsExpanded, setIsCadLegendsExpanded] = useState<boolean>(false);
   const [cadHiddenHeirKeys, setCadHiddenHeirKeys] = useState<Record<string, boolean>>({});
-  const [cadLegendPos, setCadLegendPos] = useState<{ x: number; y: number }>({ x: 12, y: 12 });
+  const [cadLegendPos, setCadLegendPos] = useState<{ x: number; y: number }>({ x: 12, y: 58 });
   const cadLegendDragRef = useRef<{
     active: boolean;
     pointerId: number;
@@ -226,20 +200,6 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
   } | null>(null);
 
   const [inspectedPlotId, setInspectedPlotId] = useState<string | null>(null);
-  const [exportCrs, setExportCrs] = useState<'wgs' | 'utm'>('wgs');
-  const [isExportingZip, setIsExportingZip] = useState<boolean>(false);
-  const [copiedGeoJson, setCopiedGeoJson] = useState<boolean>(false);
-
-  const [bottomTab, setBottomTab] = useState<BottomTableTab>('heirs_plots');
-  const [plotSearchQuery, setPlotSearchQuery] = useState<string>('');
-  const [plotTierFilter, setPlotTierFilter] = useState<AssetQualityTier | 'all'>('all');
-  const [plotZoneFilter, setPlotZoneFilter] = useState<string>('all');
-  const [plotDivisionFilter, setPlotDivisionFilter] = useState<'all' | 'divisible' | 'excluded'>(
-    'all'
-  );
-  const [halfPlotStatusFilter, setHalfPlotStatusFilter] = useState<
-    HalfPlotValidationStatus | 'all_clipped' | 'all'
-  >('all_clipped');
 
   // Mapless case explicit geometry link confirmation state
   const [selectedSourceCaseId, setSelectedSourceCaseId] = useState<string>('');
@@ -650,11 +610,23 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
     }
   };
 
+  const pickDistinctExcludedColor = (preferredHex?: string): string => {
+    const usedHeirHexes = new Set(
+      (fairAllocation?.heirAllocations || []).map((h) => h.colorHex.toUpperCase())
+    );
+    if (preferredHex && !usedHeirHexes.has(preferredHex.toUpperCase())) {
+      return preferredHex;
+    }
+    const candidate = CUSTOM_EXCLUDED_COLOR_CHOICES.find((c) => !usedHeirHexes.has(c.toUpperCase()));
+    return candidate || getDistinctHeirColor(99, usedHeirHexes);
+  };
+
   const setPlotExclusionState = (
     plotId: string,
     blockId: string,
     isExcluded: boolean,
-    specialName?: string
+    specialName?: string,
+    customColorHex?: string
   ) => {
     onUpdateSubdivisionState((prev) => {
       const existing: PlotDetailedMetadata = prev.plotMetadata[plotId] || {
@@ -667,6 +639,9 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
         specialName !== undefined
           ? specialName
           : existing.excludedSpecialName || existing.parcelNumberOrName || '';
+      const resolvedColor = isExcluded
+        ? pickDistinctExcludedColor(customColorHex || existing.excludedColorHex)
+        : existing.excludedColorHex;
       const nextManual = { ...prev.manualPlotHeirOverrides };
       if (isExcluded) {
         delete nextManual[plotId];
@@ -681,6 +656,7 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
             ...existing,
             isExcludedFromDivision: isExcluded,
             excludedSpecialName: resolvedName,
+            excludedColorHex: resolvedColor,
             ...(resolvedName && !existing.parcelNumberOrName
               ? { parcelNumberOrName: resolvedName }
               : {}),
@@ -705,7 +681,8 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
   const setBlockExclusionState = (
     blockId: string,
     isExcluded: boolean,
-    specialName?: string
+    specialName?: string,
+    customColorHex?: string
   ) => {
     onUpdateSubdivisionState((prev) => {
       const existingBlk = prev.blockMetadata[blockId] || { blockId };
@@ -713,6 +690,9 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
         specialName !== undefined
           ? specialName
           : existingBlk.excludedSpecialName || existingBlk.blockName || '';
+      const resolvedColor = isExcluded
+        ? pickDistinctExcludedColor(customColorHex || existingBlk.excludedColorHex)
+        : existingBlk.excludedColorHex;
 
       const nextPlotMeta = { ...prev.plotMetadata };
       const nextManual = { ...prev.manualPlotHeirOverrides };
@@ -739,6 +719,7 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
             ...existingBlk,
             isExcludedFromDivision: isExcluded,
             excludedSpecialName: resolvedName,
+            excludedColorHex: resolvedColor,
             ...(resolvedName && !existingBlk.blockName ? { blockName: resolvedName } : {}),
             updatedAt: new Date().toISOString(),
           },
@@ -758,24 +739,250 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
     });
   };
 
+  const requestHeirAssignmentWithQuotaGuard = (
+    heirKey: string,
+    addingPlotUnits: number,
+    targetDescription: string,
+    applyFn: () => void
+  ) => {
+    const heir = fairAllocation?.heirAllocations.find((h) => h.heirKey === heirKey);
+    if (!heir) {
+      applyFn();
+      return;
+    }
+    const status = checkHeirPlotQuotaStatus(heir, addingPlotUnits);
+    if (status.isAlreadyFull || status.willExceedQuota) {
+      setPendingQuotaAction({
+        targetDescription,
+        heirKey,
+        quotaStatus: status,
+        applyFn,
+      });
+      return;
+    }
+    applyFn();
+  };
+
+  const applyManualHeirToPlotIds = (plotIds: string[], heirKey: string, labelDesc: string) => {
+    onUpdateSubdivisionState((prev) => {
+      const nextManual = { ...prev.manualPlotHeirOverrides };
+      const nextPlotMeta = { ...prev.plotMetadata };
+      plotIds.forEach((pid) => {
+        if (heirKey === '__auto__') {
+          delete nextManual[pid];
+        } else {
+          nextManual[pid] = heirKey;
+          if (nextPlotMeta[pid]?.isExcludedFromDivision) {
+            nextPlotMeta[pid] = { ...nextPlotMeta[pid], isExcludedFromDivision: false };
+          }
+        }
+      });
+      return {
+        ...prev,
+        approvalStatus: prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+        manualPlotHeirOverrides: nextManual,
+        plotMetadata: nextPlotMeta,
+        auditHistory: [
+          createAuditEntry(
+            'manual_allocation',
+            heirKey === '__auto__'
+              ? `${labelDesc}: dib ayaa loogu celiyey qaybinta otomaatigga ah.`
+              : `${labelDesc}: gacanta ayaa loogu qoondeeyey dhaxale.`
+          ),
+          ...(prev.auditHistory || []).slice(0, 49),
+        ],
+      };
+    });
+    setMapColorMode('heirs');
+  };
+
+  const toggleBatchPlotSelection = (plotId: string, blockId: string) => {
+    const scope =
+      interactionTool === 'mark_exclusion'
+        ? exclusionBrushScope
+        : interactionTool === 'mark_tier' && tierBrushScope === 'block'
+        ? 'block'
+        : 'plot';
+
+    const idsToToggle =
+      scope === 'block'
+        ? (
+            subdivisionResult?.blocks.find((b) => b.id === blockId)?.plots.map((p) => p.id) || [
+              plotId,
+            ]
+          )
+        : [plotId];
+
+    setSelectedBatchPlotIds((prev) => {
+      const prevSet = new Set(prev);
+      const allPresent = idsToToggle.every((id) => prevSet.has(id));
+      if (allPresent) {
+        idsToToggle.forEach((id) => prevSet.delete(id));
+      } else {
+        idsToToggle.forEach((id) => prevSet.add(id));
+      }
+      return Array.from(prevSet);
+    });
+  };
+
+  const applyBatchSelectionAction = () => {
+    if (selectedBatchPlotIds.length === 0) return;
+    const batchIds = [...selectedBatchPlotIds];
+    const plotPool =
+      subdivisionResult?.allEvaluatedPlots && subdivisionResult.allEvaluatedPlots.length > 0
+        ? subdivisionResult.allEvaluatedPlots
+        : subdivisionResult?.plots || [];
+
+    if (interactionTool === 'mark_exclusion') {
+      const targetExclude = exclusionBrushMode === 'exclude';
+      const brushName = exclusionBrushSpecialName.trim();
+      const resolvedColor = targetExclude
+        ? pickDistinctExcludedColor(exclusionBrushColorHex)
+        : undefined;
+
+      onUpdateSubdivisionState((prev) => {
+        const nextPlotMeta = { ...prev.plotMetadata };
+        const nextManual = { ...prev.manualPlotHeirOverrides };
+        batchIds.forEach((pid) => {
+          const found = plotPool.find((p) => p.id === pid);
+          const blkId = found?.block || pid.split('-')[0] || 'B1';
+          const existing: PlotDetailedMetadata = nextPlotMeta[pid] || {
+            plotId: pid,
+            blockId: blkId,
+            wadiStatus: 'unverified' as WadiStatus,
+            siteQuality: 'unverified' as SiteQualityRating,
+          };
+          if (targetExclude) {
+            delete nextManual[pid];
+          }
+          nextPlotMeta[pid] = {
+            ...existing,
+            isExcludedFromDivision: targetExclude,
+            excludedSpecialName: targetExclude ? brushName : '',
+            excludedColorHex: targetExclude ? resolvedColor : existing.excludedColorHex,
+            ...(targetExclude && brushName && !existing.parcelNumberOrName
+              ? { parcelNumberOrName: brushName }
+              : {}),
+            updatedAt: new Date().toISOString(),
+          };
+        });
+        return {
+          ...prev,
+          approvalStatus: prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+          manualPlotHeirOverrides: nextManual,
+          plotMetadata: nextPlotMeta,
+          auditHistory: [
+            createAuditEntry(
+              'exclusion_update',
+              targetExclude
+                ? `${batchIds.length} Plot/Jajab ayaa laga reebay dhaxalka${brushName ? ` ("${brushName}")` : ''}.`
+                : `${batchIds.length} Plot/Jajab dib ayaa loogu daray dhaxalka.`
+            ),
+            ...(prev.auditHistory || []).slice(0, 49),
+          ],
+        };
+      });
+      setMapColorMode('excluded');
+      setSelectedBatchPlotIds([]);
+      return;
+    }
+
+    if (interactionTool === 'mark_tier') {
+      onUpdateSubdivisionState((prev) => {
+        const nextOverrides = { ...prev.plotTierOverrides };
+        batchIds.forEach((pid) => {
+          nextOverrides[pid] = activeTierBrush;
+        });
+        return {
+          ...prev,
+          approvalStatus: prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+          plotTierOverrides: nextOverrides,
+        };
+      });
+      setMapColorMode('tiers');
+      setSelectedBatchPlotIds([]);
+      return;
+    }
+
+    if (interactionTool === 'mark_zone') {
+      const blkSet = new Set<string>();
+      batchIds.forEach((pid) => {
+        const found = plotPool.find((p) => p.id === pid);
+        if (found?.block) blkSet.add(found.block);
+      });
+      onUpdateSubdivisionState((prev) => {
+        const nextZones = { ...prev.blockZones };
+        blkSet.forEach((bid) => {
+          nextZones[bid] = activeZoneBrush;
+        });
+        return {
+          ...prev,
+          zonePresetMode: 'custom',
+          approvalStatus: prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
+          blockZones: nextZones,
+        };
+      });
+      setMapColorMode('zones');
+      setSelectedBatchPlotIds([]);
+      return;
+    }
+
+    if (selectedHeirKeyForBrush) {
+      const totalUnits = batchIds.reduce((sum, pid) => {
+        const found = plotPool.find((p) => p.id === pid);
+        return sum + (found && !found.full ? 0.5 : 1);
+      }, 0);
+      requestHeirAssignmentWithQuotaGuard(
+        selectedHeirKeyForBrush,
+        totalUnits,
+        `${batchIds.length} Plot/Jajab`,
+        () => {
+          applyManualHeirToPlotIds(
+            batchIds,
+            selectedHeirKeyForBrush,
+            `${batchIds.length} Plot/Jajab`
+          );
+          setSelectedBatchPlotIds([]);
+        }
+      );
+    }
+  };
+
   const handlePlotMapClick = (plotId: string, blockId: string) => {
+    if (multiSelectMode && interactionTool !== 'inspect') {
+      toggleBatchPlotSelection(plotId, blockId);
+      return;
+    }
+
     if (interactionTool === 'inspect') {
       setInspectedPlotId(plotId);
+      const curExcl = getEffectivePlotExclusion(
+        { id: plotId, block: blockId },
+        subdivisionState.plotMetadata,
+        subdivisionState.blockMetadata
+      );
+      setInspectorScope(curExcl.scope === 'block' ? 'block' : 'plot');
+      setInspectorAssignMode(curExcl.isExcluded ? 'custom_name' : 'heir');
+      setCustomNameDraft(curExcl.specialName || '');
+      setCustomColorDraft(curExcl.colorHex || pickDistinctExcludedColor());
       return;
     }
 
     if (interactionTool === 'mark_exclusion') {
       const targetExclude = exclusionBrushMode === 'exclude';
-      const brushName =
-        exclusionBrushSpecialName.trim() ||
-        (exclusionBrushScope === 'block' ? 'Block Laga Reebay' : 'Plot Laga Reebay');
+      const brushName = exclusionBrushSpecialName.trim();
 
       if (exclusionBrushScope === 'block') {
         const curBlkExcl = getEffectiveBlockExclusion(blockId, subdivisionState.blockMetadata);
         if (targetExclude && curBlkExcl.isExcluded && curBlkExcl.specialName === brushName) {
           setBlockExclusionState(blockId, false);
         } else {
-          setBlockExclusionState(blockId, targetExclude, targetExclude ? brushName : '');
+          setBlockExclusionState(
+            blockId,
+            targetExclude,
+            targetExclude ? brushName : '',
+            exclusionBrushColorHex
+          );
         }
       } else {
         const curPlotExcl = getEffectivePlotExclusion(
@@ -791,7 +998,13 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
         ) {
           setPlotExclusionState(plotId, blockId, false);
         } else {
-          setPlotExclusionState(plotId, blockId, targetExclude, targetExclude ? brushName : '');
+          setPlotExclusionState(
+            plotId,
+            blockId,
+            targetExclude,
+            targetExclude ? brushName : '',
+            exclusionBrushColorHex
+          );
         }
         setInspectedPlotId(plotId);
       }
@@ -861,36 +1074,30 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
       if (plotExcl.isExcluded) {
         onNotify(
           'Plot-kan Waa Laga Reebay Dhaxalka',
-          `${plotId} (${plotExcl.specialName}) waxaa laga reebay qaybinta dhaxalka — marka hore dib ugu dar qaybinta haddii aad rabto in dhaxale la siiyo.`
+          `${plotId}${plotExcl.specialName ? ` (${plotExcl.specialName})` : ''} waxaa laga reebay qaybinta dhaxalka — marka hore dib ugu dar qaybinta.`
         );
         setInspectedPlotId(plotId);
         return;
       }
       setInspectedPlotId(plotId);
-      onUpdateSubdivisionState((prev) => {
-        const nextManual = { ...prev.manualPlotHeirOverrides };
-        const wasSame = nextManual[plotId] === selectedHeirKeyForBrush;
-        if (wasSame) {
-          delete nextManual[plotId];
-        } else {
-          nextManual[plotId] = selectedHeirKeyForBrush;
-        }
-        return {
-          ...prev,
-          approvalStatus: prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
-          manualPlotHeirOverrides: nextManual,
-          auditHistory: [
-            createAuditEntry(
-              'manual_allocation',
-              wasSame
-                ? `Plot ${plotId}: dib ayaa loogu celiyey qaybinta otomaatigga ah.`
-                : `Plot ${plotId}: gacanta ayaa loogu qoondeeyey dhaxale.`
-            ),
-            ...prev.auditHistory.slice(0, 49),
-          ],
-        };
-      });
-      setMapColorMode('heirs');
+      const isAlreadySame =
+        subdivisionState.manualPlotHeirOverrides[plotId] === selectedHeirKeyForBrush;
+      if (isAlreadySame) {
+        applyManualHeirToPlotIds([plotId], '__auto__', `Plot ${plotId}`);
+        return;
+      }
+      const clickedPlot = (
+        subdivisionResult?.allEvaluatedPlots ||
+        subdivisionResult?.plots ||
+        []
+      ).find((x) => x.id === plotId);
+      const unitW = clickedPlot && !clickedPlot.full ? 0.5 : 1;
+      requestHeirAssignmentWithQuotaGuard(
+        selectedHeirKeyForBrush,
+        unitW,
+        `Plot ${plotId}`,
+        () => applyManualHeirToPlotIds([plotId], selectedHeirKeyForBrush, `Plot ${plotId}`)
+      );
     }
   };
 
@@ -1065,41 +1272,6 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
     }
   };
 
-  const handleApplyRowTierPreset = () => {
-    if (!subdivisionResult) return;
-    const graded = buildRowBasedBlockTiers(subdivisionResult.blocks);
-    onUpdateSubdivisionState((prev) => ({
-      ...prev,
-      blockTiers: graded,
-      plotTierOverrides: {},
-    }));
-    setMapColorMode('tiers');
-    onNotify(
-      'Heerarka Safafka Waa La Calaamadiyey',
-      'Safafka hore: Heerka 1aad · Dhexe: Heerka 2aad · Dambe: Heerka 3aad.'
-    );
-  };
-
-  const handleSetAllBlocksTier = (tier: AssetQualityTier) => {
-    if (!subdivisionResult) return;
-    const all: Record<string, AssetQualityTier> = {};
-    subdivisionResult.blocks.forEach((b) => {
-      all[b.id] = tier;
-    });
-    onUpdateSubdivisionState((prev) => ({
-      ...prev,
-      blockTiers: all,
-      plotTierOverrides: {},
-    }));
-    setMapColorMode('tiers');
-  };
-
-  const handleRenameIndividual = (shareId: string, personIndex: number, newName: string) => {
-    const groupKey = getEditableGroupKeyForShareId(shareId);
-    const updated = updateHeirPersonName(heirsInput, groupKey, personIndex, newName);
-    onUpdateHeirsInput(updated);
-  };
-
   const inspectedPlot: GeneratedPlot | undefined = useMemo(() => {
     if (!inspectedPlotId || !subdivisionResult) return undefined;
     const pool =
@@ -1109,2173 +1281,556 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
     return pool.find((q) => q.id === inspectedPlotId);
   }, [inspectedPlotId, subdivisionResult]);
 
-  const filteredEvaluatedPlots = useMemo(() => {
-    if (!subdivisionResult) return [];
-    const pool = subdivisionResult.allEvaluatedPlots || subdivisionResult.plots;
-    const q = plotSearchQuery.trim().toLowerCase();
-    return pool.filter((p) => {
-      const hp = p.halfPlotValidation || subdivisionResult.plotValidations?.[p.id];
-      if (!hp) return false;
-      if (halfPlotStatusFilter === 'all_clipped') {
-        if (hp.boundaryRelation !== 'boundary_clipped' && hp.validationStatus === 'full_inside') {
-          return false;
-        }
-        if (hp.validationStatus === 'full_outside') {
-          return false;
-        }
-      } else if (halfPlotStatusFilter !== 'all') {
-        if (hp.validationStatus !== halfPlotStatusFilter) return false;
-      }
-
-      if (!q) return true;
-      return (
-        p.id.toLowerCase().includes(q) ||
-        p.block.toLowerCase().includes(q) ||
-        hp.statusLabelSomali.toLowerCase().includes(q) ||
-        hp.expectedRule.label.toLowerCase().includes(q)
-      );
-    });
-  }, [subdivisionResult, halfPlotStatusFilter, plotSearchQuery]);
-
   const manualOverrideCount = Object.keys(subdivisionState.manualPlotHeirOverrides).length;
 
-  const filteredPlots = useMemo(() => {
-    if (!subdivisionResult) return [];
-    const q = plotSearchQuery.trim().toLowerCase();
-    return subdivisionResult.plots.filter((p) => {
-      const pExcl = getEffectivePlotExclusion(
-        p,
-        subdivisionState.plotMetadata,
-        subdivisionState.blockMetadata
-      );
-      if (plotDivisionFilter === 'divisible' && pExcl.isExcluded) return false;
-      if (plotDivisionFilter === 'excluded' && !pExcl.isExcluded) return false;
-
-      const pTier = getEffectivePlotTier(
-        p,
-        subdivisionState.blockTiers,
-        subdivisionState.plotTierOverrides
-      );
-      if (plotTierFilter !== 'all' && pTier !== plotTierFilter) return false;
-
-      const pZone = getEffectivePlotZone(
-        p,
-        subdivisionState.blockZones,
-        subdivisionState.plotMetadata,
-        subdivisionState.blockMetadata
-      );
-      if (plotZoneFilter !== 'all' && pZone !== plotZoneFilter) return false;
-
-      const assign = fairAllocation?.plotAssignments[p.id];
-      if (highlightedHeirKey) {
-        const matchesSole = assign?.ownerHeirKey === highlightedHeirKey;
-        const matchesShared = assign?.coOwners?.some((c) => c.heirKey === highlightedHeirKey);
-        if (!matchesSole && !matchesShared) return false;
-      }
-      if (!q) return true;
-      const ownerStr = pExcl.isExcluded
-        ? `laga reebay ${pExcl.specialName}`
-        : assign?.ownerPersonName ||
-          assign?.coOwners?.map((c) => c.personName).join(' ') ||
-          '';
-      return (
-        p.id.toLowerCase().includes(q) ||
-        p.block.toLowerCase().includes(q) ||
-        pZone.toLowerCase().includes(q) ||
-        pExcl.specialName.toLowerCase().includes(q) ||
-        ownerStr.toLowerCase().includes(q)
-      );
-    });
-  }, [
-    subdivisionResult,
-    subdivisionState.blockTiers,
-    subdivisionState.plotTierOverrides,
-    subdivisionState.blockZones,
-    subdivisionState.plotMetadata,
-    subdivisionState.blockMetadata,
-    plotDivisionFilter,
-    plotTierFilter,
-    plotZoneFilter,
-    highlightedHeirKey,
-    plotSearchQuery,
-    fairAllocation,
-  ]);
-
-  const completeBlocksCount = subdivisionResult
-    ? subdivisionResult.blocks.filter((b) => b.complete).length
-    : 0;
-  const totalPlotAreaSqM = subdivisionResult
-    ? subdivisionResult.plots.reduce(
-        (sum, q) =>
-          sum + (q.calculatedAreaSqM ?? subdivisionResult.params.pw * subdivisionResult.params.pd),
-        0
-      )
-    : 0;
-
   return (
-    <div className="space-y-4 text-[#F8FAFC]">
-      {/* 1. UNIFIED WORKFLOW HEADER */}
-      <section className="bg-[#0B1220] border border-[#243449] rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1 max-w-3xl">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-[#10B981]">
-            <span>Khariiradda GIS &amp; Qaybinta Cadaaladda Dhulka</span>
-            <span className="text-[#64748B]" aria-hidden="true">·</span>
-            <span className="text-[#94A3B8] font-medium">
-              {subdivisionState.approvalStatus === 'approved'
-                ? 'Qoondayn La Ansixiyey'
-                : 'Soo-jeedin Talo ah (Proposal)'}
-            </span>
+    <div className="space-y-3 text-[#F8FAFC]">
+      {/* 1. COMPACT SINGLE-ROW STUDIO HEADER */}
+      <section className="bg-[#0B1220] border border-[#243449] rounded-2xl px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-sm sm:text-base font-extrabold text-[#F8FAFC] tracking-tight whitespace-nowrap">
+              CAD Studio
+            </h1>
+            {subdivisionResult && (
+              <span className="text-[11px] sm:text-xs text-[#94A3B8] tabular-nums truncate">
+                {(subdivisionResult.barea / 1e4).toFixed(2)} ha · {subdivisionResult.blocks.length}{' '}
+                Blk ·{' '}
+                <strong className="text-[#10B981]">
+                  {fairAllocation?.totalFullPlots ?? subdivisionResult.plots.length}
+                </strong>{' '}
+                Plot · {fairAllocation?.heirAllocations.length ?? 0} Dhaxle
+              </span>
+            )}
           </div>
-          <h1 className="text-lg sm:text-xl font-extrabold text-[#F8FAFC] tracking-tight">
-            Naqshadeeyaha Blocks &amp; Plots, Zones-ka &amp; Dhulka Laga Reebay
-          </h1>
-          <p className="text-xs text-[#94A3B8] leading-relaxed">
-            Dhaxale kasta wuxuu boqolleyda saamigiisa sharciga ah ka helayaa{' '}
-            <strong className="text-[#F8FAFC]">Zone kasta (A–D)</strong> iyo{' '}
-            <strong className="text-[#F8FAFC]">Heer kasta</strong>, iyadoo dhulka laga reebay (Masjid, Ceel, Waqf) sidiisa loo ilaalinayo.
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={onSyncAndLinkToEstate}
-            disabled={!subdivisionResult || subdivisionResult.plots.length === 0}
-            className={`min-h-[44px] inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition-colors whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-40 ${
-              subdivisionState.isLinkedToEstate
-                ? 'bg-[#10B981] hover:bg-[#059669] text-[#030712]'
-                : 'bg-[#10B981] hover:bg-[#059669] text-[#030712]'
-            }`}
-          >
-            {subdivisionState.isLinkedToEstate ? (
-              <>
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Waa Ku Xidhan Yahay ({subdivisionResult?.plots.length || 0} Plot)</span>
-              </>
-            ) : (
-              <>
-                <Link2 className="w-4 h-4 shrink-0" />
-                <span>Ku Xidh Hantida &amp; Qaybi</span>
-              </>
-            )}
-          </button>
-
-          {subdivisionResult && onOpenCartographicPdfModal && (
+        <div className="flex items-center gap-2 shrink-0">
+          {fairAllocation && fairAllocation.heirAllocations.length === 0 && (
             <button
               type="button"
-              onClick={() => onOpenCartographicPdfModal('layout11')}
-              className="min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-[#243449] bg-[#0F1B2D] hover:border-[#10B981] hover:bg-[#16263D] px-3.5 py-2 text-xs font-bold text-[#F8FAFC] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-              title="Fur Khariidadda PDF (Automatic_Layout11) & Warbixinta Heerarka Beerta (4 Bog)"
+              onClick={onNavigateToCalculator}
+              className="min-h-[38px] px-3 py-1.5 rounded-xl border border-amber-500/50 bg-amber-950/35 hover:border-amber-400 text-xs font-bold text-amber-200 whitespace-nowrap cursor-pointer"
             >
-              <Printer className="w-4 h-4 text-[#10B981] shrink-0" />
-              <span>PDF &amp; Warbixin</span>
+              Dooro Dhaxlayaasha
             </button>
           )}
 
           <button
             type="button"
-            onClick={onNavigateToResults}
-            className="min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-[#243449] bg-[#0F1B2D] hover:bg-[#16263D] px-3.5 py-2 text-xs font-bold text-[#F8FAFC] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            onClick={onSyncAndLinkToEstate}
+            disabled={!subdivisionResult || subdivisionResult.plots.length === 0}
+            className="min-h-[38px] inline-flex items-center gap-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] px-3 py-1.5 text-xs font-extrabold transition-colors whitespace-nowrap cursor-pointer disabled:opacity-40"
           >
-            <Users className="w-4 h-4 text-[#10B981] shrink-0" />
-            <span>Natiijada &amp; Shahaadada</span>
-          </button>
-
-          {/* Mobile/Tablet GIS Tools & Export Drawer Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowMobileControls((prev) => !prev)}
-            className="xl:hidden min-h-[44px] inline-flex items-center gap-2 rounded-xl border border-[#243449] bg-[#0F1B2D] hover:bg-[#16263D] px-3.5 py-2 text-xs font-bold text-[#F8FAFC] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-          >
-            <SlidersHorizontal className="w-4 h-4 text-[#10B981] shrink-0" />
-            <span>Dejinta GIS &amp; Dhoofinta</span>
-            {showMobileControls ? (
-              <ChevronUp className="w-4 h-4 text-[#94A3B8] shrink-0" />
+            {subdivisionState.isLinkedToEstate ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Ku Xidhan ({subdivisionResult?.plots.length || 0})</span>
+              </>
             ) : (
-              <ChevronDown className="w-4 h-4 text-[#94A3B8] shrink-0" />
+              <>
+                <Link2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Ku Xidh &amp; Qaybi</span>
+              </>
             )}
           </button>
+
+          {subdivisionResult && fairAllocation && (
+            <button
+              type="button"
+              onClick={() => setShowSimplePdfModal(true)}
+              className="min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-[#10B981]/50 bg-[#0F1B2D] hover:border-[#10B981] px-3 py-1.5 text-xs font-extrabold text-[#10B981] transition-colors whitespace-nowrap cursor-pointer"
+              title="Simple PDF (Master + Boggaga Dhaxlayaasha)"
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />
+              <span>PDF</span>
+            </button>
+          )}
         </div>
       </section>
 
-      {/* 2. MAIN WORKSPACE: MOBILE MAP-FIRST (order-1) + DESKTOP 2-COLUMN (4 + 8 COLS) */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
-        {/* ==================== LEFT CONTROL RAIL (Desktop always visible; Mobile collapsible) ==================== */}
+      {/* 2. CANVAS-FIRST INTERACTIVE STUDIO SHELL */}
+      <section className="bg-[#0B1220] border border-[#243449] rounded-2xl overflow-hidden flex flex-col">
+        {/* INTERACTIVE CADASTRAL CANVAS */}
         <div
-          className={`order-2 xl:order-1 xl:col-span-4 space-y-4 min-w-0 ${
-            showMobileControls ? 'block' : 'hidden xl:block'
+          className={`relative bg-[#07101E] transition-all touch-none select-none overflow-hidden ${
+            activeStudioSheet
+              ? isApkMobileMode
+                ? 'h-[310px] sm:h-[360px]'
+                : 'h-[340px] sm:h-[430px]'
+              : isApkMobileMode
+              ? 'h-[430px] sm:h-[500px]'
+              : 'h-[460px] sm:h-[580px]'
           }`}
         >
-          {/* STEP 1: XOGTA NASHQADDA HADA FURAN (Single-entry rule: uploads occur only via '+' on Khariidad) */}
-          <section className="bg-[#0B1220] border border-[#243449] rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#10B981] flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[#10B981] text-[#030712] text-[11px] font-mono-numbers tabular-nums flex items-center justify-center">
-                  1
-                </span>
-                <span>Nashqadda Beerta Hadda Furan</span>
-              </h2>
-            </div>
-
-            <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-3 space-y-1.5 text-xs">
-              <div className="font-bold text-[#F8FAFC] truncate">
-                {subdivisionState.boundaryFileName || 'Weli nashqad laguma xidhin'}
-              </div>
-              {subdivisionState.nashqadSummary ? (
-                <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px] font-mono-numbers tabular-nums text-[#CBD5E1]">
-                  <span>Blocks: <strong className="text-[#F8FAFC]">{subdivisionState.nashqadSummary.blocksCount}</strong></span>
-                  <span>Dhammaystiran: <strong className="text-[#10B981]">{subdivisionState.nashqadSummary.fullPlotsCount}</strong></span>
-                  <span>Half plots: <strong className="text-amber-400">{subdivisionState.nashqadSummary.halfPlotsCount}</strong></span>
-                  <span>Wadarta: <strong className="text-[#F8FAFC]">{subdivisionState.nashqadSummary.totalPlotsAreaSqM.toLocaleString()} m²</strong></span>
-                </div>
-              ) : (
-                <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-                  Si aad u samayso nashqad cusub ama u soo geliso nashqad beer, u laabo <strong className="text-[#F8FAFC]">Khariidad</strong> oo riix badhanka <strong className="text-[#10B981]">&ldquo;+&rdquo;</strong> ee hoose dhexda.
-                </p>
-              )}
-            </div>
-
-            {/* Live Selectors: selB (Xuduudka) & selS (Block-ka tusaalaha) for parametric grids */}
-            {!subdivisionState.prebuiltSubdivision && subdivisionState.boundaryItems.length > 0 && (
-              <div className="space-y-2.5 pt-1">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#94A3B8] mb-1">
-                    Xuduudka
-                  </label>
-                  <select
-                    value={subdivisionState.selectedBoundaryIndex}
-                    onChange={(e) => {
-                      const idx = Number(e.target.value);
-                      if (onSelectBoundaryIndex) {
-                        onSelectBoundaryIndex(idx);
-                      } else {
-                        onUpdateSubdivisionState((prev) =>
-                          applyHtmlBoundarySelectionChange(prev, idx)
-                        );
-                      }
-                    }}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-medium text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  >
-                    {subdivisionState.boundaryItems.map((it, i) => (
-                      <option key={i} value={i}>
-                        {it.name} — {it.type === 'Line' ? 'xariiq' : 'polygon'} ({it.coords.length}{' '}
-                        dhibcood)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#94A3B8] mb-1">
-                    Block-ka tusaalaha (jihada iyo meesha shabakadda)
-                  </label>
-                  <select
-                    value={subdivisionState.selectedSampleIndex}
-                    onChange={(e) => {
-                      const idx = Number(e.target.value);
-                      if (onSelectSampleIndex) {
-                        onSelectSampleIndex(idx);
-                      } else {
-                        onUpdateSubdivisionState((prev) => ({
-                          ...prev,
-                          prebuiltSubdivision: null,
-                          selectedSampleIndex: idx,
-                        }));
-                      }
-                    }}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-medium text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  >
-                    {subdivisionState.sampleCandidates.length === 0 ? (
-                      <option value={-1}>Otomaatig (xuduudka beerta)</option>
-                    ) : (
-                      subdivisionState.sampleCandidates.map((c, i) => (
-                        <option key={i} value={i}>
-                          {c.label}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* Sample Block Independent Dherer & Ballac + Manual Bearing Degree Card (Prebuilt & Parametric CAD) */}
-            {(() => {
-              const sampleAlign =
-                subdivisionResult?.sampleBlockAlignment ||
-                subdivisionState.prebuiltSubdivision?.sampleBlockAlignment ||
-                subdivisionState.nashqadSummary?.sampleBlockAlignment ||
-                null;
-              if (!sampleAlign) return null;
-              return (
-                <SampleBlockAxisControlCard
-                  alignment={sampleAlign}
-                  onAlign={(opts) => {
-                    onUpdateSubdivisionState((prev) => {
-                      const res = alignAllBlocksToSampleBlock(prev, opts);
-                      return res.ok ? res.nextState : prev;
-                    });
-                  }}
-                />
-              );
-            })()}
-
-            {onBackToInteractiveMap && (
-              <button
-                type="button"
-                onClick={onBackToInteractiveMap}
-                className="w-full min-h-[40px] rounded-xl border border-[#10B981]/45 bg-[#0F1B2D] hover:border-[#10B981] hover:bg-[#16263D] px-3 py-1.5 text-xs font-bold text-[#10B981] transition-colors cursor-pointer"
-              >
-                Ku Laabo Khariidadda (+)
-              </button>
-            )}
-
-            {/* Geometry / Gap / Self-intersection warnings */}
-            {subdivisionResult && subdivisionResult.warnings.length > 0 && (
-              <div className="rounded-xl bg-amber-950/40 border border-amber-500/40 px-3 py-2 text-[11px] text-amber-200 space-y-1 leading-relaxed">
-                {subdivisionResult.warnings.map((w, wi) => (
-                  <div key={wi}>{w}</div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* STEP 2: CABBIRRADA SHABAKADDA (MITIR) */}
-          {!subdivisionState.prebuiltSubdivision && (
-            <section className="bg-[#0B1220] border border-[#243449] rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#10B981] flex items-center gap-2 min-w-0">
-                  <span className="w-5 h-5 rounded-md bg-[#10B981] text-[#030712] text-[11px] font-mono-numbers tabular-nums flex items-center justify-center shrink-0">
-                    2
-                  </span>
-                  <span className="truncate">Cabbirrada Blocks, Plots &amp; Waddooyinka (m)</span>
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onUpdateSubdivisionState((prev) => ({
-                      ...prev,
-                      prebuiltSubdivision: null,
-                      approvalStatus:
-                        prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
-                      params: {
-                        ...prev.params,
-                        L: 90,
-                        W: 48,
-                        pw: 18,
-                        pd: 24,
-                        rU: 15,
-                        rV: 15,
-                        linkRoads: true,
-                        rot: 0,
-                        su: 0,
-                        sv: 0,
-                      },
-                    }));
-                    onNotify(
-                      'Halbeegga 48×90m & Waddo 15m',
-                      'Block kasta waxaa lagu fadhiisiyey Ballac = 48 m, Dherer = 90 m, iyo Waddo = 15 m.'
-                    );
-                  }}
-                  className="min-h-[28px] px-2 py-0.5 rounded-lg bg-[#0F1B2D] hover:bg-[#16263D] border border-[#10B981]/50 text-[10px] font-extrabold text-[#10B981] shrink-0 cursor-pointer tabular-nums"
-                >
-                  48×90m · 15m
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-[11px] font-medium text-[#94A3B8] mb-1">
-                    Block: dherer (m)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step={0.5}
-                    value={subdivisionState.params.L}
-                    onChange={(e) => updateParam('L', parseFloat(e.target.value) || 0)}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums font-bold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-[#94A3B8] mb-1">
-                    Block: ballac (m)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step={0.5}
-                    value={subdivisionState.params.W}
-                    onChange={(e) => updateParam('W', parseFloat(e.target.value) || 0)}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums font-bold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-[#94A3B8] mb-1">
-                    Plot: ballac (m)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step={0.5}
-                    value={subdivisionState.params.pw}
-                    onChange={(e) => updateParam('pw', parseFloat(e.target.value) || 0)}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums font-bold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-[#94A3B8] mb-1">
-                    Plot: dherer (m)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step={0.5}
-                    value={subdivisionState.params.pd}
-                    onChange={(e) => updateParam('pd', parseFloat(e.target.value) || 0)}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums font-bold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-[#94A3B8] mb-1">
-                    Waddo safafka (m)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={subdivisionState.params.rU}
-                    onChange={(e) => updateParam('rU', Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums font-bold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-medium text-[#94A3B8] mb-1">
-                    Waddo columns (m)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={subdivisionState.params.rV}
-                    onChange={(e) => updateParam('rV', Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums font-bold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                  />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 text-xs text-[#CBD5E1] cursor-pointer select-none min-h-[36px]">
-                <input
-                  type="checkbox"
-                  checked={subdivisionState.params.linkRoads}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    onUpdateSubdivisionState((prev) => ({
-                      ...prev,
-                      params: {
-                        ...prev.params,
-                        linkRoads: checked,
-                        rV: checked ? prev.params.rU : prev.params.rV,
-                      },
-                    }));
-                  }}
-                  className="rounded border-[#243449] bg-[#0F1B2D] accent-[#10B981]"
-                />
-                <span>Labada waddo isku cabbir ha ahaadaan</span>
-              </label>
-
-              {subdivisionResult && subdivisionResult.nC > 0 && (
-                <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] px-3 py-2 text-[11px] font-mono-numbers tabular-nums text-[#CBD5E1] space-y-0.5">
-                  <div>
-                    Plots/block: <strong className="text-[#F8FAFC]">{subdivisionResult.nC}</strong> ×{' '}
-                    <strong className="text-[#F8FAFC]">{subdivisionResult.nR}</strong> ={' '}
-                    <strong className="text-[#10B981]">
-                      {subdivisionResult.nC * subdivisionResult.nR} plot
-                    </strong>
-                  </div>
-                  <div>
-                    Block: {(subdivisionState.params.L * subdivisionState.params.W).toFixed(0)} m² ·
-                    Plot:{' '}
-                    <strong className="text-[#F8FAFC]">
-                      {(subdivisionState.params.pw * subdivisionState.params.pd).toFixed(1)} m²
-                    </strong>
-                  </div>
-                </div>
-              )}
-
-              <details className="pt-1">
-                <summary className="text-xs font-semibold text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer select-none">
-                  Hagaajin dheeraad ah (Jiheyn &amp; U-dhaaf)
-                </summary>
-                <div className="grid grid-cols-2 gap-2.5 mt-2.5">
-                  <div>
-                    <label className="block text-[11px] text-[#94A3B8] mb-1">Jiheyn (°)</label>
-                    <input
-                      type="number"
-                      step={0.5}
-                      value={subdivisionState.params.rot}
-                      onChange={(e) => updateParam('rot', parseFloat(e.target.value) || 0)}
-                      className="w-full min-h-[38px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-[#94A3B8] mb-1">
-                      Ugu yaraan plots/block
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={200}
-                      step={1}
-                      value={subdivisionState.params.minP}
-                      onChange={(e) =>
-                        updateParam('minP', Math.max(1, Math.round(parseFloat(e.target.value) || 1)))
-                      }
-                      className="w-full min-h-[38px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-[#94A3B8] mb-1">
-                      U-dhaaf dherer (m)
-                    </label>
-                    <input
-                      type="number"
-                      step={0.5}
-                      value={subdivisionState.params.su}
-                      onChange={(e) => updateParam('su', parseFloat(e.target.value) || 0)}
-                      className="w-full min-h-[38px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-[#94A3B8] mb-1">
-                      U-dhaaf ballac (m)
-                    </label>
-                    <input
-                      type="number"
-                      step={0.5}
-                      value={subdivisionState.params.sv}
-                      onChange={(e) => updateParam('sv', parseFloat(e.target.value) || 0)}
-                      className="w-full min-h-[38px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2.5 py-1.5 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="flex items-center gap-2 text-xs text-[#CBD5E1] cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={subdivisionState.params.swap}
-                        onChange={(e) => updateParam('swap', e.target.checked)}
-                        className="rounded border-[#243449] bg-[#0F1B2D] accent-[#10B981]"
-                      />
-                      <span>Dhererka block-ka ha raacdo dhinaca gaaban ee tusaalaha</span>
-                    </label>
-                  </div>
-                </div>
-              </details>
-            </section>
-          )}
-
-          {/* STEP 3: ZONES (ZONE A, B, C, D) & NON-ADJACENT BLOCKS DISPERSION */}
-          <section className="bg-[#0B1220] border border-[#243449] rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#10B981] flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[#10B981] text-[#030712] text-[11px] font-mono-numbers tabular-nums flex items-center justify-center">
-                  3
-                </span>
-                <span>Aagga (Zones A–D) &amp; Firdhinta Blocks</span>
-              </h2>
-              <Compass className="w-4 h-4 text-[#10B981] shrink-0" />
-            </div>
-
-            <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-              Zone kasta dhaxlayaashu waxay u kala helayaan boqolleyda saxda ah ee saamigooda dhaxalka, iyadoon qofna dhinac keliya ama laba block oo is-xiga la siin.
-            </p>
-
-            {/* Auto Zone Presets */}
-            <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-              <button
-                type="button"
-                onClick={() => handleApplyZonePreset('quadrants_4')}
-                className={`min-h-[38px] py-1.5 px-2 rounded-lg border font-bold cursor-pointer transition-colors ${
-                  subdivisionState.zonePresetMode === 'quadrants_4'
-                    ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
-                    : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-[#10B981]'
-                }`}
-              >
-                4-Dhinac (A–D)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleApplyZonePreset('columns_4')}
-                className={`min-h-[38px] py-1.5 px-2 rounded-lg border font-bold cursor-pointer transition-colors ${
-                  subdivisionState.zonePresetMode === 'columns_4'
-                    ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
-                    : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-[#10B981]'
-                }`}
-              >
-                Bari–Galbeed
-              </button>
-              <button
-                type="button"
-                onClick={() => handleApplyZonePreset('rows_4')}
-                className={`min-h-[38px] py-1.5 px-2 rounded-lg border font-bold cursor-pointer transition-colors ${
-                  subdivisionState.zonePresetMode === 'rows_4'
-                    ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
-                    : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-[#10B981]'
-                }`}
-              >
-                Waqooyi–Koonfur
-              </button>
-            </div>
-
-            {/* Active Zone Summary & Brush */}
-            {fairAllocation && fairAllocation.zones.length > 0 && (
-              <div className="grid grid-cols-2 gap-1.5">
-                {fairAllocation.zones.map((z) => {
-                  const active =
-                    interactionTool === 'mark_zone' && activeZoneBrush === z.zoneId;
-                  return (
-                    <button
-                      key={z.zoneId}
-                      type="button"
-                      onClick={() => {
-                        setActiveZoneBrush(z.zoneId);
-                        setInteractionTool('mark_zone');
-                        setMapColorMode('zones');
-                      }}
-                      className={`text-left rounded-xl border px-2.5 py-2 transition-colors cursor-pointer ${
-                        active
-                          ? 'border-[#10B981] bg-[#10B981]/15'
-                          : 'border-[#243449] bg-[#0F1B2D] hover:border-[#10B981]/60'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#F8FAFC]">
-                          <span
-                            className="w-2.5 h-2.5 rounded-xs shrink-0"
-                            style={{ backgroundColor: z.colorHex }}
-                          />
-                          <span>{z.zoneId}</span>
-                        </span>
-                        <span className="text-[11px] font-mono-numbers tabular-nums font-bold text-[#10B981]">
-                          {z.totalPlots} Plot
-                        </span>
-                      </div>
-                      <div className="text-[10px] font-mono-numbers tabular-nums text-[#94A3B8] truncate mt-0.5">
-                        Blocks: {z.blockIds.join(', ')}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Enforce Non-Adjacent Blocks Toggle */}
-            <label className="flex items-start gap-2.5 rounded-xl bg-[#10B981]/10 border border-[#10B981]/35 p-2.5 text-xs text-[#F8FAFC] cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={subdivisionState.enforceNonAdjacentBlocks}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  onUpdateSubdivisionState((prev) => ({
-                    ...prev,
-                    enforceNonAdjacentBlocks: checked,
-                  }));
-                }}
-                className="mt-0.5 rounded border-[#10B981] accent-[#10B981]"
-              />
-              <div>
-                <span className="font-bold block text-[#F8FAFC]">
-                  Ka Ilaali Laba Block oo Is-xiga (Anti-Adjacent Blocks)
-                </span>
-                <span className="text-[11px] text-[#94A3B8]">
-                  Qofna laba block oo isku dhow lama wada siinayo marka blocks kala fog ay jiraan.
-                </span>
-              </div>
-            </label>
-          </section>
-
-          {/* STEP 4: CALAAMADI HEERKA DHULKA (1. AUTOMATIC DEM+WADDO | 2. MANUAL PLOT/BLOCK/FREEHAND) */}
-          <section className="bg-[#0B1220] border border-[#243449] rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#10B981] flex items-center gap-2">
-                <span className="w-5 h-5 rounded-md bg-[#10B981] text-[#030712] text-[11px] font-mono-numbers tabular-nums flex items-center justify-center">
-                  4
-                </span>
-                <span>Heerka Dhulka (H1, H2, H3)</span>
-              </h2>
-            </div>
-
-            {/* Two Explicit Modes: 1. Automatic Generator vs 2. Manual */}
-            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#030712] border border-[#243449] text-[11px] font-bold">
+          {/* TOP-LEFT VIEW MODE PILL (1-Tap Layer Switcher) */}
+          {subdivisionResult && mapGeometry && (
+            <div className="absolute left-3 top-3 z-20">
               <button
                 type="button"
                 onClick={() => {
-                  setTierEvalMode('automatic');
-                  if (interactionTool === 'mark_tier') setInteractionTool('inspect');
+                  setShowViewModePopover((prev) => !prev);
+                  setShowMapLayerPopover(false);
                 }}
-                className={`min-h-[34px] rounded-lg transition-colors cursor-pointer ${
-                  tierEvalMode === 'automatic'
-                    ? 'bg-[#10B981] text-[#030712] font-extrabold'
-                    : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                }`}
+                className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#0B1220]/94 backdrop-blur-md border border-[#243449] hover:border-[#10B981] shadow-xl inline-flex items-center gap-1.5 text-xs font-extrabold text-[#F8FAFC] cursor-pointer"
               >
-                1. Automatic
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTierEvalMode('manual');
-                  setInteractionTool('mark_tier');
-                  setMapColorMode('tiers');
-                }}
-                className={`min-h-[34px] rounded-lg transition-colors cursor-pointer ${
-                  tierEvalMode === 'manual'
-                    ? 'bg-[#10B981] text-[#030712] font-extrabold'
-                    : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                }`}
-              >
-                2. Manual
-              </button>
-            </div>
-
-            {tierEvalMode === 'automatic' ? (
-              <div className="space-y-2.5 text-xs">
-                <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-                  Ku xidhan <strong>DEM joogga dhulka</strong>, <strong>waddada magaalada</strong>,
-                  iyo <strong>simnaanta vs. jeexjeexa</strong> (Dhul siman = Heer 1, Jeexjeex =
-                  Heer 2 &amp; 3).
-                </p>
-                <button
-                  type="button"
-                  disabled={!subdivisionResult || isRunningAutoDem}
-                  onClick={() => void handleRunCadAutomaticDemTiers()}
-                  className="w-full min-h-[42px] rounded-xl bg-[#10B981] hover:bg-[#059669] disabled:opacity-45 text-[#030712] px-3 py-2 text-xs font-extrabold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                >
-                  {isRunningAutoDem ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                      <span>Waa la xisaabinayaa DEM &amp; Waddada...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Mountain className="w-4 h-4 shrink-0" />
-                      <span>Dhali Heerarka (DEM + Waddo)</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyRowTierPreset}
-                  className="w-full min-h-[34px] rounded-lg border border-[#243449] bg-[#0F1B2D] hover:border-[#10B981] text-[11px] font-semibold text-[#CBD5E1] cursor-pointer"
-                >
-                  Safafka H1 / H2 / H3 (Fudud)
-                </button>
-                {subdivisionState.autoTierSummary && (
-                  <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-2.5 space-y-1 text-[11px] tabular-nums text-[#CBD5E1]">
-                    <div className="flex justify-between">
-                      <span className="text-[#94A3B8]">DEM / Slope:</span>
-                      <strong>
-                        {subdivisionState.autoTierSummary.avgSlopePercent}% ·{' '}
-                        {subdivisionState.autoTierSummary.gulliedPlotsCount} jeexjeex
-                      </strong>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#94A3B8]">Waddada:</span>
-                      <strong>
-                        {subdivisionState.autoTierSummary.nearestRoadDistanceM !== null
-                          ? `${subdivisionState.autoTierSummary.nearestRoadDistanceM} m`
-                          : 'Auto'}
-                      </strong>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-1 p-1 rounded-lg bg-[#030712] border border-[#243449] text-[10.5px] font-bold">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTierBrushScope('plot');
-                      setInteractionTool('mark_tier');
-                      setMapColorMode('tiers');
-                    }}
-                    className={`py-1.5 rounded-md cursor-pointer ${
-                      tierBrushScope === 'plot' && interactionTool === 'mark_tier'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8]'
-                    }`}
-                  >
-                    By Plot
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTierBrushScope('block');
-                      setInteractionTool('mark_tier');
-                      setMapColorMode('tiers');
-                    }}
-                    className={`py-1.5 rounded-md cursor-pointer ${
-                      tierBrushScope === 'block' && interactionTool === 'mark_tier'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8]'
-                    }`}
-                  >
-                    By Block
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTierBrushScope('freehand');
-                      setInteractionTool('mark_tier');
-                      setMapColorMode('tiers');
-                    }}
-                    className={`py-1.5 rounded-md inline-flex items-center justify-center gap-1 cursor-pointer ${
-                      tierBrushScope === 'freehand' && interactionTool === 'mark_tier'
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8]'
-                    }`}
-                  >
-                    <Lasso className="w-3 h-3 shrink-0" />
-                    <span>Freehand</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-end gap-1 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => handleSetAllBlocksTier('tier_1_prime')}
-                    className="px-2 py-1 rounded border border-[#243449] bg-[#0F1B2D] hover:border-[#10B981] text-[#CBD5E1] font-semibold cursor-pointer"
-                  >
-                    Wada H1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetAllBlocksTier('tier_2_standard')}
-                    className="px-2 py-1 rounded border border-[#243449] bg-[#0F1B2D] hover:border-[#10B981] text-[#CBD5E1] font-semibold cursor-pointer"
-                  >
-                    Wada H2
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSetAllBlocksTier('tier_3_basic')}
-                    className="px-2 py-1 rounded border border-[#243449] bg-[#0F1B2D] hover:border-[#10B981] text-[#CBD5E1] font-semibold cursor-pointer"
-                  >
-                    Wada H3
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Tier Counts & Optional Unit Prices */}
-            <div className="space-y-2 pt-1">
-              {(
-                ['tier_1_prime', 'tier_2_standard', 'tier_3_basic'] as AssetQualityTier[]
-              ).map((tierKey) => {
-                const meta = TIER_METADATA[tierKey];
-                const count = fairAllocation?.tierCounts[tierKey] ?? 0;
-                const isBrushActive =
-                  interactionTool === 'mark_tier' && activeTierBrush === tierKey;
-
-                return (
-                  <div
-                    key={tierKey}
-                    className={`rounded-xl border p-2.5 transition-colors ${
-                      isBrushActive
-                        ? 'border-[#10B981] bg-[#10B981]/10'
-                        : 'border-[#243449] bg-[#0F1B2D]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTierEvalMode('manual');
-                          setActiveTierBrush(tierKey);
-                          setInteractionTool('mark_tier');
-                          setMapColorMode('tiers');
-                        }}
-                        className="flex items-center gap-2 text-left flex-1 min-w-0 cursor-pointer"
-                      >
-                        <span
-                          className="w-3.5 h-3.5 rounded-xs shrink-0"
-                          style={{ backgroundColor: meta.fillHex }}
-                        />
-                        <span className="text-xs font-bold text-[#F8FAFC] truncate">
-                          {meta.shortSomali}
-                        </span>
-                      </button>
-
-                      <span className="text-xs font-mono-numbers tabular-nums font-extrabold text-[#10B981] shrink-0">
-                        {count} Plot
-                      </span>
-                    </div>
-
-                    <div className="mt-2 pt-2 border-t border-[#243449] flex items-center justify-between gap-2">
-                      <label className="text-[11px] text-[#94A3B8]">
-                        Qiimaha 1 Plot ({currency}, 0 = qiime la&apos;aan):
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        step={100}
-                        value={subdivisionState.tierUnitPrices[tierKey] || ''}
-                        placeholder="0"
-                        onChange={(e) => {
-                          const price = Math.max(0, parseFloat(e.target.value) || 0);
-                          onUpdateSubdivisionState((prev) => ({
-                            ...prev,
-                            tierUnitPrices: {
-                              ...prev.tierUnitPrices,
-                              [tierKey]: price,
-                            },
-                          }));
-                        }}
-                        className="w-24 min-h-[34px] bg-[#0B1220] border border-[#243449] rounded-lg px-2 py-1 text-right text-xs font-mono-numbers tabular-nums font-semibold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* STEP 5: HABKA QAYBINTA & SOO DEJINTA GIS */}
-          <section className="bg-[#0B1220] border border-[#243449] rounded-2xl p-4 space-y-3">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#10B981] flex items-center gap-2">
-              <span className="w-5 h-5 rounded-md bg-[#10B981] text-[#030712] text-[11px] font-mono-numbers tabular-nums flex items-center justify-center">
-                5
-              </span>
-              <span>Habka Qaybinta &amp; Dhoofinta GIS</span>
-            </h2>
-
-            <div className="space-y-2">
-              {(
-                [
-                  'exact_shared',
-                  'whole_balanced',
-                  'clean_equal_no_half_no_fraction',
-                ] as LandAllocationMode[]
-              ).map((modeId) => {
-                const meta = LAND_ALLOCATION_MODE_METADATA[modeId];
-                const isActive = subdivisionState.allocationMode === modeId;
-                return (
-                  <button
-                    key={modeId}
-                    type="button"
-                    onClick={() =>
-                      onUpdateSubdivisionState((prev) => ({
-                        ...prev,
-                        allocationMode: modeId,
-                        approvalStatus:
-                          prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
-                      }))
-                    }
-                    className={`w-full text-left rounded-xl border p-3 transition-colors cursor-pointer ${
-                      isActive
-                        ? 'border-[#10B981] bg-[#10B981]/10'
-                        : 'border-[#243449] bg-[#0F1B2D] hover:border-[#10B981]/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-[#F8FAFC]">{meta.titleSomali}</span>
-                      {isActive && <Check className="w-4 h-4 text-[#10B981] shrink-0" />}
-                    </div>
-                    <p className="text-[11px] text-[#94A3B8] mt-0.5 leading-relaxed">
-                      {meta.descriptionSomali}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-3 flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-[#F8FAFC]">Half-Plots (0.5 Plot)</div>
-                <div className="text-[11px] text-[#94A3B8]">
-                  {subdivisionState.includeValidHalfPlotsInAllocation
-                    ? 'Waa lagu daray qaybinta dhaxalka'
-                    : 'Waa laga reebay qaybinta dhaxalka'}
-                </div>
-              </div>
-              <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-[#0B1220] border border-[#243449] shrink-0">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateSubdivisionState((prev) => ({
-                      ...prev,
-                      includeValidHalfPlotsInAllocation: true,
-                      approvalStatus:
-                        prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
-                    }))
-                  }
-                  className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
-                    subdivisionState.includeValidHalfPlotsInAllocation
-                      ? 'bg-[#10B981] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                  }`}
-                >
-                  Ku Dar
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateSubdivisionState((prev) => ({
-                      ...prev,
-                      includeValidHalfPlotsInAllocation: false,
-                      approvalStatus:
-                        prev.approvalStatus === 'approved' ? 'under_review' : prev.approvalStatus,
-                    }))
-                  }
-                  className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
-                    !subdivisionState.includeValidHalfPlotsInAllocation
-                      ? 'bg-[#1E293B] text-[#F8FAFC]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                  }`}
-                >
-                  Ka Reeb
-                </button>
-              </div>
-            </div>
-
-            {fairAllocation && (
-              <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-3 text-[11px] space-y-1 tabular-nums">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#94A3B8]">Plots Buuxa oo La Qaybiyey:</span>
-                  <strong className="text-[#10B981] font-bold">
-                    {fairAllocation.allocatedFullPlotsCount ?? fairAllocation.totalFullPlots} /{' '}
-                    {fairAllocation.totalFullPlots} Plot
-                  </strong>
-                </div>
-                {(fairAllocation.validHalfPlotsIncludedCount ?? 0) > 0 && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[#94A3B8]">Half-Plots Lagu Daray (0.5):</span>
-                    <strong className="text-[#10B981] font-bold">
-                      {fairAllocation.validHalfPlotsIncludedCount} Half-Plot (
-                      {((fairAllocation.validHalfPlotsIncludedCount || 0) * 0.5).toFixed(1)} Plot)
-                    </strong>
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#94A3B8]">Plots Wadaag ah:</span>
-                  <strong className="text-[#F8FAFC] font-bold">
-                    {fairAllocation.sharedPlots.length} Plot
-                  </strong>
-                </div>
-                {(fairAllocation.withheldJajabPlotsCount ?? 0) > 0 && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[#94A3B8]">Jajabka Laga Reebay:</span>
-                    <strong className="text-amber-300 font-bold">
-                      {fairAllocation.withheldJajabPlotsCount} Plot
-                    </strong>
-                  </div>
-                )}
-                {(fairAllocation.withheldHalfPlotsCount ?? 0) > 0 && (
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[#94A3B8]">Half-Plots Laga Reebay:</span>
-                    <strong className="text-slate-300 font-bold">
-                      {fairAllocation.withheldHalfPlotsCount} Half-Plot
-                    </strong>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {manualOverrideCount > 0 && (
-              <div className="rounded-xl bg-amber-950/35 border border-amber-500/40 p-3 flex items-center justify-between gap-2">
-                <span className="text-xs text-amber-200 font-medium">
-                  {manualOverrideCount} plot ayaa gacanta lagu qoondeeyey.
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onUpdateSubdivisionState((prev) => ({
-                      ...prev,
-                      manualPlotHeirOverrides: {},
-                      approvalStatus: 'draft_proposal',
-                    }))
-                  }
-                  className="inline-flex items-center gap-1 text-xs font-bold text-[#10B981] hover:underline shrink-0 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Soo-jeedin Toos ah</span>
-                </button>
-              </div>
-            )}
-
-            <div className="pt-2 border-t border-[#243449] space-y-2">
-              <select
-                value={exportCrs}
-                onChange={(e) => setExportCrs(e.target.value as 'wgs' | 'utm')}
-                className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1 text-xs font-medium text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-              >
-                <option value="wgs">CRS: WGS84 Lat/Lon (EPSG:4326)</option>
-                <option value="utm">
-                  CRS: UTM Mitir (Zone{' '}
-                  {subdivisionResult
-                    ? `${subdivisionResult.zone}${subdivisionResult.south ? 'S' : 'N'} · EPSG:${subdivisionResult.epsg}`
-                    : 'Auto'}
-                  )
-                </option>
-              </select>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  disabled={
-                    !subdivisionResult ||
-                    (subdivisionResult.plots.length === 0 &&
-                      (subdivisionResult.validHalfPlots?.length || 0) === 0) ||
-                    isExportingZip
-                  }
-                  onClick={async () => {
-                    if (!subdivisionResult) return;
-                    setIsExportingZip(true);
-                    try {
-                      await downloadSubdivisionShapefileZip(
-                        subdivisionResult,
-                        subdivisionState.blockTiers,
-                        subdivisionState.plotTierOverrides,
-                        fairAllocation,
-                        exportCrs,
-                        { ...subdivisionState, caseMeta: activeCaseMeta }
-                      );
-                      onNotify(
-                        'Shapefile (.zip)',
-                        'Faylka Shapefile oo wata Magaca Kiiska, Ref No & Half Plots waa diyaar.'
-                      );
-                    } finally {
-                      setIsExportingZip(false);
-                    }
-                  }}
-                  className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] px-3 py-1.5 text-xs font-extrabold whitespace-nowrap cursor-pointer disabled:opacity-40"
-                >
-                  <Download className="w-3.5 h-3.5 shrink-0" />
-                  <span>Shapefile (.zip)</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={
-                    !subdivisionResult ||
-                    (subdivisionResult.plots.length === 0 &&
-                      (subdivisionResult.allEvaluatedPlots?.length || 0) === 0)
-                  }
-                  onClick={() => {
-                    if (!subdivisionResult) return;
-                    downloadSubdivisionGeoJSON(
-                      subdivisionResult,
-                      subdivisionState.blockTiers,
-                      subdivisionState.plotTierOverrides,
-                      fairAllocation,
-                      { ...subdivisionState, caseMeta: activeCaseMeta }
-                    );
-                  }}
-                  className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#243449] bg-[#0F1B2D] hover:bg-[#16263D] text-[#F8FAFC] px-3 py-1.5 text-xs font-bold whitespace-nowrap cursor-pointer disabled:opacity-40"
-                >
-                  <FileJson className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
-                  <span>GeoJSON (.json)</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={
-                    !subdivisionResult ||
-                    (subdivisionResult.plots.length === 0 &&
-                      (subdivisionResult.allEvaluatedPlots?.length || 0) === 0)
-                  }
-                  onClick={() => {
-                    if (!subdivisionResult) return;
-                    downloadSubdivisionCSV(
-                      subdivisionResult,
-                      subdivisionState.blockTiers,
-                      subdivisionState.plotTierOverrides,
-                      fairAllocation,
-                      { ...subdivisionState, caseMeta: activeCaseMeta }
-                    );
-                  }}
-                  className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#243449] bg-[#0F1B2D] hover:bg-[#16263D] text-[#F8FAFC] px-3 py-1.5 text-xs font-bold whitespace-nowrap cursor-pointer disabled:opacity-40"
-                >
-                  <Download className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>CSV Liiska</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={
-                    !subdivisionResult ||
-                    (subdivisionResult.plots.length === 0 &&
-                      (subdivisionResult.allEvaluatedPlots?.length || 0) === 0) ||
-                    isExportingZip
-                  }
-                  onClick={async () => {
-                    if (!subdivisionResult) return;
-                    setIsExportingZip(true);
-                    try {
-                      await downloadAllGisPackageZip(
-                        subdivisionResult,
-                        subdivisionState.blockTiers,
-                        subdivisionState.plotTierOverrides,
-                        fairAllocation,
-                        { ...subdivisionState, caseMeta: activeCaseMeta }
-                      );
-                    } finally {
-                      setIsExportingZip(false);
-                    }
-                  }}
-                  className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#243449] bg-[#0F1B2D] hover:bg-[#16263D] text-[#F8FAFC] px-3 py-1.5 text-xs font-bold whitespace-nowrap cursor-pointer disabled:opacity-40"
-                >
-                  <FolderArchive className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
-                  <span>Dhammaan (.zip)</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={
-                    !subdivisionResult ||
-                    (subdivisionResult.plots.length === 0 &&
-                      (subdivisionResult.allEvaluatedPlots?.length || 0) === 0)
-                  }
-                  onClick={async () => {
-                    const txt = buildPlotsGeoJsonClipboardText(subdivisionState, subdivisionResult);
-                    if (!txt) return;
-                    const ok = await copyTextSafelyToClipboard(txt);
-                    if (ok) {
-                      setCopiedGeoJson(true);
-                      onNotify('Waa La Koobiyeeyey', 'Qoraalka GeoJSON waa lagu koobiyeeyey clipboard-ka.');
-                      window.setTimeout(() => setCopiedGeoJson(false), 2200);
-                    }
-                  }}
-                  className="col-span-2 min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#10B981]/40 bg-[#0F1B2D] hover:border-[#10B981] text-[#10B981] px-3 py-1.5 text-xs font-bold whitespace-nowrap cursor-pointer disabled:opacity-40"
-                >
-                  {copiedGeoJson ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 shrink-0" />
-                      <span>GeoJSON Waa La Koobiyeeyey</span>
-                    </>
-                  ) : (
-                    <>
-                      <FileJson className="w-3.5 h-3.5 shrink-0" />
-                      <span>Koobiyee Qoraalka GeoJSON</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {/* ==================== RIGHT LIVE MAP & FAIR ALLOCATION WORKSPACE (First on mobile!) ==================== */}
-        <div className="order-1 xl:order-2 xl:col-span-8 space-y-4 min-w-0">
-          {/* TOP KPI METRICS STRIP */}
-          {subdivisionResult && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <div className="bg-[#0B1220] border border-[#243449] rounded-2xl p-3.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Aagga Beerta
-                </div>
-                <div className="text-lg font-mono-numbers font-extrabold text-[#F8FAFC] mt-0.5 tabular-nums">
-                  {(subdivisionResult.barea / 1e4).toFixed(2)} ha
-                </div>
-                <div className="text-[11px] text-[#94A3B8] font-mono-numbers tabular-nums">
-                  {Math.round(subdivisionResult.barea).toLocaleString()} m²
-                </div>
-              </div>
-
-              <div className="bg-[#0B1220] border border-[#243449] rounded-2xl p-3.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Blocks &amp; Xuduudda
-                </div>
-                <div className="text-lg font-mono-numbers font-extrabold text-[#F8FAFC] mt-0.5 tabular-nums">
-                  {subdivisionResult.blocks.length} Blk
-                </div>
-                <div className="text-[11px] text-[#94A3B8] tabular-nums font-mono-numbers">
-                  {(fairAllocation?.excludedBlocksCount ?? 0) > 0
-                    ? `${subdivisionResult.blocks.length - (fairAllocation?.excludedBlocksCount ?? 0)} qaybin · ${fairAllocation?.excludedBlocksCount} reeban`
-                    : `${completeBlocksCount} buuxa · ${
-                        subdivisionResult.halfPlotSummary?.boundaryClippedBlocksCount ?? 0
-                      } go'an`}
-                </div>
-              </div>
-
-              <div className="bg-[#0B1220] border border-[#243449] rounded-2xl p-3.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Plots La Qaybinayo
-                </div>
-                <div className="text-lg font-mono-numbers font-extrabold text-[#10B981] mt-0.5 tabular-nums">
-                  {fairAllocation?.totalFullPlots ?? subdivisionResult.plots.length}
-                </div>
-                <div className="text-[11px] text-[#94A3B8] font-mono-numbers tabular-nums">
-                  {(fairAllocation?.excludedPlotsCount ?? 0) > 0
-                    ? `${fairAllocation?.excludedPlotsCount} reeban (${Math.round(totalPlotAreaSqM).toLocaleString()} m²)`
-                    : `H1:${fairAllocation?.tierCounts.tier_1_prime ?? 0} · H2:${
-                        fairAllocation?.tierCounts.tier_2_standard ?? 0
-                      } · H3:${fairAllocation?.tierCounts.tier_3_basic ?? 0}`}
-                </div>
-              </div>
-
-              <div className="bg-[#0B1220] border border-[#243449] rounded-2xl p-3.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  {(fairAllocation?.excludedPlotsCount ?? 0) > 0
-                    ? 'Laga Reebay Dhaxalka'
-                    : 'Half Plots (216 m²)'}
-                </div>
-                {(fairAllocation?.excludedPlotsCount ?? 0) > 0 ? (
-                  <>
-                    <div className="text-lg font-mono-numbers font-extrabold text-rose-400 mt-0.5 tabular-nums">
-                      {fairAllocation?.excludedPlotsCount ?? 0} Plot
-                    </div>
-                    <div className="text-[11px] text-rose-300/80 font-mono-numbers tabular-nums">
-                      {fairAllocation?.excludedBlocksCount ?? 0} Blk · Magacyo gaar ah
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-lg font-mono-numbers font-extrabold text-[#10B981] mt-0.5 tabular-nums">
-                      {subdivisionResult.htmlHalvesCounted?.length ??
-                        subdivisionResult.halfPlotSummary?.validHalfPlotsCount ??
-                        0}{' '}
-                      Half
-                    </div>
-                    <div className="text-[11px] text-[#94A3B8] font-mono-numbers tabular-nums">
-                      18×12 / 9×24 ·{' '}
-                      {(
-                        (subdivisionResult.htmlHalvesCounted?.length ??
-                          subdivisionResult.halfPlotSummary?.validHalfPlotsCount ??
-                          0) *
-                        ((subdivisionResult.params.pw * subdivisionResult.params.pd) / 2)
-                      ).toFixed(0)}{' '}
-                      m²
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="col-span-2 sm:col-span-1 bg-[#0B1220] border border-[#243449] rounded-2xl p-3.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-[#94A3B8]">
-                  Dhaxlayaasha
-                </div>
-                <div className="text-lg font-mono-numbers font-extrabold text-[#10B981] mt-0.5 tabular-nums">
-                  {fairAllocation?.heirAllocations.length ?? 0} Qof
-                </div>
-                <div className="text-[11px] text-[#94A3B8] font-semibold">
-                  {fairAllocation?.hasZeroAdjacentBlockViolations ? '0 Blk is-xiga' : 'Eeg digniinta'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* SPECIAL AREA SUMMARY CARDS (`Aag gaar ah` — exact HTML stat cards) */}
-          {subdivisionResult &&
-            subdivisionResult.specialAreas &&
-            subdivisionResult.specialAreas.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {subdivisionResult.specialAreas.map((sa, idx) => (
-                  <div
-                    key={`sa-stat-${idx}`}
-                    className="bg-[#0B1220] border border-[#7c3aed]/55 rounded-2xl p-3.5"
-                  >
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[#c4b5fd] truncate">
-                      Aag: {sa.name}
-                    </div>
-                    <div className="text-base font-mono-numbers font-extrabold text-[#F8FAFC] mt-0.5 tabular-nums">
-                      {sa.nP} plots + {sa.nH} half
-                    </div>
-                    <div className="text-[11px] text-[#94A3B8] font-mono-numbers tabular-nums">
-                      {Math.round(sa.aP + sa.aH).toLocaleString()} m² · gudaha:{' '}
-                      {(sa.area / 1e4).toFixed(2)} ha
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-          {/* FAIRNESS & ZONE / BLOCK DISPERSION AUDIT BANNER */}
-          {fairAllocation && (
-            <div
-              className={`rounded-2xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
-                fairAllocation.heirAllocations.length === 0
-                  ? 'bg-amber-950/35 border-amber-500/40 text-amber-100'
-                  : fairAllocation.isFairAcrossAllTiers &&
-                    fairAllocation.isFairAcrossAllZones &&
-                    fairAllocation.hasZeroAdjacentBlockViolations
-                  ? 'bg-[#10B981]/10 border-[#10B981]/35 text-[#F8FAFC]'
-                  : 'bg-amber-950/40 border-amber-500/45 text-amber-100'
-              }`}
-            >
-              <div className="flex items-start gap-2.5">
-                {fairAllocation.heirAllocations.length === 0 ? (
-                  <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                ) : fairAllocation.isFairAcrossAllTiers &&
-                  fairAllocation.isFairAcrossAllZones &&
-                  fairAllocation.hasZeroAdjacentBlockViolations ? (
-                  <CheckCircle2 className="w-4 h-4 text-[#10B981] shrink-0 mt-0.5" />
-                ) : (
-                  <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                )}
-                <div className="leading-relaxed">
-                  <span className="font-bold">{fairAllocation.fairnessSummarySomali}</span>
-                  {fairAllocation.fairnessWarnings.length > 0 &&
-                    fairAllocation.heirAllocations.length > 0 && (
-                      <div className="mt-1 text-[11px] text-amber-200/90">
-                        {fairAllocation.fairnessWarnings.slice(0, 2).join(' · ')}
-                      </div>
-                    )}
-                </div>
-              </div>
-
-              {fairAllocation.heirAllocations.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={onNavigateToCalculator}
-                  className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] font-extrabold whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  Dooro Dhaxlayaasha
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setBottomTab('heir_reports')}
-                  className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#10B981] text-[#F8FAFC] font-bold whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  Warbixinta &amp; Ansixinta
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* INTERACTIVE CAD / GIS MAP CARD */}
-          <section className="bg-[#0B1220] border border-[#243449] rounded-2xl overflow-hidden">
-            {/* Map Primary Controls Row: Compact Icon-Only Toolbars + Active Tool Label */}
-            <div className="px-3 py-2 border-b border-[#243449] flex flex-wrap items-center justify-between gap-2 bg-[#0F1B2D]/70">
-              {/* Color Mode Icons: Heirs | Zones | Tiers | Excluded | Half Plots */}
-              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#030712]/65 border border-[#243449]">
-                <button
-                  type="button"
-                  onClick={() => setMapColorMode('heirs')}
-                  title="Midabka: Dhaxlayaasha"
-                  aria-label="Midabka: Dhaxlayaasha"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
-                    mapColorMode === 'heirs'
-                      ? 'bg-[#10B981] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <Users className="w-4 h-4 shrink-0" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapColorMode('zones')}
-                  title="Midabka: Zones (A–D)"
-                  aria-label="Midabka: Zones (A–D)"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
-                    mapColorMode === 'zones'
-                      ? 'bg-[#10B981] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <Compass className="w-4 h-4 shrink-0" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapColorMode('tiers')}
-                  title="Midabka: Heerka (H1–H3)"
-                  aria-label="Midabka: Heerka (H1–H3)"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
-                    mapColorMode === 'tiers'
-                      ? 'bg-[#10B981] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <Layers className="w-4 h-4 shrink-0" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMapColorMode('excluded')}
-                  title={`Midabka: Laga Reebay (${fairAllocation?.excludedPlotsCount ?? 0})`}
-                  aria-label={`Midabka: Laga Reebay (${fairAllocation?.excludedPlotsCount ?? 0})`}
-                  className={`relative h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
-                    mapColorMode === 'excluded'
-                      ? 'bg-rose-600 text-white'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <Ban className="w-4 h-4 shrink-0" />
-                  {(fairAllocation?.excludedPlotsCount ?? 0) > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-md bg-rose-500 text-white text-[9px] font-black leading-4 text-center tabular-nums">
-                      {fairAllocation?.excludedPlotsCount}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMapColorMode('half_plots');
-                    setInteractionTool('inspect');
-                  }}
-                  title={`Midabka: Half Plots (${subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0})`}
-                  aria-label={`Midabka: Half Plots (${subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0})`}
-                  className={`relative h-9 w-9 rounded-lg inline-flex items-center justify-center transition-colors shrink-0 cursor-pointer ${
-                    mapColorMode === 'half_plots'
-                      ? 'bg-[#10B981] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <Grid className="w-4 h-4 shrink-0" />
-                  {(subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0) > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-md bg-emerald-500 text-[#030712] text-[9px] font-black leading-4 text-center tabular-nums">
-                      {subdivisionResult?.halfPlotSummary?.validHalfPlotsCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-
-              {/* Active Mode & Tool Compact Status */}
-              <div className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold text-[#94A3B8]">
-                <span className="text-[#F8FAFC]">
+                <span className="w-2 h-2 rounded-full bg-[#10B981] shrink-0" />
+                <span>
                   {mapColorMode === 'heirs'
-                    ? 'Dhaxlayaasha'
+                    ? 'Muuqaal: Dhaxlayaal'
                     : mapColorMode === 'zones'
-                    ? 'Zones (A–D)'
+                    ? 'Muuqaal: Aag A–D'
                     : mapColorMode === 'tiers'
-                    ? 'Heerka (H1–H3)'
+                    ? 'Muuqaal: Heer H1–H3'
                     : mapColorMode === 'excluded'
-                    ? 'Laga Reebay'
-                    : 'Half Plots'}
+                    ? `Muuqaal: Reeban (${fairAllocation?.excludedPlotsCount ?? 0})`
+                    : `Muuqaal: Half (${subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0})`}
                 </span>
-                <span>·</span>
-                <span className="text-[#10B981]">
-                  {interactionTool === 'inspect'
-                    ? 'Kormeer'
-                    : interactionTool === 'mark_exclusion'
-                    ? 'Ka Reeb Dhaxalka'
-                    : interactionTool === 'mark_zone'
-                    ? 'Calaamadi Zone'
-                    : interactionTool === 'mark_tier'
-                    ? 'Calaamadi Heer'
-                    : 'Qoondayn Gacan'}
-                </span>
-              </div>
+                <ChevronDown className="w-3.5 h-3.5 text-[#94A3B8]" />
+              </button>
 
-              {/* Click Interaction Tool Icons */}
-              <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#030712]/65 border border-[#243449]">
-                <button
-                  type="button"
-                  onClick={() => setInteractionTool('inspect')}
-                  title="Qalabka: Kormeer Plot-ka"
-                  aria-label="Qalabka: Kormeer Plot-ka"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
-                    interactionTool === 'inspect'
-                      ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <MousePointerClick
-                    className={`w-4 h-4 shrink-0 ${
-                      interactionTool === 'inspect' ? 'text-[#030712]' : 'text-[#10B981]'
-                    }`}
-                  />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInteractionTool('mark_exclusion');
-                    setMapColorMode('excluded');
-                  }}
-                  title="Qalabka: Ka Reeb Dhaxalka"
-                  aria-label="Qalabka: Ka Reeb Dhaxalka"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
-                    interactionTool === 'mark_exclusion'
-                      ? 'bg-rose-600 text-white'
-                      : 'text-rose-300 hover:bg-rose-950/50'
-                  }`}
-                >
-                  <Ban className="w-4 h-4 shrink-0" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInteractionTool('mark_zone');
-                    setMapColorMode('zones');
-                  }}
-                  title="Qalabka: Calaamadi Zone"
-                  aria-label="Qalabka: Calaamadi Zone"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
-                    interactionTool === 'mark_zone'
-                      ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <Compass
-                    className={`w-4 h-4 shrink-0 ${
-                      interactionTool === 'mark_zone' ? 'text-[#030712]' : 'text-sky-400'
-                    }`}
-                  />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInteractionTool('mark_tier');
-                    setMapColorMode('tiers');
-                  }}
-                  title="Qalabka: Calaamadi Heerka"
-                  aria-label="Qalabka: Calaamadi Heerka"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
-                    interactionTool === 'mark_tier'
-                      ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <Paintbrush
-                    className={`w-4 h-4 shrink-0 ${
-                      interactionTool === 'mark_tier' ? 'text-[#030712]' : 'text-[#10B981]'
-                    }`}
-                  />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setInteractionTool('assign_heir');
-                    setMapColorMode('heirs');
-                  }}
-                  title="Qalabka: Qoondayn Gacan"
-                  aria-label="Qalabka: Qoondayn Gacan"
-                  className={`h-9 w-9 rounded-lg inline-flex items-center justify-center shrink-0 cursor-pointer transition-colors ${
-                    interactionTool === 'assign_heir'
-                      ? 'bg-[#F8FAFC] text-[#030712]'
-                      : 'text-[#94A3B8] hover:text-[#F8FAFC] hover:bg-[#0F1B2D]'
-                  }`}
-                >
-                  <UserCheck
-                    className={`w-4 h-4 shrink-0 ${
-                      interactionTool === 'assign_heir' ? 'text-[#030712]' : 'text-amber-400'
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
-
-            {/* Contextual Exclusion Marking Bar (Blocks & Plots + Special Name) */}
-            {interactionTool === 'mark_exclusion' && (
-              <div className="px-4 py-3 bg-rose-950/35 border-b border-rose-500/40 space-y-2.5 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-extrabold text-rose-200 flex items-center gap-1.5">
-                      <Ban className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                      <span>Calaamadi Dhulka Laga Reebayo Qaybinta:</span>
-                    </span>
-
-                    <div className="inline-flex rounded-lg bg-[#0B1220] border border-[#243449] p-0.5 font-bold">
-                      <button
-                        type="button"
-                        onClick={() => setExclusionBrushScope('plot')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-md cursor-pointer ${
-                          exclusionBrushScope === 'plot'
-                            ? 'bg-rose-600 text-white'
-                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                        }`}
-                      >
-                        Plot Keliya
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExclusionBrushScope('block')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-md cursor-pointer ${
-                          exclusionBrushScope === 'block'
-                            ? 'bg-rose-600 text-white'
-                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                        }`}
-                      >
-                        Block oo Dhan
-                      </button>
-                    </div>
-
-                    <div className="inline-flex rounded-lg bg-[#0B1220] border border-[#243449] p-0.5 font-bold">
-                      <button
-                        type="button"
-                        onClick={() => setExclusionBrushMode('exclude')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-md cursor-pointer ${
-                          exclusionBrushMode === 'exclude'
-                            ? 'bg-rose-600 text-white'
-                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                        }`}
-                      >
-                        Ka Reeb Dhaxalka
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExclusionBrushMode('include')}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-md cursor-pointer ${
-                          exclusionBrushMode === 'include'
-                            ? 'bg-[#10B981] text-[#030712]'
-                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                        }`}
-                      >
-                        Dib ugu Dar Qaybinta
-                      </button>
-                    </div>
-                  </div>
-
-                  <span className="text-[11px] font-semibold text-rose-200">
-                    Taabo {exclusionBrushScope === 'block' ? 'Block kasta' : 'Plot kasta'} oo khariirada ku yaal
-                  </span>
-                </div>
-
-                {exclusionBrushMode === 'exclude' && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="font-bold text-[#F8FAFC] inline-flex items-center gap-1">
-                      <Tag className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Magaca Gaarka ah:</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={exclusionBrushSpecialName}
-                      onChange={(e) => setExclusionBrushSpecialName(e.target.value)}
-                      placeholder="Qor magaca gaarka ah (Masjidka, Ceelka, Waqf...)"
-                      className="min-w-[220px] min-h-[38px] bg-[#0B1220] border border-rose-500/45 rounded-lg px-2.5 py-1 text-xs font-bold text-[#F8FAFC] placeholder:text-[#64748B] focus:outline-none focus:border-rose-400"
-                    />
-                    <div className="flex flex-wrap items-center gap-1">
-                      {SPECIAL_EXCLUSION_PRESETS.map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setExclusionBrushSpecialName(preset)}
-                          className={`min-h-[32px] px-2.5 py-1 rounded-md border text-[11px] font-semibold whitespace-nowrap cursor-pointer ${
-                            exclusionBrushSpecialName === preset
-                              ? 'bg-rose-600 text-white border-rose-500'
-                              : 'bg-[#0B1220] text-[#CBD5E1] border-[#243449] hover:border-rose-400'
-                          }`}
-                        >
-                          {preset}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Contextual Zone Brush Bar */}
-            {interactionTool === 'mark_zone' && (
-              <div className="px-4 py-2.5 bg-[#0F1B2D] border-b border-[#243449] flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-bold text-[#10B981]">
-                  Taabo Block kasta si aad ugu beddesho Zone:
-                </span>
-                {['Zone A', 'Zone B', 'Zone C', 'Zone D', 'Zone E'].map((z) => {
-                  const zm = getZoneDisplayMeta(z);
-                  return (
-                    <button
-                      key={z}
-                      type="button"
-                      onClick={() => setActiveZoneBrush(z)}
-                      className={`min-h-[34px] px-2.5 py-1 rounded-lg font-bold inline-flex items-center gap-1.5 border cursor-pointer ${
-                        activeZoneBrush === z
-                          ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
-                          : 'bg-[#0B1220] text-[#F8FAFC] border-[#243449]'
-                      }`}
-                    >
-                      <span
-                        className="w-2.5 h-2.5 rounded-xs"
-                        style={{ backgroundColor: zm.colorHex }}
-                      />
-                      <span>{z}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Contextual Tier Brush Bar (Xulo Plot | Xulo Block | Sawir Gacanta) */}
-            {interactionTool === 'mark_tier' && (
-              <div className="px-4 py-2.5 bg-[#0F1B2D] border-b border-[#243449] flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-[#10B981]">
-                    {tierBrushScope === 'freehand'
-                      ? 'Ku sawir wareeg gacanta plots-ka:'
-                      : `Taabo khariidadda (${
-                          tierBrushScope === 'block' ? 'Xulo Block' : 'Xulo Plot'
-                        }):`}
-                  </span>
-                  {(['tier_1_prime', 'tier_2_standard', 'tier_3_basic'] as AssetQualityTier[]).map(
-                    (t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setActiveTierBrush(t)}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-lg font-bold inline-flex items-center gap-1.5 border cursor-pointer ${
-                          activeTierBrush === t
-                            ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
-                            : 'bg-[#0B1220] text-[#F8FAFC] border-[#243449]'
-                        }`}
-                      >
-                        <span
-                          className="w-2.5 h-2.5 rounded-xs"
-                          style={{ backgroundColor: TIER_METADATA[t].fillHex }}
-                        />
-                        <span>{TIER_METADATA[t].code}</span>
-                      </button>
-                    )
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
+              {showViewModePopover && (
+                <div className="mt-1.5 w-52 rounded-2xl bg-[#0B1220]/96 backdrop-blur-md border border-[#243449] p-1.5 shadow-2xl space-y-1 text-xs">
                   {(
                     [
-                      { id: 'plot', label: 'Xulo Plot' },
-                      { id: 'block', label: 'Xulo Block' },
-                      { id: 'freehand', label: 'Sawir Gacanta' },
+                      { id: 'heirs', label: 'Dhaxlayaasha', icon: Users },
+                      { id: 'tiers', label: 'Heerarka (H1–H3)', icon: Layers },
+                      { id: 'zones', label: 'Aagga (Zones A–D)', icon: Compass },
+                      {
+                        id: 'excluded',
+                        label: `Dhul Reeban (${fairAllocation?.excludedPlotsCount ?? 0})`,
+                        icon: Ban,
+                      },
+                      {
+                        id: 'half_plots',
+                        label: `Half Plots (${subdivisionResult?.halfPlotSummary?.validHalfPlotsCount ?? 0})`,
+                        icon: Grid,
+                      },
                     ] as const
-                  ).map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setTierBrushScope(opt.id)}
-                      className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                        tierBrushScope === opt.id
-                          ? 'bg-[#F8FAFC] text-[#030712] border-[#F8FAFC]'
-                          : 'bg-[#0B1220] text-[#CBD5E1] border-[#243449]'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Heir Spotlight / Manual Allocation Selector */}
-            {(mapColorMode === 'heirs' || interactionTool === 'assign_heir') &&
-              fairAllocation &&
-              fairAllocation.heirAllocations.length > 0 && (
-                <div className="px-4 py-2.5 bg-[#0B1220] border-b border-[#243449] flex items-center gap-1.5 overflow-x-auto">
-                  <span className="text-[11px] font-bold text-[#94A3B8] mr-1 whitespace-nowrap shrink-0">
-                    {interactionTool === 'assign_heir'
-                      ? 'Dooro dhaxalaha:'
-                      : 'Iftiimi dhaxalaha:'}
-                  </span>
-
-                  {interactionTool !== 'assign_heir' && (
-                    <button
-                      type="button"
-                      onClick={() => setHighlightedHeirKey(null)}
-                      className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                        highlightedHeirKey === null
-                          ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
-                          : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-[#10B981]'
-                      }`}
-                    >
-                      Dhammaan ({fairAllocation.totalFullPlots})
-                    </button>
-                  )}
-
-                  {fairAllocation.heirAllocations.map((h) => {
-                    const isSelected =
-                      interactionTool === 'assign_heir'
-                        ? selectedHeirKeyForBrush === h.heirKey
-                        : highlightedHeirKey === h.heirKey;
+                  ).map((vm) => {
+                    const Icon = vm.icon;
+                    const active = mapColorMode === vm.id;
                     return (
                       <button
-                        key={h.heirKey}
+                        key={vm.id}
                         type="button"
                         onClick={() => {
-                          if (interactionTool === 'assign_heir') {
-                            setSelectedHeirKeyForBrush(h.heirKey);
-                          } else {
-                            setHighlightedHeirKey(
-                              highlightedHeirKey === h.heirKey ? null : h.heirKey
-                            );
-                          }
+                          setMapColorMode(vm.id);
+                          setShowViewModePopover(false);
                         }}
-                        className={`min-h-[34px] px-2.5 py-1 rounded-lg text-[11px] font-bold border inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#F8FAFC] text-[#030712] border-[#F8FAFC]'
-                            : 'bg-[#0F1B2D] text-[#F8FAFC] border-[#243449] hover:border-[#10B981]'
+                        className={`w-full min-h-[36px] px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2 font-bold cursor-pointer transition-colors ${
+                          active
+                            ? 'bg-[#10B981] text-[#030712]'
+                            : 'text-[#F8FAFC] hover:bg-[#0F1B2D]'
                         }`}
                       >
-                        <span
-                          className="w-2.5 h-2.5 rounded-xs shrink-0"
-                          style={{ backgroundColor: h.colorHex }}
-                        />
-                        <span className="truncate max-w-[130px]">{h.personName}</span>
-                        <span className="font-mono-numbers tabular-nums opacity-80">
-                          ({formatPlotQtyCompact(h.effectiveTotalPlotsReceived)})
+                        <span className="inline-flex items-center gap-2">
+                          <Icon className="w-3.5 h-3.5 shrink-0" />
+                          <span>{vm.label}</span>
                         </span>
+                        {active && <Check className="w-3.5 h-3.5 shrink-0" />}
                       </button>
                     );
                   })}
                 </div>
               )}
+            </div>
+          )}
 
-            {/* Interactive Dark Cadastral SVG Map Box */}
-            <div className="relative bg-[#07101E] h-[440px] sm:h-[560px] touch-none select-none overflow-hidden">
-              {/* DRAGGABLE HIDE/SHOW LEGENDS CARD ON CAD CANVAS */}
-              {subdivisionResult && mapGeometry && cadLegendItems.length > 0 && (
-                <div
-                  style={{ left: `${cadLegendPos.x}px`, top: `${cadLegendPos.y}px` }}
-                  className="absolute z-20 rounded-xl bg-[#0B1220]/94 backdrop-blur-md border border-[#243449] p-2.5 shadow-xl min-w-[168px] max-w-[235px] text-[#F8FAFC]"
-                >
-                  <button
-                    type="button"
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      e.currentTarget.setPointerCapture(e.pointerId);
-                      cadLegendDragRef.current = {
-                        active: true,
-                        pointerId: e.pointerId,
-                        startClientX: e.clientX,
-                        startClientY: e.clientY,
-                        startX: cadLegendPos.x,
-                        startY: cadLegendPos.y,
-                        moved: false,
-                      };
-                    }}
-                    onPointerMove={(e) => {
-                      const st = cadLegendDragRef.current;
-                      if (!st || !st.active || st.pointerId !== e.pointerId) return;
-                      const dx = e.clientX - st.startClientX;
-                      const dy = e.clientY - st.startClientY;
-                      if (Math.hypot(dx, dy) > 5) st.moved = true;
-                      if (st.moved) {
-                        setCadLegendPos({
-                          x: Math.max(8, st.startX + dx),
-                          y: Math.max(8, st.startY + dy),
-                        });
-                      }
-                    }}
-                    onPointerUp={(e) => {
-                      const st = cadLegendDragRef.current;
-                      if (!st || st.pointerId !== e.pointerId) return;
-                      cadLegendDragRef.current = null;
-                      try {
-                        e.currentTarget.releasePointerCapture(e.pointerId);
-                      } catch {
-                        // Ignore
-                      }
-                      if (!st.moved) {
-                        setIsCadLegendsExpanded((prev) => !prev);
-                      }
-                    }}
-                    title="Jiid meel kasta ama taabo si aad u qariso / u muujiso Sumadaha"
-                    className="w-full flex items-center justify-between gap-2 text-xs font-extrabold touch-none select-none cursor-grab active:cursor-grabbing"
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      <GripHorizontal className="w-3.5 h-3.5 text-[#10B981]" />
-                      <span>Sumadaha</span>
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold text-[#94A3B8] tabular-nums">
-                        {cadLegendItems.filter((it) => !cadHiddenHeirKeys[it.key]).length}/
-                        {cadLegendItems.length}
-                      </span>
-                      {isCadLegendsExpanded ? (
-                        <EyeOff className="w-3.5 h-3.5 text-[#94A3B8]" />
-                      ) : (
-                        <Eye className="w-3.5 h-3.5 text-[#10B981]" />
-                      )}
-                    </span>
-                  </button>
-
-                  {isCadLegendsExpanded && (
-                    <div className="mt-2 space-y-1.5 text-[11px]">
-                      <div className="flex items-center justify-between gap-2 pb-1 border-b border-[#243449] text-[10px]">
-                        <button
-                          type="button"
-                          onClick={() => setCadHiddenHeirKeys({})}
-                          className="font-bold text-[#10B981] hover:underline cursor-pointer"
-                        >
-                          Dooro Dhammaan
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const next: Record<string, boolean> = {};
-                            cadLegendItems.forEach((it) => {
-                              next[it.key] = true;
-                            });
-                            setCadHiddenHeirKeys(next);
-                          }}
-                          className="font-semibold text-[#94A3B8] hover:text-[#F8FAFC] hover:underline cursor-pointer"
-                        >
-                          Ka Saar
-                        </button>
-                      </div>
-
-                      <div className="max-h-[185px] sm:max-h-[225px] overflow-y-auto pr-0.5 space-y-1">
-                        {cadLegendItems.map((it) => {
-                          const isChecked = !cadHiddenHeirKeys[it.key];
-                          return (
-                            <label
-                              key={it.key}
-                              className="w-full flex items-center justify-between gap-2 font-semibold rounded-md px-1 py-0.5 cursor-pointer select-none hover:bg-white/5"
-                            >
-                              <span className="inline-flex items-center gap-1.5 min-w-0">
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => {
-                                    setCadHiddenHeirKeys((prev) => ({
-                                      ...prev,
-                                      [it.key]: !prev[it.key],
-                                    }));
-                                    if (mapColorMode !== 'heirs' && !it.key.startsWith('__')) {
-                                      setMapColorMode('heirs');
-                                    }
-                                  }}
-                                  className="w-3.5 h-3.5 rounded accent-[#10B981] cursor-pointer shrink-0"
-                                />
-                                <span
-                                  style={{ backgroundColor: it.color }}
-                                  className="w-3 h-2.5 rounded-xs border border-black/40 shrink-0"
-                                />
-                                <span
-                                  className={`truncate ${
-                                    isChecked ? '' : 'opacity-45 line-through'
-                                  }`}
-                                  title={it.label}
-                                >
-                                  {it.label}
-                                </span>
-                              </span>
-                              <span className="text-[10px] text-[#94A3B8] tabular-nums shrink-0">
-                                {it.count}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
+          {/* DRAGGABLE COMPACT SUMADAHA (LEGENDS) MINI PILL */}
+          {subdivisionResult && mapGeometry && cadLegendItems.length > 0 && (
+            <div
+              style={{ left: `${cadLegendPos.x}px`, top: `${cadLegendPos.y}px` }}
+              className="absolute z-20 rounded-xl bg-[#0B1220]/94 backdrop-blur-md border border-[#243449] p-2 shadow-xl min-w-[145px] max-w-[225px] text-[#F8FAFC]"
+            >
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  cadLegendDragRef.current = {
+                    active: true,
+                    pointerId: e.pointerId,
+                    startClientX: e.clientX,
+                    startClientY: e.clientY,
+                    startX: cadLegendPos.x,
+                    startY: cadLegendPos.y,
+                    moved: false,
+                  };
+                }}
+                onPointerMove={(e) => {
+                  const st = cadLegendDragRef.current;
+                  if (!st || !st.active || st.pointerId !== e.pointerId) return;
+                  const dx = e.clientX - st.startClientX;
+                  const dy = e.clientY - st.startClientY;
+                  if (Math.hypot(dx, dy) > 5) st.moved = true;
+                  if (st.moved) {
+                    setCadLegendPos({
+                      x: Math.max(8, st.startX + dx),
+                      y: Math.max(8, st.startY + dy),
+                    });
+                  }
+                }}
+                onPointerUp={(e) => {
+                  const st = cadLegendDragRef.current;
+                  if (!st || st.pointerId !== e.pointerId) return;
+                  cadLegendDragRef.current = null;
+                  try {
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                  } catch {
+                    // Ignore
+                  }
+                  if (!st.moved) {
+                    setIsCadLegendsExpanded((prev) => !prev);
+                  }
+                }}
+                title="Jiid meel kasta ama taabo si aad u furto / u qariso Sumadaha"
+                className="w-full flex items-center justify-between gap-2 text-[11px] font-extrabold touch-none select-none cursor-grab active:cursor-grabbing"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <GripHorizontal className="w-3.5 h-3.5 text-[#10B981]" />
+                  <span>Sumadaha</span>
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-[10px] font-semibold text-[#94A3B8] tabular-nums">
+                    {cadLegendItems.filter((it) => !cadHiddenHeirKeys[it.key]).length}/
+                    {cadLegendItems.length}
+                  </span>
+                  {isCadLegendsExpanded ? (
+                    <EyeOff className="w-3 h-3 text-[#94A3B8]" />
+                  ) : (
+                    <Eye className="w-3 h-3 text-[#10B981]" />
                   )}
-                </div>
-              )}
+                </span>
+              </button>
 
-              {/* FLOATING THUMB-ZONE MAP ACTION CONTROLS (44x44px hitboxes) */}
-              {subdivisionResult && mapGeometry && (
-                <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
-                  <div className="flex flex-col bg-[#0B1220]/92 backdrop-blur-md border border-[#243449] rounded-2xl p-1 shadow-xl gap-1">
+              {isCadLegendsExpanded && (
+                <div className="mt-2 space-y-1.5 text-[11px]">
+                  <div className="flex items-center justify-between gap-2 pb-1 border-b border-[#243449] text-[10px]">
                     <button
                       type="button"
-                      onClick={() => handleZoom(1.35)}
-                      className="min-h-[44px] min-w-[44px] rounded-xl hover:bg-[#0F1B2D] flex items-center justify-center text-[#F8FAFC] cursor-pointer"
-                      aria-label="Weyneey khariirada"
-                      title="Weyneey (+)"
+                      onClick={() => setCadHiddenHeirKeys({})}
+                      className="font-bold text-[#10B981] hover:underline cursor-pointer"
                     >
-                      <ZoomIn className="w-4 h-4 text-[#10B981]" />
+                      Dooro Dhammaan
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleZoom(1 / 1.35)}
-                      className="min-h-[44px] min-w-[44px] rounded-xl hover:bg-[#0F1B2D] flex items-center justify-center text-[#F8FAFC] cursor-pointer"
-                      aria-label="Yaree khariirada"
-                      title="Yaree (-)"
+                      onClick={() => {
+                        const next: Record<string, boolean> = {};
+                        cadLegendItems.forEach((it) => {
+                          next[it.key] = true;
+                        });
+                        setCadHiddenHeirKeys(next);
+                      }}
+                      className="font-semibold text-[#94A3B8] hover:text-[#F8FAFC] hover:underline cursor-pointer"
                     >
-                      <ZoomOut className="w-4 h-4 text-[#F8FAFC]" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => mapGeometry && setViewBox(mapGeometry.fitBox)}
-                      className="min-h-[44px] min-w-[44px] rounded-xl hover:bg-[#0F1B2D] flex items-center justify-center text-[#F8FAFC] cursor-pointer"
-                      aria-label="Muuji dhammaan khariirada"
-                      title="Muuji Dhammaan"
-                    >
-                      <Maximize2 className="w-4 h-4 text-[#10B981]" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowMapLayerPopover((prev) => !prev)}
-                      className={`min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${
-                        showMapLayerPopover
-                          ? 'bg-[#10B981] text-[#030712]'
-                          : 'hover:bg-[#0F1B2D] text-[#F8FAFC]'
-                      }`}
-                      aria-label="Lakabyada khariirada"
-                      title="Lakabyada & Qoraallada Khariirada"
-                    >
-                      <Layers className="w-4 h-4" />
+                      Ka Saar
                     </button>
                   </div>
 
-                  {/* Floating Map Overlays Popover */}
-                  {showMapLayerPopover && (
-                    <div className="bg-[#0B1220]/96 backdrop-blur-md border border-[#243449] rounded-2xl p-3.5 shadow-2xl w-64 space-y-2.5 text-xs text-[#F8FAFC]">
-                      <div className="flex items-center justify-between pb-1.5 border-b border-[#243449]">
-                        <span className="font-extrabold text-[#10B981]">Lakabyada Khariirada</span>
-                        <button
-                          type="button"
-                          onClick={() => setShowMapLayerPopover(false)}
-                          className="text-[#94A3B8] hover:text-[#F8FAFC] p-1 cursor-pointer"
+                  <div className="max-h-[165px] overflow-y-auto pr-0.5 space-y-1">
+                    {cadLegendItems.map((it) => {
+                      const isChecked = !cadHiddenHeirKeys[it.key];
+                      const isSpotlighted = highlightedHeirKey === it.key;
+                      const canSpotlight = !it.key.startsWith('__');
+                      return (
+                        <div
+                          key={it.key}
+                          className={`w-full flex items-center justify-between gap-1.5 font-semibold rounded-md px-1 py-0.5 select-none hover:bg-white/5 ${
+                            isSpotlighted ? 'bg-[#10B981]/15 ring-1 ring-[#10B981]/50' : ''
+                          }`}
                         >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={showBlockLabels}
-                          onChange={(e) => setShowBlockLabels(e.target.checked)}
-                          className="accent-[#10B981]"
-                        />
-                        <span>Block &amp; Zone IDs</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={showAllPlotLabels}
-                          onChange={(e) => setShowAllPlotLabels(e.target.checked)}
-                          className="accent-[#10B981]"
-                        />
-                        <span>Plot IDs</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={showHeirLabelsOnPlots}
-                          onChange={(e) => setShowHeirLabelsOnPlots(e.target.checked)}
-                          className="accent-[#10B981]"
-                        />
-                        <span>Magaca Dhaxalaha</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-rose-300 font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={showExcludedSpecialNames}
-                          onChange={(e) => setShowExcludedSpecialNames(e.target.checked)}
-                          className="accent-rose-500"
-                        />
-                        <span>Magacyada Gaarka ah (Reeban)</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-sky-300 font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={showWadiOverlay}
-                          onChange={(e) => setShowWadiOverlay(e.target.checked)}
-                          className="accent-sky-400"
-                        />
-                        <span>Muuji Dooxa (Wadi)</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={showQualityDots}
-                          onChange={(e) => setShowQualityDots(e.target.checked)}
-                          className="accent-[#10B981]"
-                        />
-                        <span>Calaamadda Tayada</span>
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer select-none text-[#10B981] font-semibold">
-                        <input
-                          type="checkbox"
-                          checked={showOutsidePlotsOverlay}
-                          onChange={(e) => setShowOutsidePlotsOverlay(e.target.checked)}
-                          className="accent-[#10B981]"
-                        />
-                        <span>Muuji Qaybta Go&apos;an &amp; Dibadda</span>
-                      </label>
-                    </div>
+                          <label className="inline-flex items-center gap-1.5 min-w-0 flex-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setCadHiddenHeirKeys((prev) => ({
+                                  ...prev,
+                                  [it.key]: !prev[it.key],
+                                }));
+                                if (mapColorMode !== 'heirs' && !it.key.startsWith('__')) {
+                                  setMapColorMode('heirs');
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded accent-[#10B981] cursor-pointer shrink-0"
+                            />
+                            <span
+                              style={{ backgroundColor: it.color }}
+                              className="w-3 h-2.5 rounded-xs border border-black/40 shrink-0"
+                            />
+                            <span
+                              className={`truncate ${
+                                isChecked ? '' : 'opacity-45 line-through'
+                              }`}
+                              title={it.label}
+                            >
+                              {it.label}
+                            </span>
+                          </label>
+                          <div className="inline-flex items-center gap-1 shrink-0">
+                            {canSpotlight && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMapColorMode('heirs');
+                                  setHighlightedHeirKey((prev) =>
+                                    prev === it.key ? null : it.key
+                                  );
+                                }}
+                                title={
+                                  isSpotlighted
+                                    ? 'Ka qaad iftiiminta dhaxlahan'
+                                    : 'Iftiimi plots-ka dhaxlahan oo keliya'
+                                }
+                                className={`p-0.5 rounded cursor-pointer ${
+                                  isSpotlighted
+                                    ? 'text-[#10B981]'
+                                    : 'text-[#64748B] hover:text-[#F8FAFC]'
+                                }`}
+                              >
+                                <Eye className="w-3 h-3" />
+                              </button>
+                            )}
+                            <span className="text-[10px] text-[#94A3B8] tabular-nums">
+                              {it.count}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {highlightedHeirKey && (
+                    <button
+                      type="button"
+                      onClick={() => setHighlightedHeirKey(null)}
+                      className="w-full py-1 rounded-lg bg-[#0F1B2D] border border-[#243449] text-[10px] font-bold text-[#10B981] hover:border-[#10B981] cursor-pointer"
+                    >
+                      Muuji Dhammaan (Ka Qaad Diiradda)
+                    </button>
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ACTIVE BRUSH INDICATOR + MULTI-TAP BATCH COMMIT PILL (Bottom-Center of Canvas) */}
+          {subdivisionResult && mapGeometry && (interactionTool !== 'inspect' || selectedBatchPlotIds.length > 0) && (
+            <div className="absolute inset-x-3 bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-[#0B1220]/95 backdrop-blur-md border border-[#10B981]/50 px-3 py-2 shadow-2xl text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse shrink-0" />
+                <span className="font-bold text-[#F8FAFC] truncate">
+                  {selectedBatchPlotIds.length > 0
+                    ? `${selectedBatchPlotIds.length} la xulay (${
+                        interactionTool === 'mark_exclusion'
+                          ? exclusionBrushSpecialName.trim() || 'Ka Reeb'
+                          : interactionTool === 'mark_tier'
+                          ? TIER_METADATA[activeTierBrush].code
+                          : interactionTool === 'mark_zone'
+                          ? activeZoneBrush
+                          : fairAllocation?.heirAllocations.find(
+                              (h) => h.heirKey === selectedHeirKeyForBrush
+                            )?.personName || 'Dhaxle'
+                      })`
+                    : interactionTool === 'assign_heir'
+                    ? `Taabo Plot/Jajab → ${
+                        fairAllocation?.heirAllocations.find(
+                          (h) => h.heirKey === selectedHeirKeyForBrush
+                        )?.personName || 'Dhaxle'
+                      }`
+                    : interactionTool === 'mark_exclusion'
+                    ? `Taabo Plot/Jajab → ${exclusionBrushSpecialName.trim() || 'Magac Gaar ah / Reeb'}`
+                    : interactionTool === 'mark_tier'
+                    ? tierBrushScope === 'freehand'
+                      ? `Ku sawir wareeg → ${TIER_METADATA[activeTierBrush].code}`
+                      : `Taabo → ${TIER_METADATA[activeTierBrush].code}`
+                    : `Taabo Block → ${activeZoneBrush}`}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {selectedBatchPlotIds.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={applyBatchSelectionAction}
+                      className="min-h-[34px] px-3 py-1 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] font-extrabold cursor-pointer"
+                    >
+                      Ku Qor ({selectedBatchPlotIds.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBatchPlotIds([])}
+                      className="min-h-[34px] px-2.5 py-1 rounded-xl bg-[#0F1B2D] border border-[#243449] text-[#94A3B8] hover:text-[#F8FAFC] font-bold cursor-pointer"
+                    >
+                      Nadiifi
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInteractionTool('inspect');
+                    setMultiSelectMode(false);
+                    setSelectedBatchPlotIds([]);
+                  }}
+                  className="min-h-[34px] px-2.5 py-1 rounded-xl bg-[#0F1B2D] border border-[#243449] text-[#CBD5E1] hover:text-[#F8FAFC] font-bold cursor-pointer"
+                >
+                  Kormeer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* FLOATING THUMB-ZONE MAP ACTION CONTROLS (44x44px hitboxes) */}
+          {subdivisionResult && mapGeometry && (
+            <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
+              <div className="flex flex-col bg-[#0B1220]/92 backdrop-blur-md border border-[#243449] rounded-2xl p-1 shadow-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInteractionTool('inspect');
+                    setMultiSelectMode(false);
+                    setSelectedBatchPlotIds([]);
+                  }}
+                  className={`min-h-[42px] min-w-[42px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${
+                    interactionTool === 'inspect'
+                      ? 'bg-[#10B981] text-[#030712]'
+                      : 'hover:bg-[#0F1B2D] text-[#F8FAFC]'
+                  }`}
+                  aria-label="Habka Kormeerka"
+                  title="Kormeer Plot-ka (Inspect)"
+                >
+                  <MousePointerClick className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoom(1.35)}
+                  className="min-h-[42px] min-w-[42px] rounded-xl hover:bg-[#0F1B2D] flex items-center justify-center text-[#F8FAFC] cursor-pointer"
+                  aria-label="Weyneey khariirada"
+                  title="Weyneey (+)"
+                >
+                  <ZoomIn className="w-4 h-4 text-[#10B981]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleZoom(1 / 1.35)}
+                  className="min-h-[42px] min-w-[42px] rounded-xl hover:bg-[#0F1B2D] flex items-center justify-center text-[#F8FAFC] cursor-pointer"
+                  aria-label="Yaree khariirada"
+                  title="Yaree (-)"
+                >
+                  <ZoomOut className="w-4 h-4 text-[#F8FAFC]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => mapGeometry && setViewBox(mapGeometry.fitBox)}
+                  className="min-h-[42px] min-w-[42px] rounded-xl hover:bg-[#0F1B2D] flex items-center justify-center text-[#F8FAFC] cursor-pointer"
+                  aria-label="Muuji dhammaan khariirada"
+                  title="Muuji Dhammaan"
+                >
+                  <Maximize2 className="w-4 h-4 text-[#10B981]" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMapLayerPopover((prev) => !prev);
+                    setShowViewModePopover(false);
+                  }}
+                  className={`min-h-[42px] min-w-[42px] rounded-xl flex items-center justify-center cursor-pointer transition-colors ${
+                    showMapLayerPopover
+                      ? 'bg-[#10B981] text-[#030712]'
+                      : 'hover:bg-[#0F1B2D] text-[#F8FAFC]'
+                  }`}
+                  aria-label="Lakabyada khariirada"
+                  title="Lakabyada & Qoraallada Khariirada"
+                >
+                  <Layers className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Floating Map Overlays Popover */}
+              {showMapLayerPopover && (
+                <div className="bg-[#0B1220]/96 backdrop-blur-md border border-[#243449] rounded-2xl p-3.5 shadow-2xl w-64 space-y-2.5 text-xs text-[#F8FAFC]">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-[#243449]">
+                    <span className="font-extrabold text-[#10B981]">Lakabyada Khariirada</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowMapLayerPopover(false)}
+                      className="text-[#94A3B8] hover:text-[#F8FAFC] p-1 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showBlockLabels}
+                      onChange={(e) => setShowBlockLabels(e.target.checked)}
+                      className="accent-[#10B981]"
+                    />
+                    <span>Block &amp; Zone IDs</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showAllPlotLabels}
+                      onChange={(e) => setShowAllPlotLabels(e.target.checked)}
+                      className="accent-[#10B981]"
+                    />
+                    <span>Plot IDs</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showHeirLabelsOnPlots}
+                      onChange={(e) => setShowHeirLabelsOnPlots(e.target.checked)}
+                      className="accent-[#10B981]"
+                    />
+                    <span>Magaca Dhaxalaha</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-rose-300 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={showExcludedSpecialNames}
+                      onChange={(e) => setShowExcludedSpecialNames(e.target.checked)}
+                      className="accent-rose-500"
+                    />
+                    <span>Magacyada Gaarka ah (Reeban)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-sky-300 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={showWadiOverlay}
+                      onChange={(e) => setShowWadiOverlay(e.target.checked)}
+                      className="accent-sky-400"
+                    />
+                    <span>Muuji Dooxa (Wadi)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showQualityDots}
+                      onChange={(e) => setShowQualityDots(e.target.checked)}
+                      className="accent-[#10B981]"
+                    />
+                    <span>Calaamadda Tayada</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-[#10B981] font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={showOutsidePlotsOverlay}
+                      onChange={(e) => setShowOutsidePlotsOverlay(e.target.checked)}
+                      className="accent-[#10B981]"
+                    />
+                    <span>Muuji Qaybta Go&apos;an &amp; Dibadda</span>
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
+
+
 
               {!subdivisionResult || !mapGeometry ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 text-center bg-[#07101E] overflow-y-auto">
@@ -3517,14 +2072,21 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                           }
                           const hp =
                             q.halfPlotValidation || subdivisionResult.plotValidations?.[q.id];
-                          const isSelectedPlot = inspectedPlotId === q.id;
+                          const isBatchSelected = selectedBatchPlotIds.includes(q.id);
+                          const isSelectedPlot = inspectedPlotId === q.id || isBatchSelected;
                           const px = mapGeometry.toX(q.centerUtm);
                           const py = mapGeometry.toY(q.centerUtm);
 
-                          // 1. NON-FULL PLOTS: Outside OR Boundary-Clipped (Half Plot Valid / Invalid / Review / Insufficient)
+                          // 1. NON-FULL PLOTS: Outside OR Boundary-Clipped (Half Plot Valid / Jajab Manual / Invalid)
                           if (!q.full) {
                             const valStatus = hp?.validationStatus || 'half_plot_invalid';
                             const statusMeta = HALF_PLOT_STATUS_METADATA[valStatus];
+                            const partialExcl = getEffectivePlotExclusion(
+                              q,
+                              subdivisionState.plotMetadata,
+                              subdivisionState.blockMetadata
+                            );
+                            const partialAssign = fairAllocation?.plotAssignments[q.id];
 
                             if (valStatus === 'full_outside') {
                               if (!showOutsidePlotsOverlay && mapColorMode !== 'half_plots') {
@@ -3552,6 +2114,13 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                               hp && hp.insideRingsUtm.length > 0 ? hp.insideRingsUtm : [];
                             const outsideRings =
                               hp && hp.outsideRingsUtm.length > 0 ? hp.outsideRingsUtm : [];
+                            const partialCustomFill = partialExcl.isExcluded
+                              ? partialExcl.colorHex || 'url(#excludedPlotHatchPattern)'
+                              : partialAssign?.ownerColorHex
+                              ? partialAssign.ownerColorHex
+                              : valStatus === 'half_plot_valid'
+                              ? 'url(#validHalfPlotPattern)'
+                              : statusMeta.fillHex;
 
                             return (
                               <g key={q.id}>
@@ -3596,23 +2165,39 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                                       data-plot-id={q.id}
                                       data-block-id={b.id}
                                       points={mapGeometry.toPtsStr(iring)}
-                                      fill={
-                                        valStatus === 'half_plot_valid'
-                                          ? 'url(#validHalfPlotPattern)'
-                                          : statusMeta.fillHex
-                                      }
+                                      fill={partialCustomFill}
                                       fillOpacity={
-                                        mapColorMode === 'half_plots'
+                                        partialAssign?.ownerColorHex || partialExcl.isExcluded
+                                          ? 0.92
+                                          : mapColorMode === 'half_plots'
                                           ? 0.9
                                           : valStatus === 'half_plot_valid'
                                           ? 0.86
                                           : 0.6
                                       }
-                                      stroke={isSelectedPlot ? '#fbbf24' : statusMeta.strokeHex}
-                                      strokeWidth={isSelectedPlot ? 2.4 : 1.1}
+                                      stroke={
+                                        isBatchSelected
+                                          ? '#38BDF8'
+                                          : isSelectedPlot
+                                          ? '#fbbf24'
+                                          : partialAssign?.ownerColorHex
+                                          ? '#F8FAFC'
+                                          : partialExcl.isExcluded
+                                          ? '#FB7185'
+                                          : statusMeta.strokeHex
+                                      }
+                                      strokeWidth={
+                                        isBatchSelected ? 2.7 : isSelectedPlot ? 2.4 : 1.1
+                                      }
                                       vectorEffect="non-scaling-stroke"
                                     >
-                                      <title>{`${q.id} (Plot #${q.no}) · ${statusMeta.labelSomali} · La filayey: ${hp?.expectedRule.label} · Gudaha: ${hp?.insideAreaSqM.toFixed(1)} m² · ${hp?.reasonSomali}`}</title>
+                                      <title>{`${q.id} (Jajab/Half #${q.no}) · ${
+                                        partialAssign?.ownerPersonName
+                                          ? `Dhaxale: ${partialAssign.ownerPersonName}`
+                                          : partialExcl.isExcluded
+                                          ? partialExcl.specialName || 'Laga Reebay'
+                                          : statusMeta.labelSomali
+                                      }`}</title>
                                     </polygon>
                                   ))
                                 ) : (
@@ -3623,8 +2208,16 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                                     points={mapGeometry.toPtsStr(q.rect)}
                                     fill={statusMeta.fillHex}
                                     fillOpacity={0.65}
-                                    stroke={isSelectedPlot ? '#fbbf24' : statusMeta.strokeHex}
-                                    strokeWidth={isSelectedPlot ? 2.2 : 0.95}
+                                    stroke={
+                                      isBatchSelected
+                                        ? '#38BDF8'
+                                        : isSelectedPlot
+                                        ? '#fbbf24'
+                                        : statusMeta.strokeHex
+                                    }
+                                    strokeWidth={
+                                      isBatchSelected ? 2.6 : isSelectedPlot ? 2.2 : 0.95
+                                    }
                                     vectorEffect="non-scaling-stroke"
                                   >
                                     <title>{`${q.id} · ${statusMeta.labelSomali}`}</title>
@@ -3754,7 +2347,11 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                           let strokeDash: string | undefined = undefined;
 
                           if (pExcl.isExcluded && mapColorMode !== 'half_plots') {
-                            fillStyle = 'url(#excludedPlotHatchPattern)';
+                            fillStyle =
+                              pExcl.colorHex ||
+                              pMeta.excludedColorHex ||
+                              subdivisionState.blockMetadata[b.id]?.excludedColorHex ||
+                              'url(#excludedPlotHatchPattern)';
                             fillOpacity = mapColorMode === 'excluded' ? 0.98 : 0.92;
                             strokeColor = '#fb7185';
                             strokeW = 1.3;
@@ -3785,7 +2382,8 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                             } else if (assign.ownerColorHex) {
                               fillStyle = assign.ownerColorHex;
                               fillOpacity = 0.86;
-                              strokeColor = '#030712';
+                              strokeColor = assign.isWithinDooxa90m ? '#DC2626' : '#030712';
+                              if (assign.isWithinDooxa90m) strokeW = 1.8;
                             } else if (assign.unassignedReason === 'withheld_jajab') {
                               fillStyle = '#475569';
                               fillOpacity = 0.72;
@@ -3809,7 +2407,11 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                             }
                           }
 
-                          if (isSelectedPlot) {
+                          if (isBatchSelected) {
+                            strokeColor = '#38BDF8';
+                            strokeW = 2.7;
+                            strokeDash = undefined;
+                          } else if (isSelectedPlot) {
                             strokeColor = '#fbbf24';
                             strokeW = 2.5;
                             strokeDash = undefined;
@@ -4188,22 +2790,32 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                 </svg>
               )}
 
-              {/* MOBILE SLIDE-UP BOTTOM SHEET + DESKTOP FLOATING PLOT INSPECTOR */}
+              {/* MOBILE SLIDE-UP BOTTOM SHEET (always bottom sheet in APK Mobile Mode) + DESKTOP FLOATING PLOT INSPECTOR */}
               {inspectedPlot && subdivisionResult && (
                 <>
                   {/* Mobile Backdrop */}
                   <div
-                    className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs md:hidden"
+                    className={`${
+                      isApkMobileMode ? '' : 'md:hidden '
+                    }fixed inset-0 z-40 bg-black/60 backdrop-blur-xs`}
                     onClick={() => setInspectedPlotId(null)}
                   />
 
                   <div
                     role="dialog"
                     aria-label={`Kormeerka Plot ${inspectedPlot.id}`}
-                    className="fixed inset-x-0 bottom-0 z-50 rounded-t-3xl md:rounded-2xl md:absolute md:inset-x-auto md:left-3 md:bottom-3 md:z-20 w-full md:w-[415px] max-h-[82vh] md:max-h-[88%] flex flex-col bg-[#0B1220]/98 backdrop-blur-md border-t md:border border-[#243449] shadow-2xl text-xs text-[#F8FAFC]"
+                    className={
+                      isApkMobileMode
+                        ? 'fixed inset-x-0 bottom-0 z-50 rounded-t-3xl w-full max-h-[82vh] pb-safe flex flex-col bg-[#0B1220]/98 backdrop-blur-md border-t border-[#243449] shadow-2xl text-xs text-[#F8FAFC]'
+                        : 'fixed inset-x-0 bottom-0 z-50 rounded-t-3xl md:rounded-2xl md:absolute md:inset-x-auto md:left-3 md:bottom-3 md:z-20 w-full md:w-[415px] max-h-[82vh] md:max-h-[88%] flex flex-col bg-[#0B1220]/98 backdrop-blur-md border-t md:border border-[#243449] shadow-2xl text-xs text-[#F8FAFC]'
+                    }
                   >
                     {/* Mobile Drag Handle */}
-                    <div className="w-10 h-1.5 bg-[#243449] rounded-full mx-auto mt-2.5 mb-1 shrink-0 md:hidden" />
+                    <div
+                      className={`${
+                        isApkMobileMode ? '' : 'md:hidden '
+                      }w-10 h-1.5 bg-[#243449] rounded-full mx-auto mt-2.5 mb-1 shrink-0`}
+                    />
 
                     {(() => {
                       const pMeta = getEffectivePlotMetadata(
@@ -4306,302 +2918,437 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                               </div>
                             )}
 
-                            {inspectedPlot.full &&
-                              (() => {
-                                const pExcl = getEffectivePlotExclusion(
-                                  inspectedPlot,
-                                  subdivisionState.plotMetadata,
-                                  subdivisionState.blockMetadata
-                                );
-                                const bExcl = getEffectiveBlockExclusion(
-                                  inspectedPlot.block,
-                                  subdivisionState.blockMetadata
-                                );
+                            {/* UNIFIED MANUAL EDIT CARD (Plot, Jajab Plot & Block) */}
+                            {(() => {
+                              const pExcl = getEffectivePlotExclusion(
+                                inspectedPlot,
+                                subdivisionState.plotMetadata,
+                                subdivisionState.blockMetadata
+                              );
+                              const bExcl = getEffectiveBlockExclusion(
+                                inspectedPlot.block,
+                                subdivisionState.blockMetadata
+                              );
+                              const activeBlock = subdivisionResult.blocks.find(
+                                (b) => b.id === inspectedPlot.block
+                              );
+                              const blockPlotIds = activeBlock?.plots.map((pl) => pl.id) || [
+                                inspectedPlot.id,
+                              ];
+                              const activeTargetIsExcluded =
+                                inspectorScope === 'block' ? bExcl.isExcluded : pExcl.isExcluded;
 
-                                return (
-                                  <>
-                                    {/* Division Inclusion / Exclusion + Special Name Presets */}
-                                    <div
-                                      className={`rounded-xl border p-3 space-y-2.5 text-[11px] ${
-                                        pExcl.isExcluded
-                                          ? 'bg-rose-950/35 border-rose-500/45'
-                                          : 'bg-[#0F1B2D] border-[#243449]'
+                              return (
+                                <div className="space-y-3 text-xs">
+                                  {/* Scope Toggle: Plot Keliya vs Block oo Dhan */}
+                                  <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#030712] border border-[#243449] font-bold text-[11px]">
+                                    <button
+                                      type="button"
+                                      onClick={() => setInspectorScope('plot')}
+                                      className={`min-h-[34px] rounded-lg px-2 cursor-pointer ${
+                                        inspectorScope === 'plot'
+                                          ? 'bg-[#10B981] text-[#030712] font-extrabold'
+                                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
                                       }`}
                                     >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="font-extrabold text-[#F8FAFC] flex items-center gap-1.5">
-                                          {pExcl.isExcluded ? (
-                                            <Ban className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                                          ) : (
-                                            <CheckCircle2 className="w-3.5 h-3.5 text-[#10B981] shrink-0" />
-                                          )}
-                                          <span>
-                                            {pExcl.isExcluded
-                                              ? pExcl.scope === 'block'
-                                                ? `Block ${inspectedPlot.block} Waa Laga Reebay`
-                                                : 'Plot Laga Reebay Dhaxalka'
-                                              : 'Wuxuu Ku Jiraa Qaybinta Dhaxalka'}
-                                          </span>
-                                        </span>
-                                      </div>
+                                      {inspectedPlot.full
+                                        ? `Plot (${inspectedPlot.id})`
+                                        : `Jajab (${inspectedPlot.id})`}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setInspectorScope('block')}
+                                      className={`min-h-[34px] rounded-lg px-2 cursor-pointer ${
+                                        inspectorScope === 'block'
+                                          ? 'bg-[#10B981] text-[#030712] font-extrabold'
+                                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                                      }`}
+                                    >
+                                      Block oo Dhan ({inspectedPlot.block} · {blockPlotIds.length})
+                                    </button>
+                                  </div>
 
-                                      <div className="flex flex-wrap gap-1.5">
-                                        {!pExcl.isExcluded ? (
-                                          <>
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                setPlotExclusionState(
-                                                  inspectedPlot.id,
-                                                  inspectedPlot.block,
-                                                  true,
-                                                  pMeta.excludedSpecialName ||
-                                                    pMeta.parcelNumberOrName ||
-                                                    exclusionBrushSpecialName ||
-                                                    'Plot Laga Reebay'
-                                                )
-                                              }
-                                              className="min-h-[38px] px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold whitespace-nowrap cursor-pointer"
-                                            >
-                                              Ka Reeb Plot-kan
-                                            </button>
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                setBlockExclusionState(
-                                                  inspectedPlot.block,
-                                                  true,
-                                                  subdivisionState.blockMetadata[inspectedPlot.block]
-                                                    ?.excludedSpecialName ||
-                                                    exclusionBrushSpecialName ||
-                                                    'Block Laga Reebay'
-                                                )
-                                              }
-                                              className="min-h-[38px] px-3 py-1.5 rounded-lg border border-rose-500/45 bg-[#0B1220] hover:bg-rose-950/40 text-rose-200 font-bold whitespace-nowrap cursor-pointer"
-                                            >
-                                              Ka Reeb Block {inspectedPlot.block}
-                                            </button>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                setPlotExclusionState(
-                                                  inspectedPlot.id,
-                                                  inspectedPlot.block,
-                                                  false
-                                                )
-                                              }
-                                              className="min-h-[38px] px-3 py-1.5 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#030712] font-extrabold whitespace-nowrap cursor-pointer"
-                                            >
-                                              Dib ugu Dar Plot-kan
-                                            </button>
-                                            {bExcl.isExcluded && (
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  setBlockExclusionState(inspectedPlot.block, false)
-                                                }
-                                                className="min-h-[38px] px-3 py-1.5 rounded-lg border border-[#10B981]/50 bg-[#0B1220] text-[#10B981] font-bold whitespace-nowrap cursor-pointer"
-                                              >
-                                                Dib ugu Dar Block {inspectedPlot.block}
-                                              </button>
-                                            )}
-                                          </>
+                                  {/* Quick Stats Row */}
+                                  <div className="grid grid-cols-2 gap-2 bg-[#0F1B2D] border border-[#243449] rounded-xl p-2.5 text-[11px] tabular-nums">
+                                    <div>
+                                      <span className="text-[#94A3B8] block">Bedka / Qiime:</span>
+                                      <strong className="text-[#F8FAFC]">
+                                        {calcArea} m²
+                                        {pMeta.verifiedPrice != null
+                                          ? ` · ${pMeta.verifiedPrice.toLocaleString()} ${currency}`
+                                          : ''}
+                                      </strong>
+                                    </div>
+                                    <div>
+                                      <span className="text-[#94A3B8] block">Xaaladda Dooxa:</span>
+                                      <strong
+                                        className={
+                                          assign?.isWithinDooxa90m
+                                            ? 'text-red-400'
+                                            : 'text-[#CBD5E1]'
+                                        }
+                                      >
+                                        {assign?.isWithinDooxa90m
+                                          ? '≤90m Dooxa (H3 · Giraan Cas)'
+                                          : WADI_STATUS_METADATA[pMeta.wadiStatus].shortSomali}
+                                      </strong>
+                                    </div>
+                                  </div>
+
+                                  {/* Two Clean Modes: Pick Heir vs Custom Non-Inheritance Name */}
+                                  <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#030712] border border-[#243449] text-[11px] font-bold">
+                                    <button
+                                      type="button"
+                                      onClick={() => setInspectorAssignMode('heir')}
+                                      className={`min-h-[34px] rounded-lg px-2 cursor-pointer ${
+                                        inspectorAssignMode === 'heir'
+                                          ? 'bg-[#F8FAFC] text-[#030712] font-extrabold'
+                                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                                      }`}
+                                    >
+                                      1. Liiska Dhaxlayaasha
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setInspectorAssignMode('custom_name')}
+                                      className={`min-h-[34px] rounded-lg px-2 cursor-pointer ${
+                                        inspectorAssignMode === 'custom_name'
+                                          ? 'bg-rose-600 text-white font-extrabold'
+                                          : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                                      }`}
+                                    >
+                                      2. Magac Gaar ah (Danguud)
+                                    </button>
+                                  </div>
+
+                                  {inspectorAssignMode === 'heir' ? (
+                                    <div className="space-y-2 rounded-xl border border-[#243449] bg-[#0F1B2D] p-3">
+                                      <div className="flex items-center justify-between gap-2 text-[11px]">
+                                        <span className="font-bold text-[#F8FAFC]">
+                                          {assign?.ownerPersonName
+                                            ? `Hadda: ${assign.ownerPersonName}`
+                                            : activeTargetIsExcluded
+                                            ? `Laga reebay: ${pExcl.specialName || 'Gaar ah'}`
+                                            : 'Waa bannaan yahay / Jajab'}
+                                        </span>
+                                        {subdivisionState.manualPlotHeirOverrides[
+                                          inspectedPlot.id
+                                        ] && (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              applyManualHeirToPlotIds(
+                                                inspectorScope === 'block'
+                                                  ? blockPlotIds
+                                                  : [inspectedPlot.id],
+                                                '__auto__',
+                                                inspectorScope === 'block'
+                                                  ? `Block ${inspectedPlot.block}`
+                                                  : `Plot ${inspectedPlot.id}`
+                                              )
+                                            }
+                                            className="text-[10.5px] font-bold text-amber-300 hover:underline cursor-pointer"
+                                          >
+                                            Celi Otomaatig
+                                          </button>
                                         )}
                                       </div>
 
-                                      {pExcl.isExcluded && (
-                                        <div className="space-y-1.5">
-                                          <label className="block text-[10px] font-bold text-rose-200">
-                                            Magaca Gaarka ah (
-                                            {pExcl.scope === 'block'
-                                              ? `Block ${inspectedPlot.block}`
-                                              : inspectedPlot.id}
-                                            ):
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={
-                                              pExcl.scope === 'block'
-                                                ? subdivisionState.blockMetadata[
-                                                    inspectedPlot.block
-                                                  ]?.excludedSpecialName ?? bExcl.specialName
-                                                : pMeta.excludedSpecialName ?? pExcl.specialName
-                                            }
-                                            onChange={(e) => {
-                                              const val = e.target.value;
-                                              if (pExcl.scope === 'block') {
+                                      {fairAllocation && fairAllocation.heirAllocations.length > 0 ? (
+                                        <div className="max-h-48 overflow-y-auto space-y-1 pr-0.5">
+                                          {fairAllocation.heirAllocations.map((h) => {
+                                            const isOwner =
+                                              subdivisionState.manualPlotHeirOverrides[
+                                                inspectedPlot.id
+                                              ] === h.heirKey || assign?.ownerHeirKey === h.heirKey;
+                                            const qStatus = checkHeirPlotQuotaStatus(
+                                              h,
+                                              inspectorScope === 'block'
+                                                ? blockPlotIds.length
+                                                : inspectedPlot.full
+                                                ? 1
+                                                : 0.5
+                                            );
+                                            return (
+                                              <button
+                                                key={h.heirKey}
+                                                type="button"
+                                                onClick={() => {
+                                                  const targetIds =
+                                                    inspectorScope === 'block'
+                                                      ? blockPlotIds
+                                                      : [inspectedPlot.id];
+                                                  const addUnits =
+                                                    inspectorScope === 'block'
+                                                      ? blockPlotIds.length
+                                                      : inspectedPlot.full
+                                                      ? 1
+                                                      : 0.5;
+                                                  const desc =
+                                                    inspectorScope === 'block'
+                                                      ? `Block ${inspectedPlot.block} (${blockPlotIds.length} plot)`
+                                                      : `${inspectedPlot.full ? 'Plot' : 'Jajab'} ${inspectedPlot.id}`;
+                                                  requestHeirAssignmentWithQuotaGuard(
+                                                    h.heirKey,
+                                                    addUnits,
+                                                    desc,
+                                                    () =>
+                                                      applyManualHeirToPlotIds(
+                                                        targetIds,
+                                                        h.heirKey,
+                                                        desc
+                                                      )
+                                                  );
+                                                }}
+                                                className={`w-full flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors cursor-pointer ${
+                                                  isOwner
+                                                    ? 'border-[#10B981] bg-[#10B981]/15'
+                                                    : 'border-[#243449] bg-[#0B1220] hover:border-[#10B981]/60'
+                                                }`}
+                                              >
+                                                <span className="flex items-center gap-2 min-w-0">
+                                                  <span
+                                                    className="w-3 h-3 rounded-xs shrink-0 border border-white/25"
+                                                    style={{ backgroundColor: h.colorHex }}
+                                                  />
+                                                  <span className="truncate font-bold text-[#F8FAFC] text-[11.5px]">
+                                                    {h.personName}
+                                                  </span>
+                                                </span>
+                                                <span
+                                                  className={`shrink-0 font-mono-numbers tabular-nums text-[10.5px] font-bold ${
+                                                    qStatus.isAlreadyFull
+                                                      ? 'text-amber-300'
+                                                      : 'text-[#10B981]'
+                                                  }`}
+                                                >
+                                                  {formatPlotQtyCompact(
+                                                    h.effectiveTotalPlotsReceived
+                                                  )}
+                                                  /{qStatus.roundedTarget}
+                                                </span>
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : (
+                                        <p className="text-[11px] text-[#94A3B8]">
+                                          Marka hore xisaabi dhaxlayaasha bogga{' '}
+                                          <strong className="text-[#F8FAFC]">
+                                            Dhaxal Xisaabinta
+                                          </strong>
+                                          .
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-2.5 rounded-xl border border-rose-500/40 bg-rose-950/25 p-3">
+                                      <div>
+                                        <label className="block text-[10.5px] font-bold text-rose-200 mb-1">
+                                          Magac Gaar ah (Dhul aan ku jirin dhaxalka):
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={customNameDraft}
+                                          onChange={(e) => {
+                                            const v = e.target.value;
+                                            setCustomNameDraft(v);
+                                            if (activeTargetIsExcluded) {
+                                              if (inspectorScope === 'block') {
                                                 setBlockExclusionState(
                                                   inspectedPlot.block,
                                                   true,
-                                                  val
+                                                  v,
+                                                  customColorDraft
                                                 );
                                               } else {
                                                 setPlotExclusionState(
                                                   inspectedPlot.id,
                                                   inspectedPlot.block,
                                                   true,
-                                                  val
+                                                  v,
+                                                  customColorDraft
+                                                );
+                                              }
+                                            }
+                                          }}
+                                          placeholder="Qor magac gaar ah (ama ka tag banaan)..."
+                                          className="w-full min-h-[36px] bg-[#0B1220] border border-rose-500/45 rounded-lg px-2.5 py-1 text-xs font-bold text-[#F8FAFC] placeholder:text-[#64748B] focus:outline-none focus:border-rose-400"
+                                        />
+                                      </div>
+
+                                      <div className="flex flex-wrap items-center justify-between gap-2">
+                                        {SPECIAL_EXCLUSION_PRESETS.map((preset) => (
+                                          <button
+                                            key={preset}
+                                            type="button"
+                                            onClick={() => {
+                                              setCustomNameDraft(preset);
+                                              if (inspectorScope === 'block') {
+                                                setBlockExclusionState(
+                                                  inspectedPlot.block,
+                                                  true,
+                                                  preset,
+                                                  customColorDraft
+                                                );
+                                              } else {
+                                                setPlotExclusionState(
+                                                  inspectedPlot.id,
+                                                  inspectedPlot.block,
+                                                  true,
+                                                  preset,
+                                                  customColorDraft
                                                 );
                                               }
                                             }}
-                                            placeholder="Tusaale: Masjidka, Ceelka Biyaha, Waqf..."
-                                            className="w-full min-h-[38px] bg-[#0B1220] border border-rose-500/45 rounded-lg px-2.5 py-1 text-xs font-bold text-[#F8FAFC] focus:outline-none focus:border-rose-400"
-                                          />
-                                          <div className="flex flex-wrap gap-1">
-                                            {SPECIAL_EXCLUSION_PRESETS.map((preset) => (
-                                              <button
-                                                key={preset}
-                                                type="button"
-                                                onClick={() => {
-                                                  if (pExcl.scope === 'block') {
+                                            className={`px-2.5 py-1 rounded-md border text-[11px] font-bold cursor-pointer ${
+                                              customNameDraft === preset
+                                                ? 'bg-rose-600 text-white border-rose-500'
+                                                : 'bg-[#0B1220] text-[#F8FAFC] border-[#243449] hover:border-rose-400'
+                                            }`}
+                                          >
+                                            {preset}
+                                          </button>
+                                        ))}
+
+                                        <div className="flex items-center gap-1">
+                                          {CUSTOM_EXCLUDED_COLOR_CHOICES.slice(0, 6).map((cHex) => (
+                                            <button
+                                              key={cHex}
+                                              type="button"
+                                              onClick={() => {
+                                                setCustomColorDraft(cHex);
+                                                if (activeTargetIsExcluded) {
+                                                  if (inspectorScope === 'block') {
                                                     setBlockExclusionState(
                                                       inspectedPlot.block,
                                                       true,
-                                                      preset
+                                                      customNameDraft,
+                                                      cHex
                                                     );
                                                   } else {
                                                     setPlotExclusionState(
                                                       inspectedPlot.id,
                                                       inspectedPlot.block,
                                                       true,
-                                                      preset
+                                                      customNameDraft,
+                                                      cHex
                                                     );
                                                   }
-                                                }}
-                                                className="px-2 py-1 rounded bg-[#0B1220] border border-[#243449] hover:border-rose-400 text-[10px] font-semibold text-[#CBD5E1] cursor-pointer"
-                                              >
-                                                {preset}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2 bg-[#0F1B2D] border border-[#243449] rounded-xl p-2.5 text-[11px]">
-                                      <div>
-                                        <span className="text-[#94A3B8] block">Bedka (GIS / Sugan):</span>
-                                        <strong className="font-mono-numbers tabular-nums text-[#F8FAFC]">
-                                          {calcArea} m²
-                                          {pMeta.verifiedAreaSqM != null
-                                            ? ` / ${pMeta.verifiedAreaSqM} m²`
-                                            : ''}
-                                        </strong>
-                                      </div>
-                                      <div>
-                                        <span className="text-[#94A3B8] block">Qiimaha Sugan:</span>
-                                        <strong className="font-mono-numbers tabular-nums text-[#F8FAFC]">
-                                          {pMeta.verifiedPrice != null
-                                            ? `${pMeta.verifiedPrice.toLocaleString()} ${currency}`
-                                            : 'Lama xaqiijin'}
-                                        </strong>
-                                      </div>
-                                      <div>
-                                        <span className="text-[#94A3B8] block">Xaaladda Dooxa:</span>
-                                        <strong className="text-[#CBD5E1]">
-                                          {WADI_STATUS_METADATA[pMeta.wadiStatus].shortSomali}
-                                        </strong>
-                                      </div>
-                                      <div>
-                                        <span className="text-[#94A3B8] block">Tayada Goobta:</span>
-                                        <strong className="text-[#CBD5E1]">
-                                          {SITE_QUALITY_METADATA[pMeta.siteQuality].labelSomali}
-                                        </strong>
-                                      </div>
-                                    </div>
-
-                                    {assign && !pExcl.isExcluded && (
-                                      <div className="text-[11px] text-[#CBD5E1] bg-[#10B981]/10 border border-[#10B981]/30 rounded-xl px-3 py-2">
-                                        <span className="text-[#94A3B8]">Xaaladda Hadda: </span>
-                                        <strong className="text-[#10B981]">
-                                          {assign.assignmentType === 'shared_fractional'
-                                            ? `Plot Wadaag ah (${assign.coOwners
-                                                ?.map(
-                                                  (c) =>
-                                                    `${c.personName} ${c.sharePercentageOfPlot}%`
-                                                )
-                                                .join(' + ')})`
-                                            : assign.ownerPersonName
-                                            ? `${assign.ownerPersonName} (${
-                                                assign.assignmentType === 'manual_override'
-                                                  ? 'Gacan lagu xidhay'
-                                                  : 'Soo-jeedin'
-                                              })`
-                                            : 'Waa Bannaan Yahay'}
-                                        </strong>
-                                      </div>
-                                    )}
-
-                                    {!pExcl.isExcluded &&
-                                      fairAllocation &&
-                                      fairAllocation.heirAllocations.length > 0 && (
-                                        <div>
-                                          <label className="block text-[10px] font-bold uppercase text-[#94A3B8] mb-1">
-                                            U Qoondee Dhaxal-Suge (Qoondayn Gacanta ah)
-                                          </label>
-                                          <select
-                                            value={
-                                              subdivisionState.manualPlotHeirOverrides[
-                                                inspectedPlot.id
-                                              ] || '__auto__'
-                                            }
-                                            onChange={(e) => {
-                                              const val = e.target.value;
-                                              onUpdateSubdivisionState((prev) => {
-                                                const next = { ...prev.manualPlotHeirOverrides };
-                                                if (val === '__auto__') {
-                                                  delete next[inspectedPlot.id];
-                                                } else {
-                                                  next[inspectedPlot.id] = val;
                                                 }
+                                              }}
+                                              className={`w-5 h-5 rounded border cursor-pointer ${
+                                                customColorDraft === cHex
+                                                  ? 'border-white scale-110'
+                                                  : 'border-white/25 opacity-80'
+                                              }`}
+                                              style={{ backgroundColor: cHex }}
+                                              title={`Midabka: ${cHex}`}
+                                            />
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex flex-wrap gap-1.5 pt-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (inspectorScope === 'block') {
+                                              setBlockExclusionState(
+                                                inspectedPlot.block,
+                                                true,
+                                                customNameDraft.trim(),
+                                                customColorDraft
+                                              );
+                                            } else {
+                                              setPlotExclusionState(
+                                                inspectedPlot.id,
+                                                inspectedPlot.block,
+                                                true,
+                                                customNameDraft.trim(),
+                                                customColorDraft
+                                              );
+                                            }
+                                          }}
+                                          className="flex-1 min-h-[36px] px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer"
+                                        >
+                                          Ku Xidh (Ka Reeb Dhaxalka)
+                                        </button>
+                                        {activeTargetIsExcluded && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (inspectorScope === 'block') {
+                                                setBlockExclusionState(inspectedPlot.block, false);
+                                              } else {
+                                                setPlotExclusionState(
+                                                  inspectedPlot.id,
+                                                  inspectedPlot.block,
+                                                  false
+                                                );
+                                              }
+                                            }}
+                                            className="min-h-[36px] px-3 py-1.5 rounded-lg bg-[#10B981] hover:bg-[#059669] text-[#030712] font-extrabold cursor-pointer"
+                                          >
+                                            Dib ugu Dar
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Quick Tier Override Buttons */}
+                                  <div className="flex items-center justify-between gap-2 pt-1">
+                                    <span className="text-[11px] font-semibold text-[#94A3B8]">
+                                      Beddel Heerka:
+                                    </span>
+                                    <div className="inline-flex gap-1">
+                                      {(
+                                        [
+                                          'tier_1_prime',
+                                          'tier_2_standard',
+                                          'tier_3_basic',
+                                        ] as AssetQualityTier[]
+                                      ).map((tk, idx) => (
+                                        <button
+                                          key={tk}
+                                          type="button"
+                                          onClick={() => {
+                                            onUpdateSubdivisionState((prev) => {
+                                              if (inspectorScope === 'block') {
                                                 return {
                                                   ...prev,
-                                                  approvalStatus:
-                                                    prev.approvalStatus === 'approved'
-                                                      ? 'under_review'
-                                                      : prev.approvalStatus,
-                                                  manualPlotHeirOverrides: next,
+                                                  blockTiers: {
+                                                    ...prev.blockTiers,
+                                                    [inspectedPlot.block]: tk,
+                                                  },
                                                 };
-                                              });
-                                            }}
-                                            className="w-full min-h-[42px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-semibold text-[#F8FAFC] focus:outline-none focus:border-[#10B981]"
-                                          >
-                                            <option value="__auto__">
-                                              Soo-jeedinta Otomaatigga ah (Cadaaladda Zone &amp; Heer)
-                                            </option>
-                                            {fairAllocation.heirAllocations.map((h) => (
-                                              <option key={h.heirKey} value={h.heirKey}>
-                                                {h.personName} ({h.roleTitleSomali} · hadda:{' '}
-                                                {formatPlotQtyCompact(
-                                                  h.effectiveTotalPlotsReceived
-                                                )}
-                                                /{formatPlotQtyCompact(h.exactTotalPlotsQuota)} plot)
-                                              </option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                      )}
-                                  </>
-                                );
-                              })()}
+                                              }
+                                              return {
+                                                ...prev,
+                                                plotTierOverrides: {
+                                                  ...prev.plotTierOverrides,
+                                                  [inspectedPlot.id]: tk,
+                                                },
+                                              };
+                                            });
+                                          }}
+                                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold cursor-pointer ${
+                                            pTier === tk
+                                              ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
+                                              : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449]'
+                                          }`}
+                                        >
+                                          H{idx + 1}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
-                            <div className="flex items-center justify-between pt-2 border-t border-[#243449]">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setBottomTab(
-                                    inspectedPlot.full ? 'plot_metadata' : 'half_plots_validation'
-                                  );
-                                }}
-                                className="min-h-[38px] text-xs font-bold text-[#10B981] hover:underline cursor-pointer"
-                              >
-                                {inspectedPlot.full
-                                  ? 'Buuxi Xogta & Dooxa Plot-kan →'
-                                  : 'Arag Jadwalka Half Plots →'}
-                              </button>
+                            <div className="flex items-center justify-end pt-2 border-t border-[#243449]">
                               <span className="text-[10px] font-mono-numbers tabular-nums text-[#94A3B8]">
                                 {inspectedPlot.centerLonLat[1].toFixed(5)},{' '}
                                 {inspectedPlot.centerLonLat[0].toFixed(5)}
@@ -4616,113 +3363,986 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
               )}
             </div>
 
-            {/* Map Legend */}
-            <div className="px-4 py-2.5 border-t border-[#243449] bg-[#0B1220] flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#94A3B8]">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3.5 h-2.5 border border-dashed border-rose-500 inline-block" />
-                <span>Xuduudka Beerta</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 font-semibold text-rose-300">
-                <span className="w-3.5 h-3 rounded-xs border border-dashed border-rose-400 bg-rose-950 inline-block" />
-                <span>Laga Reebay Dhaxalka (Magac Gaar ah)</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="w-3 h-3 rounded-xs inline-block"
-                  style={{ backgroundColor: HALF_PLOT_STATUS_METADATA.full_inside.fillHex }}
-                />
-                <span>Gudaha oo dhan (La Qaybinayo)</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-xs border border-emerald-400 bg-emerald-800 inline-block" />
-                <span>Half Plot sax ah (12×18m / 9×24m)</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="w-3 h-3 rounded-xs inline-block"
-                  style={{ backgroundColor: HALF_PLOT_STATUS_METADATA.half_plot_invalid.fillHex }}
-                />
-                <span>Ma buuxin Half Plot</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="w-3 h-3 rounded-xs inline-block"
-                  style={{ backgroundColor: HALF_PLOT_STATUS_METADATA.needs_review.fillHex }}
-                />
-                <span>Dib-u-eegis</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-xs border border-dashed border-slate-500 bg-slate-800 inline-block" />
-                <span>Dibadda oo dhan</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded-xs border border-sky-400 bg-sky-900/60 inline-block" />
-                <span>Doox (Wadi)</span>
-              </span>
+            {/* CONTEXTUAL STUDIO WORKBENCH SHEET (Slides open right above 4-Step Dock) */}
+            {activeStudioSheet && (
+              <div className="border-t border-[#243449] bg-[#0B1220] p-3.5 sm:p-4 max-h-[46vh] overflow-y-auto space-y-3">
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#243449]">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-[#10B981]">
+                    {activeStudioSheet === 'shabakad'
+                      ? '1. Shabakadda & Jiheynta'
+                      : activeStudioSheet === 'heer_aag'
+                      ? '2. Heerarka (≤90m) & Aagga (A–D)'
+                      : activeStudioSheet === 'qaybi'
+                      ? '3. Qaybi Gacanta (Dhaxlayaal · Jajab · Danguud)'
+                      : '4. Qaybinta & Simple PDF'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveStudioSheet(null)}
+                    className="min-h-[32px] min-w-[32px] rounded-lg bg-[#0F1B2D] border border-[#243449] flex items-center justify-center text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer"
+                    aria-label="Xir sanduuqa qalabka"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* SHEET 1: SHABAKAD */}
+                {activeStudioSheet === 'shabakad' && (
+                  <div className="space-y-3 text-xs">
+                    {!subdivisionState.prebuiltSubdivision &&
+                      subdivisionState.boundaryItems.length > 0 && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#94A3B8] mb-1">
+                              Xuduudka Beerta
+                            </label>
+                            <select
+                              value={subdivisionState.selectedBoundaryIndex}
+                              onChange={(e) => {
+                                const idx = Number(e.target.value);
+                                if (onSelectBoundaryIndex) {
+                                  onSelectBoundaryIndex(idx);
+                                } else {
+                                  onUpdateSubdivisionState((prev) =>
+                                    applyHtmlBoundarySelectionChange(prev, idx)
+                                  );
+                                }
+                              }}
+                              className="w-full min-h-[40px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-medium text-[#F8FAFC]"
+                            >
+                              {subdivisionState.boundaryItems.map((it, i) => (
+                                <option key={i} value={i}>
+                                  {it.name} ({it.coords.length} dhibcood)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-[#94A3B8] mb-1">
+                              Block Tusaale (Jihada Shabakadda)
+                            </label>
+                            <select
+                              value={subdivisionState.selectedSampleIndex}
+                              onChange={(e) => {
+                                const idx = Number(e.target.value);
+                                if (onSelectSampleIndex) {
+                                  onSelectSampleIndex(idx);
+                                } else {
+                                  onUpdateSubdivisionState((prev) => ({
+                                    ...prev,
+                                    prebuiltSubdivision: null,
+                                    selectedSampleIndex: idx,
+                                  }));
+                                }
+                              }}
+                              className="w-full min-h-[40px] bg-[#0F1B2D] border border-[#243449] rounded-xl px-2.5 py-1.5 text-xs font-medium text-[#F8FAFC]"
+                            >
+                              {subdivisionState.sampleCandidates.length === 0 ? (
+                                <option value={-1}>Otomaatig (xuduudka beerta)</option>
+                              ) : (
+                                subdivisionState.sampleCandidates.map((c, i) => (
+                                  <option key={i} value={i}>
+                                    {c.label}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                    {(() => {
+                      const sampleAlign =
+                        subdivisionResult?.sampleBlockAlignment ||
+                        subdivisionState.prebuiltSubdivision?.sampleBlockAlignment ||
+                        subdivisionState.nashqadSummary?.sampleBlockAlignment ||
+                        null;
+                      if (!sampleAlign) return null;
+                      return (
+                        <SampleBlockAxisControlCard
+                          alignment={sampleAlign}
+                          onAlign={(opts) => {
+                            onUpdateSubdivisionState((prev) => {
+                              const res = alignAllBlocksToSampleBlock(prev, opts);
+                              return res.ok ? res.nextState : prev;
+                            });
+                          }}
+                        />
+                      );
+                    })()}
+
+                    {!subdivisionState.prebuiltSubdivision && (
+                      <div className="space-y-2.5 pt-2 border-t border-[#243449]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-[#CBD5E1]">
+                            Halbeegga Rasmiga ah
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onUpdateSubdivisionState((prev) => ({
+                                ...prev,
+                                prebuiltSubdivision: null,
+                                approvalStatus:
+                                  prev.approvalStatus === 'approved'
+                                    ? 'under_review'
+                                    : prev.approvalStatus,
+                                params: {
+                                  ...prev.params,
+                                  L: 90,
+                                  W: 48,
+                                  pw: 18,
+                                  pd: 24,
+                                  rU: 15,
+                                  rV: 15,
+                                  linkRoads: true,
+                                  rot: 0,
+                                  su: 0,
+                                  sv: 0,
+                                },
+                              }));
+                              onNotify(
+                                'Halbeegga 48×90m & Waddo 15m',
+                                'Block kasta waxaa lagu fadhiisiyey 48×90m · Waddo 15m · Plot 18×24m.'
+                              );
+                            }}
+                            className="min-h-[34px] px-3 py-1 rounded-xl bg-[#10B981]/15 border border-[#10B981]/50 text-xs font-extrabold text-[#10B981] cursor-pointer tabular-nums"
+                          >
+                            Ku Celi 48×90m · 15m
+                          </button>
+                        </div>
+
+                        <details>
+                          <summary className="text-[11px] font-bold text-[#94A3B8] hover:text-[#F8FAFC] cursor-pointer select-none">
+                            Tifatir Sare (Cabbirrada Mitir &amp; Jiheynta)
+                          </summary>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                Block Dherer (m)
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                step={0.5}
+                                value={subdivisionState.params.L}
+                                onChange={(e) => updateParam('L', parseFloat(e.target.value) || 0)}
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                Block Ballac (m)
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                step={0.5}
+                                value={subdivisionState.params.W}
+                                onChange={(e) => updateParam('W', parseFloat(e.target.value) || 0)}
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                Plot Ballac (m)
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                step={0.5}
+                                value={subdivisionState.params.pw}
+                                onChange={(e) => updateParam('pw', parseFloat(e.target.value) || 0)}
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                Plot Dherer (m)
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                step={0.5}
+                                value={subdivisionState.params.pd}
+                                onChange={(e) => updateParam('pd', parseFloat(e.target.value) || 0)}
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                Waddo U (m)
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.5}
+                                value={subdivisionState.params.rU}
+                                onChange={(e) =>
+                                  updateParam('rU', Math.max(0, parseFloat(e.target.value) || 0))
+                                }
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                Waddo V (m)
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={0.5}
+                                value={subdivisionState.params.rV}
+                                onChange={(e) =>
+                                  updateParam('rV', Math.max(0, parseFloat(e.target.value) || 0))
+                                }
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                Jiheyn (°)
+                              </label>
+                              <input
+                                type="number"
+                                step={0.5}
+                                value={subdivisionState.params.rot}
+                                onChange={(e) =>
+                                  updateParam('rot', parseFloat(e.target.value) || 0)
+                                }
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                U-dhaaf U (m)
+                              </label>
+                              <input
+                                type="number"
+                                step={0.5}
+                                value={subdivisionState.params.su}
+                                onChange={(e) => updateParam('su', parseFloat(e.target.value) || 0)}
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-[#94A3B8] mb-0.5">
+                                U-dhaaf V (m)
+                              </label>
+                              <input
+                                type="number"
+                                step={0.5}
+                                value={subdivisionState.params.sv}
+                                onChange={(e) => updateParam('sv', parseFloat(e.target.value) || 0)}
+                                className="w-full min-h-[36px] bg-[#0F1B2D] border border-[#243449] rounded-lg px-2 py-1 text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                              />
+                            </div>
+                          </div>
+                        </details>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SHEET 2: HEER & AAG */}
+                {activeStudioSheet === 'heer_aag' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#030712] border border-[#243449] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTierEvalMode('automatic');
+                          if (interactionTool === 'mark_tier') setInteractionTool('inspect');
+                        }}
+                        className={`min-h-[34px] rounded-lg cursor-pointer ${
+                          tierEvalMode === 'automatic'
+                            ? 'bg-[#10B981] text-[#030712] font-extrabold'
+                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                        }`}
+                      >
+                        1. Auto DEM + ≤90m
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTierEvalMode('manual');
+                          setInteractionTool('mark_tier');
+                          setMapColorMode('tiers');
+                        }}
+                        className={`min-h-[34px] rounded-lg cursor-pointer ${
+                          tierEvalMode === 'manual'
+                            ? 'bg-[#10B981] text-[#030712] font-extrabold'
+                            : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                        }`}
+                      >
+                        2. Rinjiyeyn Gacan
+                      </button>
+                    </div>
+
+                    {tierEvalMode === 'automatic' ? (
+                      <button
+                        type="button"
+                        disabled={!subdivisionResult || isRunningAutoDem}
+                        onClick={() => void handleRunCadAutomaticDemTiers()}
+                        className="w-full min-h-[42px] rounded-xl bg-[#10B981] hover:bg-[#059669] disabled:opacity-45 text-[#030712] px-3 py-2 text-xs font-extrabold inline-flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {isRunningAutoDem ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                            <span>Waa la xisaabinayaa DEM &amp; Dooxa ≤90m...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Mountain className="w-4 h-4 shrink-0" />
+                            <span>Dhali Heerarka (DEM + Waddo + ≤90m Dooxa)</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#030712] border border-[#243449] font-bold text-[11px]">
+                          {(
+                            [
+                              { id: 'plot', label: 'Plot' },
+                              { id: 'block', label: 'Block' },
+                              { id: 'freehand', label: 'Sawir Gacan' },
+                            ] as const
+                          ).map((sc) => (
+                            <button
+                              key={sc.id}
+                              type="button"
+                              onClick={() => {
+                                setTierBrushScope(sc.id);
+                                setInteractionTool('mark_tier');
+                                setMapColorMode('tiers');
+                              }}
+                              className={`min-h-[32px] rounded-lg cursor-pointer ${
+                                tierBrushScope === sc.id && interactionTool === 'mark_tier'
+                                  ? 'bg-[#F8FAFC] text-[#030712]'
+                                  : 'text-[#94A3B8]'
+                              }`}
+                            >
+                              {sc.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Compact 3-Tier Cards (Tap to paint + unit price) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {(
+                        ['tier_1_prime', 'tier_2_standard', 'tier_3_basic'] as AssetQualityTier[]
+                      ).map((tierKey) => {
+                        const meta = TIER_METADATA[tierKey];
+                        const count = fairAllocation?.tierCounts[tierKey] ?? 0;
+                        const active =
+                          interactionTool === 'mark_tier' && activeTierBrush === tierKey;
+                        return (
+                          <div
+                            key={tierKey}
+                            className={`rounded-xl border p-2.5 flex items-center justify-between gap-2 ${
+                              active
+                                ? 'border-[#10B981] bg-[#10B981]/15'
+                                : 'border-[#243449] bg-[#0F1B2D]'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTierEvalMode('manual');
+                                setActiveTierBrush(tierKey);
+                                setInteractionTool('mark_tier');
+                                setMapColorMode('tiers');
+                              }}
+                              className="flex items-center gap-2 min-w-0 text-left cursor-pointer"
+                            >
+                              <span
+                                className="w-3 h-3 rounded-xs shrink-0"
+                                style={{ backgroundColor: meta.fillHex }}
+                              />
+                              <div className="min-w-0">
+                                <div className="font-extrabold text-[#F8FAFC]">{meta.code}</div>
+                                <div className="text-[10px] text-[#10B981] tabular-nums">
+                                  {count} Plot
+                                </div>
+                              </div>
+                            </button>
+                            <input
+                              type="number"
+                              min={0}
+                              step={100}
+                              value={subdivisionState.tierUnitPrices[tierKey] || ''}
+                              placeholder={currency}
+                              onChange={(e) => {
+                                const price = Math.max(0, parseFloat(e.target.value) || 0);
+                                onUpdateSubdivisionState((prev) => ({
+                                  ...prev,
+                                  tierUnitPrices: { ...prev.tierUnitPrices, [tierKey]: price },
+                                }));
+                              }}
+                              className="w-20 min-h-[32px] bg-[#0B1220] border border-[#243449] rounded-lg px-2 py-1 text-right text-xs font-mono-numbers tabular-nums text-[#F8FAFC]"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Zones A-D + Anti-Adjacent */}
+                    <div className="pt-2 border-t border-[#243449] space-y-2">
+                      <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => handleApplyZonePreset('quadrants_4')}
+                          className={`min-h-[34px] py-1 px-2 rounded-xl border font-bold cursor-pointer ${
+                            subdivisionState.zonePresetMode === 'quadrants_4'
+                              ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
+                              : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449]'
+                          }`}
+                        >
+                          4-Dhinac
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyZonePreset('columns_4')}
+                          className={`min-h-[34px] py-1 px-2 rounded-xl border font-bold cursor-pointer ${
+                            subdivisionState.zonePresetMode === 'columns_4'
+                              ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
+                              : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449]'
+                          }`}
+                        >
+                          Bari–Galbeed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyZonePreset('rows_4')}
+                          className={`min-h-[34px] py-1 px-2 rounded-xl border font-bold cursor-pointer ${
+                            subdivisionState.zonePresetMode === 'rows_4'
+                              ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
+                              : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449]'
+                          }`}
+                        >
+                          Waqooyi–Koonfur
+                        </button>
+                      </div>
+
+                      {fairAllocation && fairAllocation.zones.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {fairAllocation.zones.map((z) => {
+                            const active =
+                              interactionTool === 'mark_zone' && activeZoneBrush === z.zoneId;
+                            return (
+                              <button
+                                key={z.zoneId}
+                                type="button"
+                                onClick={() => {
+                                  setActiveZoneBrush(z.zoneId);
+                                  setInteractionTool('mark_zone');
+                                  setMapColorMode('zones');
+                                }}
+                                className={`min-h-[34px] px-2.5 py-1 rounded-xl border inline-flex items-center gap-1.5 font-bold cursor-pointer ${
+                                  active
+                                    ? 'border-[#10B981] bg-[#10B981]/18 text-[#F8FAFC]'
+                                    : 'border-[#243449] bg-[#0F1B2D] text-[#CBD5E1]'
+                                }`}
+                              >
+                                <span
+                                  className="w-2.5 h-2.5 rounded-xs"
+                                  style={{ backgroundColor: z.colorHex }}
+                                />
+                                <span>{z.zoneId}</span>
+                                <span className="text-[10px] text-[#10B981] tabular-nums">
+                                  ({z.totalPlots})
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <label className="flex items-center gap-2 rounded-xl bg-[#10B981]/10 border border-[#10B981]/35 p-2.5 text-xs text-[#F8FAFC] cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={subdivisionState.enforceNonAdjacentBlocks}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            onUpdateSubdivisionState((prev) => ({
+                              ...prev,
+                              enforceNonAdjacentBlocks: checked,
+                            }));
+                          }}
+                          className="rounded border-[#10B981] accent-[#10B981]"
+                        />
+                        <span className="font-bold">
+                          Ka Ilaali Laba Block oo Is-xiga (Firdhi Zones &amp; Heerarka)
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* SHEET 3: QAYBI GACANTA (Heirs + Jajab + Multi-Tap + Custom Name / Danguud) */}
+                {activeStudioSheet === 'qaybi' && (
+                  <div className="space-y-2.5 text-xs">
+                    {/* Top Row: Painter Mode (Dhaxlayaal vs Danguud) + Multi-Tap Switch */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="inline-flex rounded-xl bg-[#030712] border border-[#243449] p-1 font-bold text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQaybiPaintMode('heir');
+                            setInteractionTool('assign_heir');
+                            setMapColorMode('heirs');
+                          }}
+                          className={`min-h-[32px] px-3 rounded-lg cursor-pointer ${
+                            qaybiPaintMode === 'heir'
+                              ? 'bg-[#10B981] text-[#030712] font-extrabold'
+                              : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                          }`}
+                        >
+                          1. Sii Dhaxle (Jajab/Plot)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQaybiPaintMode('custom_name');
+                            setInteractionTool('mark_exclusion');
+                            setMapColorMode('excluded');
+                          }}
+                          className={`min-h-[32px] px-3 rounded-lg cursor-pointer ${
+                            qaybiPaintMode === 'custom_name'
+                              ? 'bg-rose-600 text-white font-extrabold'
+                              : 'text-[#94A3B8] hover:text-[#F8FAFC]'
+                          }`}
+                        >
+                          2. Magac Gaar ah (Danguud)
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !multiSelectMode;
+                          setMultiSelectMode(next);
+                          if (!next) setSelectedBatchPlotIds([]);
+                          if (interactionTool === 'inspect') {
+                            setInteractionTool(
+                              qaybiPaintMode === 'custom_name' ? 'mark_exclusion' : 'assign_heir'
+                            );
+                          }
+                        }}
+                        className={`min-h-[34px] px-3 py-1 rounded-xl border inline-flex items-center gap-1.5 font-extrabold cursor-pointer transition-colors ${
+                          multiSelectMode
+                            ? 'bg-sky-500 text-[#030712] border-sky-400'
+                            : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-sky-400'
+                        }`}
+                      >
+                        <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                        <span>Xulo Badan (Multi-Tap)</span>
+                      </button>
+                    </div>
+
+                    {qaybiPaintMode === 'heir' ? (
+                      <div className="space-y-2">
+                        {fairAllocation && fairAllocation.heirAllocations.length > 0 ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {fairAllocation.heirAllocations.map((h) => {
+                              const active =
+                                interactionTool === 'assign_heir' &&
+                                selectedHeirKeyForBrush === h.heirKey;
+                              const qStatus = checkHeirPlotQuotaStatus(h, 1);
+                              return (
+                                <button
+                                  key={h.heirKey}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedHeirKeyForBrush(h.heirKey);
+                                    setInteractionTool('assign_heir');
+                                    setMapColorMode('heirs');
+                                  }}
+                                  className={`min-h-[42px] px-3 py-2 rounded-xl border flex items-center justify-between gap-2 text-left cursor-pointer transition-colors ${
+                                    active
+                                      ? 'border-[#10B981] bg-[#10B981]/15'
+                                      : 'border-[#243449] bg-[#0F1B2D] hover:border-[#10B981]/60'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-2 min-w-0">
+                                    <span
+                                      className="w-3.5 h-3.5 rounded-xs shrink-0 border border-white/25"
+                                      style={{ backgroundColor: h.colorHex }}
+                                    />
+                                    <span className="font-bold text-[#F8FAFC] truncate">
+                                      {h.personName}
+                                    </span>
+                                  </span>
+                                  <span
+                                    className={`font-mono-numbers tabular-nums text-[11px] font-extrabold shrink-0 ${
+                                      qStatus.isAlreadyFull ? 'text-amber-300' : 'text-[#10B981]'
+                                    }`}
+                                  >
+                                    {formatPlotQtyCompact(h.effectiveTotalPlotsReceived)}/
+                                    {qStatus.roundedTarget}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-3 flex items-center justify-between gap-2">
+                            <span className="text-[#94A3B8]">
+                              Marka hore dooro dhaxlayaasha bogga Xisaabinta.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={onNavigateToCalculator}
+                              className="px-3 py-1.5 rounded-lg bg-[#10B981] text-[#030712] font-extrabold cursor-pointer"
+                            >
+                              Tag Xisaabinta
+                            </button>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-[#94A3B8]">
+                          Taabo magaca dhaxlaha kadibna taabo <strong>Plot</strong>,{' '}
+                          <strong>Jajab/Half</strong>, ama shid <strong>Xulo Badan</strong> si aad hal mar dhowr plot u wada siiso.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 rounded-xl bg-rose-950/25 border border-rose-500/40 p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="inline-flex rounded-lg bg-[#0B1220] border border-[#243449] p-0.5 font-bold text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setExclusionBrushScope('plot')}
+                              className={`min-h-[30px] px-2.5 rounded-md cursor-pointer ${
+                                exclusionBrushScope === 'plot'
+                                  ? 'bg-rose-600 text-white'
+                                  : 'text-[#94A3B8]'
+                              }`}
+                            >
+                              Plot / Jajab
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExclusionBrushScope('block')}
+                              className={`min-h-[30px] px-2.5 rounded-md cursor-pointer ${
+                                exclusionBrushScope === 'block'
+                                  ? 'bg-rose-600 text-white'
+                                  : 'text-[#94A3B8]'
+                              }`}
+                            >
+                              Block oo Dhan
+                            </button>
+                          </div>
+
+                          <div className="inline-flex rounded-lg bg-[#0B1220] border border-[#243449] p-0.5 font-bold text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExclusionBrushMode('exclude');
+                                setInteractionTool('mark_exclusion');
+                              }}
+                              className={`min-h-[30px] px-2.5 rounded-md cursor-pointer ${
+                                exclusionBrushMode === 'exclude'
+                                  ? 'bg-rose-600 text-white'
+                                  : 'text-[#94A3B8]'
+                              }`}
+                            >
+                              Ka Reeb
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExclusionBrushMode('include');
+                                setInteractionTool('mark_exclusion');
+                              }}
+                              className={`min-h-[30px] px-2.5 rounded-md cursor-pointer ${
+                                exclusionBrushMode === 'include'
+                                  ? 'bg-[#10B981] text-[#030712]'
+                                  : 'text-[#94A3B8]'
+                              }`}
+                            >
+                              Dib ugu Dar
+                            </button>
+                          </div>
+                        </div>
+
+                        {exclusionBrushMode === 'exclude' && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="text"
+                              value={exclusionBrushSpecialName}
+                              onChange={(e) => {
+                                setExclusionBrushSpecialName(e.target.value);
+                                setInteractionTool('mark_exclusion');
+                              }}
+                              placeholder="Magac gaar ah (ama ka tag banaan)..."
+                              className="flex-1 min-w-[175px] min-h-[38px] bg-[#0B1220] border border-rose-500/45 rounded-xl px-3 py-1.5 text-xs font-bold text-[#F8FAFC] placeholder:text-[#64748B] focus:outline-none focus:border-rose-400"
+                            />
+                            {SPECIAL_EXCLUSION_PRESETS.map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => {
+                                  setExclusionBrushSpecialName(preset);
+                                  setInteractionTool('mark_exclusion');
+                                }}
+                                className={`min-h-[36px] px-3 py-1 rounded-xl border text-xs font-extrabold cursor-pointer ${
+                                  exclusionBrushSpecialName === preset
+                                    ? 'bg-rose-600 text-white border-rose-500'
+                                    : 'bg-[#0B1220] text-[#F8FAFC] border-[#243449]'
+                                }`}
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                            <div className="flex items-center gap-1">
+                              {CUSTOM_EXCLUDED_COLOR_CHOICES.slice(0, 6).map((cHex) => (
+                                <button
+                                  key={cHex}
+                                  type="button"
+                                  onClick={() => {
+                                    setExclusionBrushColorHex(cHex);
+                                    setInteractionTool('mark_exclusion');
+                                  }}
+                                  className={`w-6 h-6 rounded-md border cursor-pointer ${
+                                    exclusionBrushColorHex === cHex
+                                      ? 'border-white scale-110'
+                                      : 'border-white/25 opacity-80'
+                                  }`}
+                                  style={{ backgroundColor: cHex }}
+                                  title={`Midabka: ${cHex}`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SHEET 4: PDF & XIDH */}
+                {activeStudioSheet === 'pdf_xidh' && (
+                  <div className="space-y-3 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          'clean_equal_no_half_no_fraction',
+                          'whole_balanced',
+                          'exact_shared',
+                        ] as LandAllocationMode[]
+                      ).map((modeId) => {
+                        const meta = LAND_ALLOCATION_MODE_METADATA[modeId];
+                        const isActive = subdivisionState.allocationMode === modeId;
+                        return (
+                          <button
+                            key={modeId}
+                            type="button"
+                            onClick={() =>
+                              onUpdateSubdivisionState((prev) => ({
+                                ...prev,
+                                allocationMode: modeId,
+                              }))
+                            }
+                            className={`text-left rounded-xl border p-2.5 cursor-pointer transition-colors ${
+                              isActive
+                                ? 'border-[#10B981] bg-[#10B981]/12'
+                                : 'border-[#243449] bg-[#0F1B2D]'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 font-bold text-[#F8FAFC]">
+                              <span className="truncate">{meta.shortSomali}</span>
+                              {isActive && <Check className="w-3.5 h-3.5 text-[#10B981] shrink-0" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="rounded-xl bg-[#0F1B2D] border border-[#243449] p-2.5 flex items-center justify-between gap-2">
+                      <span className="font-bold text-[#F8FAFC]">Half-Plots Otomaatig (0.5 Plot)</span>
+                      <div className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-[#0B1220] border border-[#243449]">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateSubdivisionState((prev) => ({
+                              ...prev,
+                              includeValidHalfPlotsInAllocation: true,
+                            }))
+                          }
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer ${
+                            subdivisionState.includeValidHalfPlotsInAllocation
+                              ? 'bg-[#10B981] text-[#030712]'
+                              : 'text-[#94A3B8]'
+                          }`}
+                        >
+                          Ku Dar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateSubdivisionState((prev) => ({
+                              ...prev,
+                              includeValidHalfPlotsInAllocation: false,
+                            }))
+                          }
+                          className={`px-2.5 py-1 rounded text-[11px] font-bold cursor-pointer ${
+                            !subdivisionState.includeValidHalfPlotsInAllocation
+                              ? 'bg-[#1E293B] text-[#F8FAFC]'
+                              : 'text-[#94A3B8]'
+                          }`}
+                        >
+                          Ka Reeb
+                        </button>
+                      </div>
+                    </div>
+
+                    {fairAllocation && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#0F1B2D] border border-[#243449] px-3 py-2 text-[11px] tabular-nums">
+                        <span>
+                          La qaybiyey:{' '}
+                          <strong className="text-[#10B981]">
+                            {fairAllocation.allocatedFullPlotsCount ?? fairAllocation.totalFullPlots}/
+                            {fairAllocation.totalFullPlots}
+                          </strong>
+                        </span>
+                        {(fairAllocation.withheldJajabPlotsCount ?? 0) > 0 && (
+                          <span className="text-amber-300">
+                            Jajab: <strong>{fairAllocation.withheldJajabPlotsCount}</strong>
+                          </span>
+                        )}
+                        {(fairAllocation.excludedPlotsCount ?? 0) > 0 && (
+                          <span className="text-rose-300">
+                            Reeban: <strong>{fairAllocation.excludedPlotsCount}</strong>
+                          </span>
+                        )}
+                        {manualOverrideCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onUpdateSubdivisionState((prev) => ({
+                                ...prev,
+                                manualPlotHeirOverrides: {},
+                                approvalStatus: 'draft_proposal',
+                              }))
+                            }
+                            className="inline-flex items-center gap-1 font-bold text-[#10B981] hover:underline cursor-pointer"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            <span>Celi Gacanta ({manualOverrideCount})</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={onSyncAndLinkToEstate}
+                        disabled={!subdivisionResult || subdivisionResult.plots.length === 0}
+                        className="min-h-[44px] rounded-xl bg-[#0F1B2D] border border-[#243449] hover:border-[#10B981] text-[#F8FAFC] font-extrabold inline-flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
+                      >
+                        <Link2 className="w-4 h-4 text-[#10B981]" />
+                        <span>Ku Xidh Xisaabta</span>
+                      </button>
+                      {subdivisionResult && fairAllocation && (
+                        <button
+                          type="button"
+                          onClick={() => setShowSimplePdfModal(true)}
+                          className="min-h-[44px] rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] font-extrabold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>Simple PDF</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4-STEP FLOATING THUMB-ZONE ACTION DOCK */}
+            <div className="border-t border-[#243449] bg-[#0F1B2D]/95 p-1.5 grid grid-cols-4 gap-1">
+              {(
+                [
+                  { id: 'shabakad', label: '1. Shabakad', icon: Grid },
+                  { id: 'heer_aag', label: '2. Heer & Aag', icon: Mountain },
+                  { id: 'qaybi', label: '3. Qaybi', icon: Paintbrush },
+                  { id: 'pdf_xidh', label: '4. PDF & Xidh', icon: FileText },
+                ] as const
+              ).map((step) => {
+                const Icon = step.icon;
+                const active = activeStudioSheet === step.id;
+                return (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => {
+                      setShowViewModePopover(false);
+                      setShowMapLayerPopover(false);
+                      setActiveStudioSheet((prev) => (prev === step.id ? null : step.id));
+                    }}
+                    className={`min-h-[48px] px-1.5 py-1.5 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                      active
+                        ? 'bg-[#10B981] text-[#030712] font-extrabold shadow'
+                        : 'text-[#CBD5E1] hover:bg-[#0B1220] hover:text-[#F8FAFC]'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="text-[10.5px] sm:text-xs font-bold leading-none truncate max-w-full">
+                      {step.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {subdivisionResult && subdivisionResult.warnings.length > 0 && (
-              <div className="px-4 py-2.5 bg-amber-950/35 border-t border-amber-500/40 text-xs text-amber-200">
+              <div className="px-4 py-2 bg-amber-950/35 border-t border-amber-500/40 text-xs text-amber-200">
                 {subdivisionResult.warnings.join(' · ')}
               </div>
             )}
+            {fairAllocation &&
+              fairAllocation.fairnessWarnings.length > 0 &&
+              fairAllocation.heirAllocations.length > 0 && (
+                <div className="px-4 py-2 bg-[#0F1B2D] border-t border-[#243449] text-xs text-amber-200">
+                  {fairAllocation.fairnessWarnings[0]}
+                </div>
+              )}
           </section>
 
-          {/* BOTTOM TABBED REGISTERS & METADATA / REPORT / HALF PLOTS PANELS */}
-          <GisBottomRegistersSection
-            bottomTab={bottomTab}
-            onSelectBottomTab={setBottomTab}
-            subdivisionState={subdivisionState}
-            subdivisionResult={subdivisionResult}
-            fairAllocation={fairAllocation}
-            currency={currency}
-            inspectedPlotId={inspectedPlotId}
-            onSelectPlotId={setInspectedPlotId}
-            highlightedHeirKey={highlightedHeirKey}
-            onHighlightHeirOnMap={(hk) => {
-              setMapColorMode('heirs');
-              setHighlightedHeirKey(highlightedHeirKey === hk ? null : hk);
-            }}
-            onSwitchToExcludedMapMode={() => setMapColorMode('excluded')}
-            onSwitchToHalfPlotsMapMode={() => setMapColorMode('half_plots')}
-            onActivateExclusionBrush={() => {
-              setInteractionTool('mark_exclusion');
-              setMapColorMode('excluded');
-            }}
-            onFocusPlotOnMap={(q) => {
-              setMapColorMode('half_plots');
-              setInspectedPlotId(q.id);
-              if (mapGeometry) {
-                const cx = mapGeometry.toX(q.centerUtm);
-                const cy = mapGeometry.toY(q.centerUtm);
-                setViewBox({
-                  x: cx - 75,
-                  y: cy - 60,
-                  w: 150,
-                  h: 120,
-                });
-              }
-            }}
-            onRenameIndividual={handleRenameIndividual}
-            onSetPlotExclusionState={setPlotExclusionState}
-            onSetBlockExclusionState={setBlockExclusionState}
-            onUpdateSubdivisionState={onUpdateSubdivisionState}
-            onNotify={onNotify}
-            plotSearchQuery={plotSearchQuery}
-            onChangePlotSearchQuery={setPlotSearchQuery}
-            plotDivisionFilter={plotDivisionFilter}
-            onChangePlotDivisionFilter={setPlotDivisionFilter}
-            plotZoneFilter={plotZoneFilter}
-            onChangePlotZoneFilter={setPlotZoneFilter}
-            plotTierFilter={plotTierFilter}
-            onChangePlotTierFilter={setPlotTierFilter}
-            halfPlotStatusFilter={halfPlotStatusFilter}
-            onChangeHalfPlotStatusFilter={setHalfPlotStatusFilter}
-            filteredPlots={filteredPlots}
-            filteredEvaluatedPlots={filteredEvaluatedPlots}
-          />
-        </div>
-      </div>
+      {/* Quota Guard Permission Modal */}
+      <CadQuotaPermissionModal
+        isOpen={Boolean(pendingQuotaAction)}
+        targetDescription={pendingQuotaAction?.targetDescription || ''}
+        heir={
+          pendingQuotaAction
+            ? fairAllocation?.heirAllocations.find(
+                (h) => h.heirKey === pendingQuotaAction.heirKey
+              ) || null
+            : null
+        }
+        quotaStatus={pendingQuotaAction?.quotaStatus || null}
+        onConfirm={() => {
+          const fn = pendingQuotaAction?.applyFn;
+          setPendingQuotaAction(null);
+          fn?.();
+        }}
+        onCancel={() => setPendingQuotaAction(null)}
+      />
+
+      {/* Simple Ilma Cige Style PDF Export Modal */}
+      {subdivisionResult && fairAllocation && (
+        <SimpleInheritancePdfModal
+          isOpen={showSimplePdfModal}
+          onClose={() => setShowSimplePdfModal(false)}
+          subdivisionResult={subdivisionResult}
+          subdivisionState={subdivisionState}
+          fairAllocation={fairAllocation}
+          activeCaseMeta={activeCaseMeta}
+        />
+      )}
     </div>
   );
 };

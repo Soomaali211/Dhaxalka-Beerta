@@ -49,6 +49,78 @@ export function isNativeAndroidApkRuntime(): boolean {
   return false;
 }
 
+export const APK_MOBILE_MODE_PREFERENCE_STORAGE_KEY = 'beerta_apk_mobile_mode';
+
+export function getStoredApkMobileModePreference(storage?: StorageLike): boolean | null {
+  try {
+    const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+    if (!target || typeof target.getItem !== 'function') return null;
+    const raw = target.getItem(APK_MOBILE_MODE_PREFERENCE_STORAGE_KEY);
+    if (raw === '1' || raw === 'true') return true;
+    if (raw === '0' || raw === 'false') return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveApkMobileModePreference(
+  enabled: boolean | null,
+  storage?: StorageLike
+): void {
+  try {
+    const target = storage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
+    if (!target) return;
+    if (enabled === null) {
+      target.removeItem?.(APK_MOBILE_MODE_PREFERENCE_STORAGE_KEY);
+    } else {
+      target.setItem(APK_MOBILE_MODE_PREFERENCE_STORAGE_KEY, enabled ? '1' : '0');
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+/**
+ * Enforces Mobile Mode / Mobile Layout unconditionally inside native Android APK runtimes
+ * (even on tablets, foldables, or landscape orientation), while allowing optional preview
+ * override via `?apk=1` / `?mobile=1` or user preference in web browsers.
+ */
+export function shouldForceApkMobileLayout(
+  userPreference?: boolean | null,
+  runtimeOverride?: boolean,
+  searchStringOverride?: string
+): boolean {
+  const isNative =
+    typeof runtimeOverride === 'boolean' ? runtimeOverride : isNativeAndroidApkRuntime();
+  if (isNative) return true;
+
+  const searchStr =
+    typeof searchStringOverride === 'string'
+      ? searchStringOverride
+      : typeof window !== 'undefined'
+      ? window.location?.search || ''
+      : '';
+  if (searchStr) {
+    try {
+      const params = new URLSearchParams(searchStr);
+      const apkFlag = params.get('apk') || params.get('mobile');
+      if (apkFlag === '1' || apkFlag === 'true') return true;
+      if (params.get('layout') === 'mobile') return true;
+    } catch {
+      // ignore invalid query params
+    }
+  }
+
+  if (typeof userPreference === 'boolean') return userPreference;
+  return getStoredApkMobileModePreference() === true;
+}
+
+export function syncApkMobileModeDocumentClass(enabled: boolean): void {
+  if (typeof document === 'undefined' || !document.documentElement) return;
+  document.documentElement.classList.toggle('apk-mobile-mode', enabled);
+}
+
 /**
  * Unregisters any stale Workbox Service Workers and clears precache buckets inside the
  * native Android APK WebView so APK upgrades (`adb install -r` / new APK versions) always

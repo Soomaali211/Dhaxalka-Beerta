@@ -5,6 +5,7 @@ import { PrimaryDestination } from './MobileTopAppBar';
 interface MobileBottomNavProps {
   activeDestination: PrimaryDestination;
   onSelectDestination: (destination: PrimaryDestination) => void;
+  isApkMobileMode?: boolean;
 }
 
 const NAV_TABS: {
@@ -29,7 +30,7 @@ const NAV_TABS: {
   },
   {
     id: 'list_data',
-    label: 'Xog & Kiisas',
+    label: 'Xog & Dejin',
     icon: TableProperties,
   },
 ];
@@ -37,11 +38,14 @@ const NAV_TABS: {
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   activeDestination,
   onSelectDestination,
+  isApkMobileMode = false,
 }) => {
   return (
     <nav
       aria-label="Hagidda Hoose"
-      className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-[#0a1220]/95 backdrop-blur-md border-t border-[#223250] pb-safe no-print"
+      className={`${
+        isApkMobileMode ? '' : 'lg:hidden '
+      }fixed bottom-0 left-0 right-0 z-30 bg-[#0a1220]/95 backdrop-blur-md border-t border-[#223250] pb-safe no-print`}
     >
       <div className="grid grid-cols-4 items-center h-16 px-1.5">
         {NAV_TABS.map((tab) => {

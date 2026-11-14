@@ -7,19 +7,9 @@ import {
   ComprehensiveHeirAssetAllocation,
   IndividualNamedHeirAllocation,
 } from '../types/inheritance';
-import {
-  FairLandAllocationResult,
-  LandAllocationMode,
-} from '../types/landSubdivision';
 import { calculateComprehensiveEstateDistribution } from '../utils/estateAssetDistributionEngine';
 import { updateHeirPersonName, getEditableGroupKeyForShareId } from '../utils/heirNameUtils';
-import {
-  LAND_ALLOCATION_MODE_METADATA,
-  computeStandalonePlotModeAllocation,
-  formatPlotQtyCompact,
-  getDistinctHeirColor,
-  summarizePlotIdsCompact,
-} from '../utils/landSubdivisionEngine';
+import { getDistinctHeirColor } from '../utils/landSubdivisionEngine';
 import {
   ArrowLeft,
   Check,
@@ -31,8 +21,6 @@ import {
   BookOpen,
   UserCheck,
   Users,
-  Grid,
-  MapPin,
 } from 'lucide-react';
 
 interface ApkResultsAndNamesViewProps {
@@ -40,18 +28,11 @@ interface ApkResultsAndNamesViewProps {
   result: InheritanceCalculationResult;
   heirsInput: HeirsInput;
   currency: Currency;
-  linkedLandAllocation?: FairLandAllocationResult | null;
-  allocationMode?: LandAllocationMode;
-  onChangeAllocationMode?: (mode: LandAllocationMode) => void;
-  includeValidHalfPlots?: boolean;
-  onToggleIncludeHalfPlots?: (include: boolean) => void;
   onUpdateHeirsInput: (updated: HeirsInput) => void;
   onBackToCalculator: () => void;
   onOpenAssetsModal: () => void;
-  onOpenLandDesigner: () => void;
   onSaveCaseRecord: () => void;
   onPrintCertificate: () => void;
-  onPrintInheritanceMapPdf?: () => void;
   onExportExcel: () => void;
 }
 
@@ -60,102 +41,28 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
   result,
   heirsInput,
   currency,
-  linkedLandAllocation,
-  allocationMode: propAllocationMode,
-  onChangeAllocationMode,
-  includeValidHalfPlots = false,
-  onToggleIncludeHalfPlots,
   onUpdateHeirsInput,
   onBackToCalculator,
   onOpenAssetsModal,
-  onOpenLandDesigner,
   onSaveCaseRecord,
   onPrintCertificate,
-  onPrintInheritanceMapPdf,
   onExportExcel,
 }) => {
   const [assetFilter, setAssetFilter] = useState<'all' | 'land' | 'money' | 'livestock'>('all');
 
-  const activeAllocationMode: LandAllocationMode =
-    linkedLandAllocation?.allocationMode || propAllocationMode || 'exact_shared';
-
   const distribution = calculateComprehensiveEstateDistribution(assets, result, heirsInput, currency);
-
-  // Compute standalone mode plot counts when GIS map is not linked
-  const standalonePlotMode = computeStandalonePlotModeAllocation(
-    distribution.totalLandPlots,
-    distribution.allIndividualHeirs,
-    activeAllocationMode,
-    includeValidHalfPlots
-  );
 
   // Guaranteed unique hex color for every individual heir (0 collisions)
   const individualColorByKey: Record<string, string> = {};
   const groupRepresentativeColorById: Record<string, string> = {};
   distribution.allIndividualHeirs.forEach((ind, idx) => {
     const key = `${ind.heirGroupId}::${ind.personIndex}`;
-    const gisHeir = linkedLandAllocation?.heirAllocations.find(
-      (h) => h.heirGroupId === ind.heirGroupId && h.personIndex === ind.personIndex
-    );
-    const resolvedColor = gisHeir?.colorHex || getDistinctHeirColor(idx);
+    const resolvedColor = getDistinctHeirColor(idx);
     individualColorByKey[key] = resolvedColor;
     if (!groupRepresentativeColorById[ind.heirGroupId]) {
       groupRepresentativeColorById[ind.heirGroupId] = resolvedColor;
     }
   });
-
-  const getIndividualLandDisplay = (ind: IndividualNamedHeirAllocation): string => {
-    const gisHeir = linkedLandAllocation?.heirAllocations.find(
-      (h) => h.heirGroupId === ind.heirGroupId && h.personIndex === ind.personIndex
-    );
-    if (gisHeir) {
-      return `${formatPlotQtyCompact(gisHeir.effectiveTotalPlotsReceived)} Plot`;
-    }
-    if (activeAllocationMode === 'exact_shared') {
-      return ind.landDisplay;
-    }
-    const k = `${ind.heirGroupId}::${ind.personIndex}`;
-    const wholeCnt = standalonePlotMode.perHeirPlots[k] ?? 0;
-    return `${wholeCnt} Plot oo buuxa`;
-  };
-
-  const getGroupLandSummary = (h: ComprehensiveHeirAssetAllocation): {
-    perPersonLabel: string;
-    groupTotalPlots: number;
-  } => {
-    if (linkedLandAllocation) {
-      const members = linkedLandAllocation.heirAllocations.filter(
-        (gh) => gh.heirGroupId === h.heirId
-      );
-      if (members.length > 0) {
-        const sumPlots = +(
-          members.reduce((s, m) => s + m.effectiveTotalPlotsReceived, 0)
-        ).toFixed(2);
-        const minP = Math.min(...members.map((m) => m.effectiveTotalPlotsReceived));
-        const maxP = Math.max(...members.map((m) => m.effectiveTotalPlotsReceived));
-        const perPersonLabel =
-          Math.abs(maxP - minP) < 0.01
-            ? `${formatPlotQtyCompact(minP)} Plot`
-            : `${formatPlotQtyCompact(minP)}–${formatPlotQtyCompact(maxP)} Plot`;
-        return { perPersonLabel, groupTotalPlots: sumPlots };
-      }
-    }
-    if (activeAllocationMode !== 'exact_shared') {
-      const vals = Array.from({ length: h.count }).map(
-        (_, i) => standalonePlotMode.perHeirPlots[`${h.heirId}::${i}`] ?? 0
-      );
-      const sumPlots = vals.reduce((s, v) => s + v, 0);
-      const minP = vals.length > 0 ? Math.min(...vals) : 0;
-      const maxP = vals.length > 0 ? Math.max(...vals) : 0;
-      const perPersonLabel =
-        minP === maxP ? `${minP} Plot oo buuxa` : `${minP}–${maxP} Plot`;
-      return { perPersonLabel, groupTotalPlots: sumPlots };
-    }
-    return {
-      perPersonLabel: h.land.displayPerPerson,
-      groupTotalPlots: h.land.totalPlotsForGroup,
-    };
-  };
 
   const formatMoney = (val: number) => {
     try {
@@ -173,15 +80,14 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
 
   const hasCashValuation = result.netDistributableEstateUSD > 0;
 
-  // Smart summary for group total when cash value is $0 (e.g., 100 unvalued Plots or Livestock)
+  // Smart summary for group total when cash value is $0 (e.g., unvalued Plots or Livestock)
   const formatGroupPrimaryTotal = (h: ComprehensiveHeirAssetAllocation) => {
     if (hasCashValuation) {
       return formatMoney(h.totalEstimatedValueUSD);
     }
     const parts: string[] = [];
-    if (distribution.totalLandPlots > 0 || linkedLandAllocation) {
-      const grpLand = getGroupLandSummary(h);
-      parts.push(`${formatPlotQtyCompact(grpLand.groupTotalPlots)} Plot`);
+    if (distribution.totalLandPlots > 0) {
+      parts.push(`${h.land.totalPlotsForGroup} Plot`);
     }
     if (distribution.totalLivestockHeads > 0) {
       parts.push(`${h.livestock.totalHeadsForGroup} Neef`);
@@ -195,8 +101,8 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
       return formatMoney(ind.totalEstimatedValueUSD);
     }
     const parts: string[] = [];
-    if (distribution.totalLandPlots > 0 || linkedLandAllocation) {
-      parts.push(getIndividualLandDisplay(ind));
+    if (distribution.totalLandPlots > 0) {
+      parts.push(ind.landDisplay);
     }
     if (distribution.totalLivestockHeads > 0) {
       parts.push(ind.livestockDisplay);
@@ -283,16 +189,6 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
             <BookmarkCheck className="w-4 h-4 text-[#22c55e]" />
             <span>Keydi</span>
           </button>
-          {onPrintInheritanceMapPdf && (
-            <button
-              type="button"
-              onClick={onPrintInheritanceMapPdf}
-              className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220] border border-[#22c55e]/60 hover:border-[#22c55e] text-[#22c55e] px-3.5 py-2 text-xs font-extrabold transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <MapPin className="w-4 h-4" />
-              <span>Khariidadda Dhaxalka PDF</span>
-            </button>
-          )}
           <button
             type="button"
             onClick={onPrintCertificate}
@@ -512,22 +408,19 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
                 {/* Per-person & Group Asset Breakdown */}
                 <div className="grid grid-cols-2 gap-2.5 pt-2.5 border-t border-[#243449]/70 text-xs">
                   {(assetFilter === 'all' || assetFilter === 'land') &&
-                    (distribution.totalLandPlots > 0 || Boolean(linkedLandAllocation)) && (() => {
-                      const grpLand = getGroupLandSummary(h);
-                      return (
-                        <div className="bg-[#0B1220] rounded-xl px-3 py-2">
-                          <span className="text-[11px] text-[#94A3B8] block">Dhul (Qofkiiba)</span>
-                          <strong className="text-[#F8FAFC] font-bold block font-mono-numbers tabular-nums">
-                            {grpLand.perPersonLabel}
-                          </strong>
-                          {h.count > 1 && (
-                            <span className="text-[11px] text-[#94A3B8] font-mono-numbers tabular-nums">
-                              Kooxda ({h.count}): {formatPlotQtyCompact(grpLand.groupTotalPlots)} Plot
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })()}
+                    distribution.totalLandPlots > 0 && (
+                      <div className="bg-[#0B1220] rounded-xl px-3 py-2">
+                        <span className="text-[11px] text-[#94A3B8] block">Dhul (Qofkiiba)</span>
+                        <strong className="text-[#F8FAFC] font-bold block font-mono-numbers tabular-nums">
+                          {h.land.displayPerPerson}
+                        </strong>
+                        {h.count > 1 && (
+                          <span className="text-[11px] text-[#94A3B8] font-mono-numbers tabular-nums">
+                            Kooxda ({h.count}): {h.land.totalPlotsForGroup} Plot
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                   {(assetFilter === 'all' || assetFilter === 'money') && distribution.totalMoneyUSD > 0 && (
                     <div className="bg-[#0B1220] rounded-xl px-3 py-2">
@@ -634,24 +527,21 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
 
                     {(assetFilter === 'all' || assetFilter === 'land') && (
                       <td className="py-3.5 px-3.5 font-mono-numbers tabular-nums">
-                        {distribution.totalLandPlots > 0 || linkedLandAllocation ? (() => {
-                          const grpLand = getGroupLandSummary(h);
-                          return (
-                            <div>
-                              <span className="font-bold text-[#F8FAFC]">{grpLand.perPersonLabel}</span>
-                              {h.count > 1 && (
-                                <span className="block text-[11px] text-[#94A3B8]">
-                                  Kooxda: {formatPlotQtyCompact(grpLand.groupTotalPlots)} Plot
-                                </span>
-                              )}
-                              {h.land.sqMPerPerson && activeAllocationMode === 'exact_shared' && (
-                                <span className="block text-[11px] text-[#94A3B8]">
-                                  ~{h.land.sqMPerPerson.toLocaleString()} m²
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })() : (
+                        {distribution.totalLandPlots > 0 ? (
+                          <div>
+                            <span className="font-bold text-[#F8FAFC]">{h.land.displayPerPerson}</span>
+                            {h.count > 1 && (
+                              <span className="block text-[11px] text-[#94A3B8]">
+                                Kooxda: {h.land.totalPlotsForGroup} Plot
+                              </span>
+                            )}
+                            {h.land.sqMPerPerson && (
+                              <span className="block text-[11px] text-[#94A3B8]">
+                                ~{h.land.sqMPerPerson.toLocaleString()} m²
+                              </span>
+                            )}
+                          </div>
+                        ) : (
                           <span className="text-[#94A3B8]">—</span>
                         )}
                       </td>
@@ -770,234 +660,12 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
           </span>
         </div>
 
-        {/* 3-Mode Land Allocation Switcher & Withheld Half/Jajab Summary */}
-        {(Boolean(linkedLandAllocation) || distribution.totalLandPlots > 0) && (
-          <div className="px-5 py-3.5 bg-[#0B1220]/85 border-b border-[#243449] space-y-2.5 text-xs">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
-              <span className="font-extrabold text-[#F8FAFC]">
-                Habka Qaybinta Plots-ka Dhaxalka:
-              </span>
-              {onChangeAllocationMode && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                  {(
-                    [
-                      'exact_shared',
-                      'whole_balanced',
-                      'clean_equal_no_half_no_fraction',
-                    ] as LandAllocationMode[]
-                  ).map((modeId) => {
-                    const meta = LAND_ALLOCATION_MODE_METADATA[modeId];
-                    const active = activeAllocationMode === modeId;
-                    return (
-                      <button
-                        key={modeId}
-                        type="button"
-                        onClick={() => onChangeAllocationMode(modeId)}
-                        className={`min-h-[36px] rounded-xl border px-3 py-1.5 text-[11px] font-bold flex items-center justify-between gap-1.5 transition-colors cursor-pointer ${
-                          active
-                            ? 'bg-[#10B981] text-[#030712] border-[#10B981]'
-                            : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-[#10B981]/60'
-                        }`}
-                      >
-                        <span className="truncate">{meta.shortSomali}</span>
-                        {active && <Check className="w-3.5 h-3.5 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {onToggleIncludeHalfPlots && (
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-[#243449]/60">
-                <span className="text-[11px] font-bold text-[#CBD5E1]">
-                  Half-Plots (0.5 Plot):{' '}
-                  <span className="font-normal text-[#94A3B8]">
-                    {includeValidHalfPlots
-                      ? 'Waa lagu daray dhaxalka (0.5 plot = 1 half-plot)'
-                      : 'Waa laga reebay qaybinta dhaxalka'}
-                  </span>
-                </span>
-                <div className="inline-flex items-center gap-1 p-0.5 rounded-xl bg-[#0F1B2D] border border-[#243449]">
-                  <button
-                    type="button"
-                    onClick={() => onToggleIncludeHalfPlots(true)}
-                    className={`min-h-[32px] px-3 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
-                      includeValidHalfPlots
-                        ? 'bg-[#10B981] text-[#030712]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    Ku Dar Dhaxalka
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onToggleIncludeHalfPlots(false)}
-                    className={`min-h-[32px] px-3 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
-                      !includeValidHalfPlots
-                        ? 'bg-[#1E293B] text-[#F8FAFC]'
-                        : 'text-[#94A3B8] hover:text-[#F8FAFC]'
-                    }`}
-                  >
-                    Ka Reeb Dhaxalka
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-              {LAND_ALLOCATION_MODE_METADATA[activeAllocationMode].descriptionSomali}
-            </p>
-
-            {/* Mode-Specific Summary Counters for Withheld Half-Plots & Jajab */}
-            {!linkedLandAllocation && activeAllocationMode !== 'exact_shared' && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-mono-numbers tabular-nums text-[#CBD5E1]">
-                <span>
-                  Plots La Qaybiyey:{' '}
-                  <strong className="text-[#10B981]">{standalonePlotMode.allocatedWholePlots} Plot</strong>
-                </span>
-                <span>
-                  Plots Wadaag ah: <strong className="text-[#F8FAFC]">0 Plot</strong>
-                </span>
-                {standalonePlotMode.withheldJajabPlotsCount > 0 && (
-                  <span>
-                    Jajabka Laga Reebay:{' '}
-                    <strong className="text-amber-300">
-                      {standalonePlotMode.withheldJajabPlotsCount} Plot
-                    </strong>
-                  </span>
-                )}
-                {standalonePlotMode.withheldHalfPlotsUnits > 0 && (
-                  <span>
-                    Half-Plots Laga Reebay:{' '}
-                    <strong className="text-slate-300">
-                      {standalonePlotMode.withheldHalfPlotsUnits} Plot
-                    </strong>
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Approval, Spatial Fairness & Excluded Land Banner when GIS Land Allocation is Linked */}
-        {linkedLandAllocation && (() => {
-          const exclBlocks = linkedLandAllocation.excludedBlocks ?? [];
-          const exclPlots = linkedLandAllocation.excludedPlots ?? [];
-          const exclPlotsCount = linkedLandAllocation.excludedPlotsCount ?? exclPlots.length;
-          const allocCount =
-            linkedLandAllocation.allocatedFullPlotsCount ?? linkedLandAllocation.totalFullPlots;
-          const jajabWithheld = linkedLandAllocation.withheldJajabPlotsCount ?? 0;
-          const halfWithheld = linkedLandAllocation.withheldHalfPlotsCount ?? 0;
-          const halfIncluded = linkedLandAllocation.validHalfPlotsIncludedCount ?? 0;
-          return (
-            <div className="px-5 py-3.5 bg-[#0B1220]/70 border-b border-[#243449] space-y-2 text-xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="text-[#94A3B8] leading-relaxed">
-                  <strong className="text-[#10B981]">
-                    {linkedLandAllocation.approvalStatus === 'approved'
-                      ? 'Qoondayn La Ansixiyey'
-                      : 'Soo-jeedin Talo ah (Weli Lama Ansixin)'}
-                  </strong>
-                  <span aria-hidden="true"> · </span>
-                  <span className="font-mono-numbers tabular-nums font-semibold text-[#F8FAFC]">
-                    {allocCount} / {linkedLandAllocation.totalFullPlots} Plot Buuxa
-                  </span>
-                  {halfIncluded > 0 && (
-                    <>
-                      <span aria-hidden="true"> · </span>
-                      <span className="font-mono-numbers tabular-nums font-bold text-[#10B981]">
-                        +{halfIncluded} Half-Plot Lagu Daray ({(halfIncluded * 0.5).toFixed(1)} Plot)
-                      </span>
-                    </>
-                  )}
-                  <span aria-hidden="true"> · </span>
-                  <span className="font-mono-numbers tabular-nums font-semibold text-[#F8FAFC]">
-                    {linkedLandAllocation.sharedPlots.length} Plot Wadaag ah
-                  </span>
-                  {jajabWithheld > 0 && (
-                    <>
-                      <span aria-hidden="true"> · </span>
-                      <span className="font-mono-numbers tabular-nums font-bold text-amber-300">
-                        {jajabWithheld} Plot Jajab Laga Reebay
-                      </span>
-                    </>
-                  )}
-                  {halfWithheld > 0 && (
-                    <>
-                      <span aria-hidden="true"> · </span>
-                      <span className="font-mono-numbers tabular-nums font-semibold text-slate-300">
-                        {halfWithheld} Half-Plot Laga Reebay
-                      </span>
-                    </>
-                  )}
-                  {exclPlotsCount > 0 && (
-                    <>
-                      <span aria-hidden="true"> · </span>
-                      <span className="font-mono-numbers tabular-nums font-bold text-rose-400">
-                        {exclPlotsCount} Plot Danguud Laga Reebay
-                      </span>
-                    </>
-                  )}
-                  <span aria-hidden="true"> · </span>
-                  <span>
-                    {linkedLandAllocation.zones.length} Zone (
-                    {linkedLandAllocation.zones.map((z) => z.zoneId).join(', ')})
-                  </span>
-                  <span aria-hidden="true"> · </span>
-                  <span
-                    className={
-                      linkedLandAllocation.hasZeroAdjacentBlockViolations
-                        ? 'text-emerald-300 font-semibold'
-                        : 'text-amber-400 font-semibold'
-                    }
-                  >
-                    {linkedLandAllocation.hasZeroAdjacentBlockViolations
-                      ? '0 Laba Block oo Is-xiga (Blocks kala fog)'
-                      : 'Dib-u-eeg Blocks is-xiga'}
-                  </span>
-                </div>
-                {linkedLandAllocation.approvedBy && linkedLandAllocation.approvalStatus === 'approved' && (
-                  <div className="text-[11px] text-[#94A3B8] shrink-0">
-                    Ansixiyey: <strong className="text-[#F8FAFC]">{linkedLandAllocation.approvedBy}</strong>
-                  </div>
-                )}
-              </div>
-
-              {(exclBlocks.length > 0 || exclPlots.length > 0) && (
-                <div className="rounded-xl border border-rose-500/30 bg-rose-950/35 px-3.5 py-2 text-[11px] text-rose-200 leading-relaxed">
-                  <strong className="font-bold text-rose-300">
-                    Laga Reebay Qaybinta Dhaxalka (Magacyo Gaar ah):{' '}
-                  </strong>
-                  {[
-                    ...exclBlocks.map(
-                      (eb) => `Block ${eb.blockId}: ${eb.specialName} (${eb.plotsCount} Plot)`
-                    ),
-                    ...exclPlots
-                      .filter((ep) => ep.excludedScope === 'plot')
-                      .map((ep) => `${ep.plotId}: ${ep.specialName}`),
-                  ].join(' · ')}
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
         {/* MOBILE VIEW (< md): INDIVIDUAL PERSON CARDS — NO HORIZONTAL SCROLLING */}
         <div className="md:hidden divide-y divide-[#243449]">
           {distribution.allIndividualHeirs.map((ind, idx) => {
             const heirColor =
               individualColorByKey[`${ind.heirGroupId}::${ind.personIndex}`] ||
               getDistinctHeirColor(idx);
-            const gisHeir = linkedLandAllocation?.heirAllocations.find(
-              (h) => h.heirGroupId === ind.heirGroupId && h.personIndex === ind.personIndex
-            );
-            const activeZones = gisHeir
-              ? Object.values(gisHeir.byZone).filter((zb) => zb.totalZonePlots > 0)
-              : [];
-            const encumberedWadiPlots = gisHeir
-              ? +(gisHeir.wadiBreakdown.cuts_through + gisHeir.wadiBreakdown.partial).toFixed(2)
-              : 0;
 
             return (
               <div key={`${ind.heirGroupId}-${ind.personIndex}-${idx}`} className="p-4 space-y-2.5">
@@ -1032,12 +700,10 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
 
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[#94A3B8] font-mono-numbers tabular-nums">
-                    {(distribution.totalLandPlots > 0 || linkedLandAllocation) && (
+                    {distribution.totalLandPlots > 0 && (
                       <span>
                         Dhul:{' '}
-                        <strong className="text-[#F8FAFC]">
-                          {getIndividualLandDisplay(ind)}
-                        </strong>
+                        <strong className="text-[#F8FAFC]">{ind.landDisplay}</strong>
                       </span>
                     )}
                     {distribution.totalMoneyUSD > 0 && (
@@ -1055,63 +721,6 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
                     {formatIndividualPrimaryTotal(ind)}
                   </div>
                 </div>
-
-                {gisHeir && (
-                  <div className="rounded-xl bg-[#0B1220] border border-[#243449] px-3 py-2.5 text-[11px] space-y-1">
-                    <div className="font-bold text-[#10B981] font-mono-numbers tabular-nums">
-                      Blocks: {gisHeir.assignedBlockIds.join(', ') || '—'} · {gisHeir.totalAreaSqM.toLocaleString()} m² (GIS)
-                      {gisHeir.verifiedAreaTotalSqM !== null
-                        ? ` · Xaqiijiyey: ${gisHeir.verifiedAreaTotalSqM.toLocaleString()} m²`
-                        : ''}
-                    </div>
-                    <div className={gisHeir.adjacentBlockPairs.length === 0 ? 'text-emerald-300 font-semibold' : 'text-amber-400 font-semibold'}>
-                      {gisHeir.adjacentBlockPairs.length === 0
-                        ? 'Blocks kala fog (Lama siin laba block oo is-xiga)'
-                        : `Digniin: Blocks is-xiga (${gisHeir.adjacentBlockPairs.map(([a, b]) => `${a}&${b}`).join(', ')})`}
-                    </div>
-                    {activeZones.length > 0 && (
-                      <div className="text-[#94A3B8] font-mono-numbers tabular-nums">
-                        <strong className="text-[#F8FAFC]">Zones:</strong>{' '}
-                        {activeZones
-                          .map(
-                            (zb) =>
-                              `${zb.zoneId}: ${formatPlotQtyCompact(zb.effectivePlotsInZone)} Plot (${zb.zonePercentageReceived.toFixed(1)}%)`
-                          )
-                          .join(' · ')}
-                      </div>
-                    )}
-                    {gisHeir.byTier.tier_1_prime.totalTierPlots > 0 && (
-                      <div className="text-[#94A3B8] font-mono-numbers tabular-nums">
-                        <strong className="text-[#F8FAFC]">H1 (Fiican):</strong>{' '}
-                        {formatPlotQtyCompact(gisHeir.byTier.tier_1_prime.effectiveTotalPlots)} Plot —{' '}
-                        {summarizePlotIdsCompact(gisHeir.byTier.tier_1_prime.assignedWholePlotIds, 3)}
-                      </div>
-                    )}
-                    {gisHeir.byTier.tier_2_standard.totalTierPlots > 0 && (
-                      <div className="text-[#94A3B8] font-mono-numbers tabular-nums">
-                        <strong className="text-[#F8FAFC]">H2 (Dhexe):</strong>{' '}
-                        {formatPlotQtyCompact(gisHeir.byTier.tier_2_standard.effectiveTotalPlots)} Plot —{' '}
-                        {summarizePlotIdsCompact(gisHeir.byTier.tier_2_standard.assignedWholePlotIds, 3)}
-                      </div>
-                    )}
-                    {gisHeir.byTier.tier_3_basic.totalTierPlots > 0 && (
-                      <div className="text-[#94A3B8] font-mono-numbers tabular-nums">
-                        <strong className="text-[#F8FAFC]">H3 (Hoose):</strong>{' '}
-                        {formatPlotQtyCompact(gisHeir.byTier.tier_3_basic.effectiveTotalPlots)} Plot —{' '}
-                        {summarizePlotIdsCompact(gisHeir.byTier.tier_3_basic.assignedWholePlotIds, 3)}
-                      </div>
-                    )}
-                    {(encumberedWadiPlots > 0 || gisHeir.verifiedValueTotalUSD !== null) && (
-                      <div className="text-[#94A3B8] font-mono-numbers tabular-nums pt-1 border-t border-[#243449]">
-                        {encumberedWadiPlots > 0 && <span>Doox mara: {encumberedWadiPlots} Plot</span>}
-                        {encumberedWadiPlots > 0 && gisHeir.verifiedValueTotalUSD !== null && <span> · </span>}
-                        {gisHeir.verifiedValueTotalUSD !== null && (
-                          <span>Qiime Xaqiijiyey: {formatMoney(gisHeir.verifiedValueTotalUSD)}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })}
@@ -1127,9 +736,6 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
                 <th className="py-3 px-3">Xiriirka</th>
                 <th className="py-3 px-3 text-center">Saamiga (%)</th>
                 <th className="py-3 px-3">Dhul (Plots)</th>
-                {linkedLandAllocation && (
-                  <th className="py-3 px-3 min-w-[290px]">Zones (A–D) · Blocks · Plot IDs (H1–H3)</th>
-                )}
                 <th className="py-3 px-3">Lacag</th>
                 <th className="py-3 px-3">Xoolo</th>
                 <th className="py-3 px-4 text-right">Waxa Uu Helay</th>
@@ -1140,12 +746,6 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
                 const heirColor =
                   individualColorByKey[`${ind.heirGroupId}::${ind.personIndex}`] ||
                   getDistinctHeirColor(idx);
-                const gisHeir = linkedLandAllocation?.heirAllocations.find(
-                  (h) => h.heirGroupId === ind.heirGroupId && h.personIndex === ind.personIndex
-                );
-                const activeZones = gisHeir
-                  ? Object.values(gisHeir.byZone).filter((zb) => zb.totalZonePlots > 0)
-                  : [];
 
                 return (
                   <tr
@@ -1166,7 +766,7 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
                         <span
                           style={{ backgroundColor: heirColor }}
                           className="w-3 h-3 rounded-xs shrink-0 border border-white/20"
-                          title={`Midabka khariidadda: ${heirColor}`}
+                          title={`Midabka dhaxlaha: ${heirColor}`}
                         />
                         <input
                           type="text"
@@ -1187,96 +787,8 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
                       {ind.individualPercentage.toFixed(2)}%
                     </td>
                     <td className="py-3 px-3 font-mono-numbers tabular-nums text-[#F8FAFC] font-semibold">
-                      {distribution.totalLandPlots > 0 || linkedLandAllocation
-                        ? getIndividualLandDisplay(ind)
-                        : '—'}
+                      {distribution.totalLandPlots > 0 ? ind.landDisplay : '—'}
                     </td>
-                    {linkedLandAllocation && (
-                      <td className="py-3 px-3 text-[11px] font-mono-numbers tabular-nums space-y-0.5">
-                        {gisHeir ? (
-                          <>
-                            <div className="font-bold text-[#10B981]">
-                              Blocks: {gisHeir.assignedBlockIds.join(', ') || '—'}
-                              <span className="text-[#94A3B8] font-normal"> · </span>
-                              <span
-                                className={
-                                  gisHeir.adjacentBlockPairs.length === 0
-                                    ? 'text-emerald-300 font-semibold'
-                                    : 'text-amber-400 font-semibold'
-                                }
-                              >
-                                {gisHeir.adjacentBlockPairs.length === 0
-                                  ? 'Kala fog'
-                                  : `Is-xiga (${gisHeir.adjacentBlockPairs.map(([a, b]) => `${a}&${b}`).join(',')})`}
-                              </span>
-                            </div>
-                            {activeZones.length > 0 && (
-                              <div className="text-[#94A3B8]">
-                                <strong className="text-[#F8FAFC]">Zones:</strong>{' '}
-                                {activeZones
-                                  .map(
-                                    (zb) =>
-                                      `${zb.zoneId}: ${formatPlotQtyCompact(zb.effectivePlotsInZone)} (${zb.zonePercentageReceived.toFixed(1)}%)`
-                                  )
-                                  .join(' · ')}
-                              </div>
-                            )}
-                            {gisHeir.byTier.tier_1_prime.totalTierPlots > 0 && (
-                              <div className="text-[#94A3B8]">
-                                <strong className="text-[#F8FAFC]">H1:</strong>{' '}
-                                {summarizePlotIdsCompact(
-                                  gisHeir.byTier.tier_1_prime.assignedWholePlotIds,
-                                  3
-                                )}
-                                {gisHeir.byTier.tier_1_prime.sharedPlotSlices.map((s) => (
-                                  <span key={s.plotId} className="text-amber-300">
-                                    {' '}
-                                    +{s.plotId}({s.percentageOfPlot}%)
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {gisHeir.byTier.tier_2_standard.totalTierPlots > 0 && (
-                              <div className="text-[#94A3B8]">
-                                <strong className="text-[#F8FAFC]">H2:</strong>{' '}
-                                {summarizePlotIdsCompact(
-                                  gisHeir.byTier.tier_2_standard.assignedWholePlotIds,
-                                  3
-                                )}
-                                {gisHeir.byTier.tier_2_standard.sharedPlotSlices.map((s) => (
-                                  <span key={s.plotId} className="text-amber-300">
-                                    {' '}
-                                    +{s.plotId}({s.percentageOfPlot}%)
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {gisHeir.byTier.tier_3_basic.totalTierPlots > 0 && (
-                              <div className="text-[#94A3B8]">
-                                <strong className="text-[#F8FAFC]">H3:</strong>{' '}
-                                {summarizePlotIdsCompact(
-                                  gisHeir.byTier.tier_3_basic.assignedWholePlotIds,
-                                  3
-                                )}
-                                {gisHeir.byTier.tier_3_basic.sharedPlotSlices.map((s) => (
-                                  <span key={s.plotId} className="text-amber-300">
-                                    {' '}
-                                    +{s.plotId}({s.percentageOfPlot}%)
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                            {gisHeir.verifiedValueTotalUSD !== null && (
-                              <div className="text-emerald-300">
-                                Qiime Xaqiijiyey: {formatMoney(gisHeir.verifiedValueTotalUSD)}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    )}
                     <td className="py-3 px-3 font-mono-numbers tabular-nums font-semibold text-[#F8FAFC]">
                       {distribution.totalMoneyUSD > 0 ? formatMoney(ind.moneyAmountUSD) : '—'}
                     </td>
@@ -1291,30 +803,6 @@ export const ApkResultsAndNamesView: React.FC<ApkResultsAndNamesViewProps> = ({
               })}
             </tbody>
           </table>
-        </div>
-
-        {/* Quick Link Footer to GIS Map Designer */}
-        <div className="px-5 py-3.5 bg-[#0B1220] border-t border-[#243449] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
-          <div className="flex items-center gap-2 text-[#94A3B8]">
-            <MapPin className="w-4 h-4 text-[#10B981] shrink-0" />
-            <span>
-              {linkedLandAllocation
-                ? `Khariidadda Beerta waa ku xidhan tahay (${linkedLandAllocation.totalFullPlots} Plot · ${linkedLandAllocation.zones.length} Zone · H1/H2/H3 si cadaalad ah loogu firdhiyey).`
-                : 'Ma doonaysaa inaad xuduudka beerta u qaybiso Blocks & Plots oo dhaxale kasta khariidad loogu calaamadiyo?'}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenLandDesigner}
-            className="min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] px-4 py-2 text-xs font-extrabold whitespace-nowrap shrink-0 cursor-pointer transition-colors"
-          >
-            <Grid className="w-3.5 h-3.5" />
-            <span>
-              {linkedLandAllocation
-                ? 'Ku Arag Khariidadda Blocks & Plots'
-                : 'Fur Naqshadeeyaha Blocks & Plots'}
-            </span>
-          </button>
         </div>
       </section>
 

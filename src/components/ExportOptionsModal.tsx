@@ -43,6 +43,7 @@ interface ExportOptionsModalProps {
   activeCaseMeta?: CaseExportMetadata;
   onClose: () => void;
   onExportLayoutPdf: () => void;
+  onOpenSimplePdfModal?: () => void;
   onOpenCartographicPdfModal?: (
     mode: 'layout11' | 'heerarka_report' | 'inheritance_map'
   ) => void;
@@ -62,6 +63,7 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
   activeCaseMeta,
   onClose,
   onExportLayoutPdf,
+  onOpenSimplePdfModal,
   onOpenCartographicPdfModal,
   onExportExcelWorkbook,
   onExportInheritanceCsv,
@@ -345,6 +347,33 @@ export const ExportOptionsModal: React.FC<ExportOptionsModalProps> = ({
             </div>
             <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
           </button>
+
+          {/* 1A-Simple. Simple PDF (Ilma Cige A4 Master + Per-Heir) */}
+          {hasGisPlots && fairAllocation && onOpenSimplePdfModal && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenSimplePdfModal();
+              }}
+              className="w-full min-h-[50px] rounded-xl bg-[#0F1B2D] hover:bg-[#15243B] border border-[#22C55E]/55 hover:border-[#22C55E] px-3 py-2 flex items-center justify-between gap-2.5 text-left transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-[#F8FAFC] truncate">
+                    Simple PDF — Qaabka Ilma Cige (A4)
+                  </div>
+                  <div className="text-[11px] text-[#94A3B8] truncate">
+                    Bogga Guud (A–H &amp; ≤90m dooxa) + Boggaga Dhaxlayaasha
+                  </div>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#94A3B8] shrink-0" />
+            </button>
+          )}
 
           {/* 1A-0. Export Khariidadda Muuqaalka Dhaxalka PDF */}
           {hasGisPlots && onOpenCartographicPdfModal && (

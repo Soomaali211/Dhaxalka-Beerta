@@ -386,6 +386,8 @@ export interface PlotDetailedMetadata {
   zoneOverride?: string;
   verifiedAreaSqM?: number | null;
   wadiStatus: WadiStatus;
+  wadiDistanceM?: number | null;
+  isWithinDooxa90m?: boolean;
   siteQuality: SiteQualityRating;
   surfaceCondition?: string;
   shapeAndLandUse?: string;
@@ -639,10 +641,14 @@ export interface PlotAssignmentRecord {
   allocationLifecycleStatus: 'approved' | 'pending_proposal' | 'available' | 'excluded';
   /** Reason a plot was intentionally left unassigned (e.g., withheld jajab remainder or half-plot) */
   unassignedReason?: 'withheld_jajab' | 'withheld_half_plot' | 'no_heirs';
+  /** True when plot is within the <=90m dooxa corridor (Heer 3 red ring indicator) */
+  isWithinDooxa90m?: boolean;
+  wadiDistanceM?: number | null;
   /** True when excluded from inheritance division */
   isExcluded?: boolean;
   excludedScope?: 'block' | 'plot';
   excludedSpecialName?: string;
+  excludedColorHex?: string;
   /** Present when sole_heir or manual_override */
   ownerHeirKey?: string;
   ownerPersonName?: string;
@@ -655,6 +661,7 @@ export interface PlotAssignmentRecord {
 export interface ExcludedBlockSummary {
   blockId: string;
   specialName: string;
+  colorHex?: string;
   zoneId: string;
   plotsCount: number;
   areaSqM: number;
@@ -666,6 +673,7 @@ export interface ExcludedPlotSummary {
   blockId: string;
   zoneId: string;
   specialName: string;
+  colorHex?: string;
   excludedScope: 'block' | 'plot';
   areaSqM: number;
   notes?: string;

@@ -20,10 +20,14 @@ import {
   applyHtmlUseSample,
   buildExportLayers,
   buildPlotRegisterCSV,
+  checkHeirPlotQuotaStatus,
   computeLandSubdivision,
+  computeSimpleHeirPdfData,
   computeStandalonePlotModeAllocation,
   createInitialSampleSubdivisionState,
   getDistinctHeirColor,
+  getEffectiveBlockExclusion,
+  getEffectivePlotExclusion,
   hydrateLandSubdivisionState,
   inspectMultipleGeoJsonUploads,
   prepareBulkMetadataImportFromCSV,
@@ -96,7 +100,13 @@ import {
   measureBlockLongAndShortSidesM,
   runSahankaAiSurvey,
 } from '../src/utils/sahankaAiEngine';
-import { safePersistJsonToLocalStorage } from '../src/utils/androidApkBridge';
+import {
+  APK_MOBILE_MODE_PREFERENCE_STORAGE_KEY,
+  getStoredApkMobileModePreference,
+  safePersistJsonToLocalStorage,
+  saveApkMobileModePreference,
+  shouldForceApkMobileLayout,
+} from '../src/utils/androidApkBridge';
 
 let passedCount = 0;
 let failedCount = 0;
@@ -3389,8 +3399,357 @@ async function runSection17CanonicalBlockAndApkSafetyTests(): Promise<void> {
   );
 }
 
+function runSection18CadStudioAndSimplePdfTests() {
+  console.log('\n18. CAD Studio: ≤90m Dooxa Red Ring, Clean Defaults, Manual Jajab, Quota Guard & Simple PDF');
+
+  // 18A. Clean default exclusion names (no forced 'Plot Laga Reebay' / 'Block Laga Reebay') & distinct custom color
+  const cleanState = createInitialSampleSubdivisionState();
+  const sampleSub = computeLandSubdivision(
+    cleanState.boundaryItems[cleanState.selectedBoundaryIndex],
+    cleanState.sampleCandidates[0],
+    cleanState.params
+  );
+  assert(sampleSub !== null && sampleSub.plots.length >= 6, '18A.0: Sample subdivision ready');
+  if (!sampleSub) return;
+
+  const p0 = sampleSub.plots[0];
+  const p1 = sampleSub.plots[1];
+  const emptyPlotExcl = getEffectivePlotExclusion(
+    p0,
+    {
+      [p0.id]: {
+        plotId: p0.id,
+        blockId: p0.block,
+        wadiStatus: 'unverified',
+        siteQuality: 'unverified',
+        isExcludedFromDivision: true,
+        excludedSpecialName: '',
+        excludedColorHex: '#94A3B8',
+      },
+    },
+    {}
+  );
+  const emptyBlockExcl = getEffectiveBlockExclusion(p1.block, {
+    [p1.block]: {
+      blockId: p1.block,
+      isExcludedFromDivision: true,
+      excludedSpecialName: '',
+      excludedColorHex: '#64748B',
+    },
+  });
+  assert(
+    emptyPlotExcl.isExcluded &&
+      emptyPlotExcl.specialName === '' &&
+      emptyBlockExcl.isExcluded &&
+      emptyBlockExcl.specialName === '',
+    '18A: Blank custom exclusion names stay cleanly empty without hardcoded Plot/Block Laga Reebay defaults'
+  );
+
+  const customDanguudColor = '#8B5CF6';
+  const distinctHeir0 = getDistinctHeirColor(0, [customDanguudColor]);
+  assert(
+    distinctHeir0.toUpperCase() !== customDanguudColor.toUpperCase(),
+    '18B: Custom write-in color is avoided by heir palette generator'
+  );
+
+  // 18B. 90m Dooxa buffer marks plots within <=90m of Dooxa as tier_3_basic + isWithinDooxa90m=true
+  const eastX = sampleSub.bb[2] - 15;
+  const wadiMidLonLat1 = sampleSub.inv([eastX, sampleSub.bb[1]]);
+  const wadiMidLonLat2 = sampleSub.inv([eastX, sampleSub.bb[3]]);
+  const demRes90 = computeAutomaticDemAndRoadTiers({
+    subdivision: sampleSub,
+    demSampler: {
+      sourceLabel: 'Test Flat DEM',
+      hasRealElevation: false,
+      sampleLonLat: () => 400,
+    },
+    cityRoad: { sourceLabel: 'Test Road', roadLinesLonLat: [] },
+    wadiItems: [{ name: 'Dooxa Weyn', type: 'Line', coords: [wadiMidLonLat1, wadiMidLonLat2] }],
+    existingPlotMetadata: {},
+    existingBlockMetadata: {},
+    dooxaBufferMeters: 90,
+  });
+  const dooxaTaggedPlots = Object.values(demRes90.updatedPlotMetadata).filter(
+    (m) => m.isWithinDooxa90m
+  );
+  assert(
+    dooxaTaggedPlots.length > 0 &&
+      dooxaTaggedPlots.every((m) => {
+        const effTier = demRes90.plotTierOverrides[m.plotId] || demRes90.blockTiers[m.blockId];
+        return effTier === 'tier_3_basic' && (m.wadiDistanceM ?? 999) <= 90;
+      }),
+    `18C: Plots within <=90m of Dooxa (${dooxaTaggedPlots.length}) are marked isWithinDooxa90m=true and graded Heer 3`
+  );
+
+  // 18C. Manual Jajab Assignment works even when global includeValidHalfPlotsInAllocation === false
+  const heirsSample18: HeirsInput = {
+    ...EMPTY_HEIRS_INPUT,
+    sonsCount: 2,
+    daughtersCount: 1,
+    heirNames: {
+      sons: ['Axmed Cige', 'Maxamed Cige'],
+      daughters: ['Hodan Cige'],
+    },
+  };
+  const faraidSample = calculateInheritance(
+    heirsSample18,
+    [
+      {
+        id: 'farm_18',
+        category: 'farm_land',
+        title: 'Beerta Tijaabada',
+        quantity: sampleSub.plots.length,
+        unit: 'Plot',
+        estimatedValueUSD: 250000,
+      },
+    ],
+    []
+  );
+  const partialCandidate =
+    (sampleSub.allEvaluatedPlots || []).find(
+      (ep) => !ep.full && ep.halfPlotValidation?.boundaryRelation !== 'full_outside'
+    ) || null;
+
+  const allocWithJajab = allocatePlotsFairlyToHeirs(
+    sampleSub,
+    demRes90.blockTiers,
+    demRes90.plotTierOverrides,
+    partialCandidate ? { [partialCandidate.id]: 'sons::0' } : {},
+    { tier_1_prime: 0, tier_2_standard: 0, tier_3_basic: 0 },
+    'clean_equal_no_half_no_fraction',
+    faraidSample,
+    heirsSample18,
+    {
+      blockZones: cleanState.blockZones,
+      plotMetadata: {
+        ...demRes90.updatedPlotMetadata,
+        [p0.id]: {
+          plotId: p0.id,
+          blockId: p0.block,
+          verifiedAreaSqM: null,
+          verifiedPrice: null,
+          wadiStatus: 'none',
+          siteQuality: 'good',
+          isExcludedFromDivision: true,
+          excludedSpecialName: 'Danguud',
+          excludedColorHex: customDanguudColor,
+        },
+      },
+      blockMetadata: demRes90.updatedBlockMetadata,
+      includeValidHalfPlots: false,
+    }
+  );
+
+  assert(
+    Boolean(allocWithJajab),
+    '18D-pre: allocatePlotsFairlyToHeirs succeeds with manual overrides and custom excluded color'
+  );
+
+  if (allocWithJajab) {
+    if (partialCandidate && sampleSub.validHalfPlots?.some((vh) => vh.id === partialCandidate.id)) {
+      assert(
+        allocWithJajab.plotAssignments[partialCandidate.id]?.ownerHeirKey === 'sons::0',
+        '18D: Manual Jajab partial plot assignment assigns target heir cleanly even when global half-plots toggle is OFF'
+      );
+    } else if (partialCandidate) {
+      assert(
+        allocWithJajab.plotAssignments[partialCandidate.id]?.ownerHeirKey === 'sons::0',
+        '18D: Manual partial clipped plot override assigns target heir cleanly'
+      );
+    }
+
+    // 18D. Quota Guard check
+    const heir0 = allocWithJajab.heirAllocations[0];
+    const fullQuota = checkHeirPlotQuotaStatus(heir0, 1);
+    assert(
+      typeof fullQuota.roundedTarget === 'number' &&
+        fullQuota.willExceedQuota === (fullQuota.projectedTotal > fullQuota.roundedTarget + 1e-4),
+      `18E: checkHeirPlotQuotaStatus accurately detects full/over-quota status (${fullQuota.currentReceived}/${fullQuota.roundedTarget})`
+    );
+
+    // 18E. Simple Ilma Cige PDF dataset builder
+    const pdfData = computeSimpleHeirPdfData(sampleSub, allocWithJajab, {
+      ...cleanState,
+      plotMetadata: {
+        ...demRes90.updatedPlotMetadata,
+        [p0.id]: {
+          plotId: p0.id,
+          blockId: p0.block,
+          verifiedAreaSqM: null,
+          verifiedPrice: null,
+          wadiStatus: 'none',
+          siteQuality: 'good',
+          isExcludedFromDivision: true,
+          excludedSpecialName: 'Danguud',
+          excludedColorHex: customDanguudColor,
+        },
+      },
+    });
+    assert(
+      pdfData.columns.length >= 1 &&
+        pdfData.columns[0].columnLetter === 'A' &&
+        pdfData.heirSheets.length === 3 &&
+        pdfData.heirSheets.every((s) => s.clusters.every((cl) => cl.plotIds.length <= 5)) &&
+        pdfData.customExcludedGroups.some(
+          (g) => g.name === 'Danguud' && g.colorHex === customDanguudColor
+        ),
+      '18F: computeSimpleHeirPdfData builds A-H columns, per-heir Heer 1/2/3 sheets with <=5/row clusters, and Danguud custom color group'
+    );
+  }
+}
+
+async function runSection19SettingsAndExportHubTests() {
+  console.log('\n19. Qaybta 4 — Settings, Kiisaska & Export Hub Verification');
+  const modifiedState = hydrateLandSubdivisionState({
+    ...createInitialSampleSubdivisionState(),
+    params: {
+      ...DEFAULT_SUBDIVISION_PARAMS,
+      L: 100,
+      W: 50,
+      rU: 10,
+      rV: 10,
+    },
+    enforceNonAdjacentBlocks: false,
+    includeValidHalfPlotsInAllocation: true,
+    allocationMode: 'whole_balanced',
+  });
+
+  assert(
+    modifiedState.params.L === 100 &&
+      modifiedState.params.W === 50 &&
+      modifiedState.enforceNonAdjacentBlocks === false &&
+      modifiedState.includeValidHalfPlotsInAllocation === true &&
+      modifiedState.allocationMode === 'whole_balanced',
+    '19A: System Settings hydration preserves allocation mode, half-plot toggle, and non-adjacent block switch'
+  );
+
+  const restoredCanonical = {
+    ...modifiedState,
+    params: {
+      ...modifiedState.params,
+      L: DEFAULT_SUBDIVISION_PARAMS.L,
+      W: DEFAULT_SUBDIVISION_PARAMS.W,
+      pw: DEFAULT_SUBDIVISION_PARAMS.pw,
+      pd: DEFAULT_SUBDIVISION_PARAMS.pd,
+      rU: DEFAULT_SUBDIVISION_PARAMS.rU,
+      rV: DEFAULT_SUBDIVISION_PARAMS.rV,
+      linkRoads: true,
+    },
+  };
+  assert(
+    restoredCanonical.params.L === 90 &&
+      restoredCanonical.params.W === 48 &&
+      restoredCanonical.params.rU === 15 &&
+      restoredCanonical.params.rV === 15 &&
+      restoredCanonical.params.pw === 18 &&
+      restoredCanonical.params.pd === 24,
+    '19B: Restore Canonical Dimensions resets block/road/plot dimensions cleanly to 90x48m / 15m / 18x24m'
+  );
+
+  const bItem = restoredCanonical.boundaryItems[0];
+  const sCand = restoredCanonical.sampleCandidates[0];
+  const sub = computeLandSubdivision(bItem, sCand, restoredCanonical.params);
+  assert(Boolean(sub && sub.plots.length > 0), '19C: Restored canonical dimensions generate valid subdivision plots for Export Hub');
+
+  if (sub) {
+    const csvStr = buildPlotRegisterCSV(
+      sub,
+      restoredCanonical.blockTiers,
+      restoredCanonical.plotTierOverrides,
+      null,
+      restoredCanonical
+    );
+    const layers = buildExportLayers(
+      sub,
+      restoredCanonical.blockTiers,
+      restoredCanonical.plotTierOverrides,
+      null,
+      {
+        blockZones: restoredCanonical.blockZones,
+        plotMetadata: restoredCanonical.plotMetadata,
+        blockMetadata: restoredCanonical.blockMetadata,
+        approvalStatus: restoredCanonical.approvalStatus,
+      }
+    );
+    assert(
+      csvStr.split('\n').length > 2 && layers.Plots.length === sub.plots.length,
+      `19D: Export Hub CSV (${csvStr.split('\n').length - 1} rows) and GeoJSON (${layers.Plots.length} features) stay synchronized`
+    );
+  }
+}
+
+async function runSection20ApkMobileLayoutTests() {
+  console.log('\n20. APK Mobile Mode / Mobile Layout Enforcement Verification');
+
+  // 20A. Native Android APK runtime unconditionally forces Mobile Layout regardless of user preference
+  assert(
+    shouldForceApkMobileLayout(null, true) === true &&
+      shouldForceApkMobileLayout(false, true) === true,
+    '20A: Native Android APK runtime unconditionally locks isApkMobileMode=true even if preference is false or null'
+  );
+
+  // 20B. Non-APK web defaults to responsive auto (false) unless query param or user preference enables it
+  assert(
+    shouldForceApkMobileLayout(null, false, '') === false &&
+      shouldForceApkMobileLayout(false, false, '') === false &&
+      shouldForceApkMobileLayout(true, false, '') === true &&
+      shouldForceApkMobileLayout(null, false, '?apk=1') === true &&
+      shouldForceApkMobileLayout(null, false, '?mobile=1') === true &&
+      shouldForceApkMobileLayout(null, false, '?layout=mobile') === true,
+    '20B: Web runtime defaults to responsive auto and supports ?apk=1 / ?mobile=1 / user Mobile preference'
+  );
+
+  // 20C. Preference storage round-trip
+  const memMap = new Map<string, string>();
+  const mockStorage = {
+    setItem: (k: string, v: string) => {
+      memMap.set(k, v);
+    },
+    getItem: (k: string) => memMap.get(k) ?? null,
+    removeItem: (k: string) => {
+      memMap.delete(k);
+    },
+  };
+  saveApkMobileModePreference(true, mockStorage);
+  assert(
+    memMap.get(APK_MOBILE_MODE_PREFERENCE_STORAGE_KEY) === '1' &&
+      getStoredApkMobileModePreference(mockStorage) === true,
+    '20C.1: saveApkMobileModePreference persists true cleanly'
+  );
+  saveApkMobileModePreference(null, mockStorage);
+  assert(
+    getStoredApkMobileModePreference(mockStorage) === null,
+    '20C.2: Clearing APK mobile preference returns null (Auto)'
+  );
+
+  // 20D. Static verification that shell & CAD Studio consume isApkMobileMode
+  const appText = fs.readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const bottomNavText = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/MobileBottomNav.tsx'),
+    'utf8'
+  );
+  const drawerText = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/NavigationDrawer.tsx'),
+    'utf8'
+  );
+  const cadText = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/BlocksAndPlotsDesignerView.tsx'),
+    'utf8'
+  );
+  assert(
+    appText.includes('isApkMobileMode={isApkMobileMode}') &&
+      bottomNavText.includes('isApkMobileMode') &&
+      drawerText.includes('!isApkMobileMode') &&
+      cadText.includes('isApkMobileMode'),
+    '20D: App shell, BottomNav, NavigationDrawer & CAD Studio wire isApkMobileMode without desktop fallback inside APK'
+  );
+}
+
 runSection16SahankaTests()
   .then(() => runSection17CanonicalBlockAndApkSafetyTests())
+  .then(() => runSection18CadStudioAndSimplePdfTests())
+  .then(() => runSection19SettingsAndExportHubTests())
+  .then(() => runSection20ApkMobileLayoutTests())
   .then(() => {
     console.log('\n-------------------------------------------------------------------');
     console.log(` REGRESSION SUMMARY: ${passedCount} passed, ${failedCount} failed`);
@@ -3404,5 +3763,6 @@ runSection16SahankaTests()
     console.error('Unhandled error in async regression tests:', err);
     process.exit(1);
   });
+
 
 

@@ -271,7 +271,7 @@ body {
   max-width: 100%;
 }
 
-/* Small Android screens: keep controls usable while preventing viewport spill. */
+/* Small Android screens & enforced APK Mobile Mode: keep controls usable while preventing viewport spill. */
 @media screen and (max-width: 640px) {
   .leaflet-control-container {
     max-width: 100%;
@@ -287,6 +287,24 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+html.apk-mobile-mode,
+html.apk-mobile-mode body {
+  overflow-x: clip;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+html.apk-mobile-mode .leaflet-control-container {
+  max-width: 100%;
+}
+
+html.apk-mobile-mode .leaflet-control-attribution {
+  max-width: calc(100vw - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @supports not (overflow: clip) {

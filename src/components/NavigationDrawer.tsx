@@ -42,6 +42,7 @@ interface NavigationDrawerProps {
   onOpenBackupRestoreModal: () => void;
   onOpenExportModal: () => void;
   onOpenWelcomeSplash?: () => void;
+  isApkMobileMode?: boolean;
 }
 
 const PRIMARY_DESTINATIONS: {
@@ -66,7 +67,7 @@ const PRIMARY_DESTINATIONS: {
   },
   {
     id: 'list_data',
-    label: 'Xogta, Kiisaska & Settings',
+    label: 'Xog, Kiisas & Settings',
     icon: TableProperties,
   },
 ];
@@ -93,6 +94,7 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
   onOpenBackupRestoreModal,
   onOpenExportModal,
   onOpenWelcomeSplash,
+  isApkMobileMode = false,
 }) => {
   const handleNavigate = (dest: PrimaryDestination) => {
     onSelectDestination(dest);
@@ -283,7 +285,11 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
             <span className="truncate">Soo saar &amp; PDF</span>
           </button>
 
-          <div className="md:hidden px-3.5 pt-2 flex items-center justify-between gap-2">
+          <div
+            className={`${
+              isApkMobileMode ? '' : 'md:hidden '
+            }px-3.5 pt-2 flex items-center justify-between gap-2`}
+          >
             <label htmlFor="drawer-currency-select" className="text-xs text-[#94A3B8]">
               Lacagta
             </label>
@@ -316,15 +322,17 @@ export const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
 
   return (
     <>
-      {/* Desktop Persistent Sidebar (lg+) */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-68 lg:shrink-0 border-r border-[#243449] sticky top-0 h-screen no-print">
-        {renderDrawerContent(false)}
-      </aside>
+      {/* Desktop Persistent Sidebar (lg+, disabled in APK Mobile Mode) */}
+      {!isApkMobileMode && (
+        <aside className="hidden lg:flex lg:flex-col lg:w-68 lg:shrink-0 border-r border-[#243449] sticky top-0 h-screen no-print">
+          {renderDrawerContent(false)}
+        </aside>
+      )}
 
-      {/* Mobile Slide-Over Drawer (< lg) */}
+      {/* Mobile Slide-Over Drawer (< lg or always active in APK Mobile Mode) */}
       {isOpen && (
         <div
-          className="lg:hidden fixed inset-0 z-50 flex no-print"
+          className={`${isApkMobileMode ? '' : 'lg:hidden '}fixed inset-0 z-50 flex no-print`}
           role="dialog"
           aria-modal="true"
           aria-label="Liiska Hagidda"

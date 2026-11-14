@@ -42,6 +42,7 @@ interface ExportHubViewProps {
   fairAllocation: FairLandAllocationResult | null;
   activeCaseMeta?: CaseExportMetadata;
   onExportLayoutPdf: () => void;
+  onOpenSimplePdfModal?: () => void;
   onOpenCartographicPdfModal: (
     mode: 'layout11' | 'heerarka_report' | 'inheritance_map'
   ) => void;
@@ -60,6 +61,7 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
   fairAllocation,
   activeCaseMeta,
   onExportLayoutPdf,
+  onOpenSimplePdfModal,
   onOpenCartographicPdfModal,
   onExportExcelWorkbook,
   onExportInheritanceCsv,
@@ -70,8 +72,8 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
   const [isExportingShp, setIsExportingShp] = useState<boolean>(false);
   const [copiedMode, setCopiedMode] = useState<'geojson' | 'csv' | null>(null);
   const [selectedExportType, setSelectedExportType] = useState<
-    'map_pdf' | 'heerarka_pdf' | 'excel' | 'geojson' | 'csv'
-  >('map_pdf');
+    'simple_pdf' | 'map_pdf' | 'heerarka_pdf' | 'excel' | 'geojson' | 'csv'
+  >('simple_pdf');
 
   const metrics = computeUnifiedFarmMetrics(subdivisionState, subdivisionResult);
   const hasGisPlots = metrics.hasMap && (metrics.fullPlotsCount > 0 || metrics.halfPlotsCount > 0);
@@ -318,11 +320,20 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
             value={selectedExportType}
             onChange={(e) =>
               setSelectedExportType(
-                e.target.value as 'map_pdf' | 'heerarka_pdf' | 'excel' | 'geojson' | 'csv'
+                e.target.value as
+                  | 'simple_pdf'
+                  | 'map_pdf'
+                  | 'heerarka_pdf'
+                  | 'excel'
+                  | 'geojson'
+                  | 'csv'
               )
             }
             className="flex-1 min-h-[48px] rounded-xl bg-[#0a1220] border border-[#223250] focus:border-[#22c55e] px-3.5 text-sm font-bold text-[#e8eef7] focus:outline-none cursor-pointer"
           >
+            {hasGisPlots && fairAllocation && onOpenSimplePdfModal && (
+              <option value="simple_pdf">Simple PDF — Qaybinta Dhaxalka (Ilma Cige)</option>
+            )}
             {hasGisPlots && (
               <option value="map_pdf">Khariidadda Muuqaalka (PDF)</option>
             )}
@@ -339,7 +350,14 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
           <button
             type="button"
             onClick={() => {
-              if (selectedExportType === 'map_pdf' && hasGisPlots) {
+              if (
+                selectedExportType === 'simple_pdf' &&
+                hasGisPlots &&
+                fairAllocation &&
+                onOpenSimplePdfModal
+              ) {
+                onOpenSimplePdfModal();
+              } else if (selectedExportType === 'map_pdf' && hasGisPlots) {
                 onOpenCartographicPdfModal('layout11');
               } else if (selectedExportType === 'heerarka_pdf' && hasGisPlots) {
                 onOpenCartographicPdfModal('heerarka_report');
@@ -363,16 +381,39 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
         <div className="flex items-center gap-2 px-1">
           <LayoutTemplate className="w-4 h-4 text-[#22c55e]" />
           <h3 className="text-xs font-extrabold uppercase tracking-wider text-[#a9b8d0]">
-            Naqshadda PDF &amp; Warbixinnada Rasmiga ah (QGIS Print Layout)
+            Naqshadda PDF &amp; Warbixinnada Rasmiga ah
           </h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          {hasGisPlots && fairAllocation && onOpenSimplePdfModal && (
+            <button
+              type="button"
+              onClick={onOpenSimplePdfModal}
+              className="w-full min-h-[72px] rounded-2xl bg-[#111b2e] hover:bg-[#16243d] border border-[#22c55e]/60 hover:border-[#22c55e] px-4 py-3.5 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="w-11 h-11 rounded-xl bg-[#22c55e]/15 border border-[#22c55e]/30 text-[#22c55e] flex items-center justify-center shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-[#e8eef7]">
+                    Simple PDF — Qaabka Ilma Cige (A4)
+                  </div>
+                  <div className="text-xs text-[#a9b8d0] line-clamp-2">
+                    Bogga Guud (A–H &amp; ≤90m dooxa) + Boggaga Gaarka ah ee Dhaxle Kasta
+                  </div>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-[#a9b8d0] shrink-0" />
+            </button>
+          )}
+
           {hasGisPlots && (
             <button
               type="button"
               onClick={() => onOpenCartographicPdfModal('inheritance_map')}
-              className="w-full min-h-[72px] rounded-2xl bg-[#111b2e] hover:bg-[#16243d] border border-[#22c55e]/50 hover:border-[#22c55e] px-4 py-3.5 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
+              className="w-full min-h-[72px] rounded-2xl bg-[#111b2e] hover:bg-[#16243d] border border-[#223250] hover:border-[#22c55e] px-4 py-3.5 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="w-11 h-11 rounded-xl bg-[#22c55e]/15 border border-[#22c55e]/30 text-[#22c55e] flex items-center justify-center shrink-0">
