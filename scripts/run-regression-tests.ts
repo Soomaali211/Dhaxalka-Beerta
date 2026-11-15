@@ -107,6 +107,28 @@ import {
   saveApkMobileModePreference,
   shouldForceApkMobileLayout,
 } from '../src/utils/androidApkBridge';
+import {
+  analyzeColorMapFromRgba,
+  expandColorGroupsToAssignmentDrafts,
+  mergeAiLegendLabelsIntoColorGroups,
+} from '../src/utils/pdfColorMapAnalyzer';
+import {
+  applyVerifiedPdfImportToSubdivisionState,
+  buildCadSpatialLayoutPromptSummary,
+  evaluateVectorExtractionCompleteness,
+  matchAssigneeNameToHeirOrSpecial,
+  matchPlotTokenToCadPlotId,
+  parseVectorPdfTokensToDrafts,
+} from '../src/utils/pdfInheritanceImportEngine';
+import {
+  FusedGpsState,
+  GpsFixSample,
+  applyDatumOffsetToLatLng,
+  computeDatumOffsetMetersBetweenPoints,
+  fuseGpsSample,
+  haversineMetersExact,
+  locatePointOnFarm,
+} from '../src/utils/precisionGpsEngine';
 
 let passedCount = 0;
 let failedCount = 0;
@@ -3745,11 +3767,316 @@ async function runSection20ApkMobileLayoutTests() {
   );
 }
 
+async function runSection21PdfImportOwnershipAndPrecisionGpsTests() {
+  console.log(
+    '\n21. Vector PDF / Scan Import Verification, Dashboard Ownership View & 90–100% Precision GPS Fusion'
+  );
+
+  // 21A. Precision GPS Fusion: outlier rejection, inverse-variance stationary convergence (>=92% confidence)
+  const baseTs = 1760000000000;
+  let gpsHistory: GpsFixSample[] = [];
+  let fusedGps: FusedGpsState | null = null;
+
+  const stationaryFixes: GpsFixSample[] = [
+    { lat: 9.56102, lng: 44.06501, accuracyM: 12, timestampMs: baseTs, provider: 'native_gnss' },
+    { lat: 9.56101, lng: 44.06503, accuracyM: 7, timestampMs: baseTs + 1500, provider: 'native_gnss' },
+    { lat: 9.561, lng: 44.06502, accuracyM: 5, timestampMs: baseTs + 3000, provider: 'native_gnss' },
+    { lat: 9.561005, lng: 44.065018, accuracyM: 4, timestampMs: baseTs + 4500, provider: 'native_gnss' },
+  ];
+  for (const fx of stationaryFixes) {
+    const res = fuseGpsSample(gpsHistory, fx, fusedGps, null);
+    gpsHistory = res.nextHistory;
+    fusedGps = res.fused;
+  }
+
+  assert(
+    fusedGps !== null &&
+      !fusedGps.isRejectedOutlier &&
+      fusedGps.confidencePct >= 92 &&
+      fusedGps.accuracyM <= 5 &&
+      fusedGps.sampleCountUsed === 4,
+    '21A.1: Inverse-variance GNSS fusion reaches >=92% confidence and <=5m stationary accuracy'
+  );
+
+  // Coarse 120m network jump outlier must be rejected once GNSS lock is active
+  const outlierStep = fuseGpsSample(
+    gpsHistory,
+    { lat: 9.565, lng: 44.07, accuracyM: 120, timestampMs: baseTs + 5500, provider: 'network_fallback' },
+    fusedGps,
+    null
+  );
+  assert(
+    outlierStep.fused.isRejectedOutlier === true &&
+      outlierStep.fused.lat === fusedGps?.lat &&
+      outlierStep.fused.lng === fusedGps?.lng,
+    '21A.2: fuseGpsSample rejects coarse >75m network outliers without corrupting locked GNSS position'
+  );
+
+  // Stale cached fix (>5s older) must be rejected
+  const staleStep = fuseGpsSample(
+    gpsHistory,
+    { lat: 9.569, lng: 44.069, accuracyM: 6, timestampMs: baseTs - 8000, provider: 'browser_gps' },
+    fusedGps,
+    null
+  );
+  assert(
+    staleStep.fused.isRejectedOutlier === true,
+    '21A.3: fuseGpsSample rejects stale cached timestamps'
+  );
+
+  // Datum offset round-trip calibration (sub-meter accuracy)
+  const rawLat = 9.561;
+  const rawLng = 44.065;
+  const targetLat = 9.561045;
+  const targetLng = 44.065055;
+  const offsetM = computeDatumOffsetMetersBetweenPoints(rawLat, rawLng, targetLat, targetLng);
+  const calibrated = applyDatumOffsetToLatLng(rawLat, rawLng, offsetM);
+  const residualErrorM = haversineMetersExact(calibrated.lat, calibrated.lng, targetLat, targetLng);
+  assert(
+    residualErrorM < 0.25,
+    '21A.4: Datum offset calibration snaps GPS coordinates cleanly within <0.25m of target corner'
+  );
+
+  // Farm/Plot containment check
+  const locateHit = locatePointOnFarm(
+    9.5605,
+    44.0655,
+    [
+      {
+        id: 'R01-C01-P01',
+        blockId: 'R01-C01',
+        ownerDisplay: 'Axmed Cali',
+        isExcluded: false,
+        latLngRing: [
+          [9.56, 44.065],
+          [9.56, 44.066],
+          [9.561, 44.066],
+          [9.561, 44.065],
+        ],
+        centerLatLng: [9.5605, 44.0655],
+      },
+    ],
+    [
+      [9.559, 44.064],
+      [9.559, 44.067],
+      [9.562, 44.067],
+      [9.562, 44.064],
+    ]
+  );
+  assert(
+    locateHit.matchedPlotId === 'R01-C01-P01' &&
+      locateHit.matchedOwnerLabel === 'Axmed Cali' &&
+      locateHit.distanceToNearestM === 0,
+    '21B: locatePointOnFarm identifies exact standing Plot ID and Owner immediately'
+  );
+
+  // 21C. Vector PDF / Scan Matching & 100% CAD Studio Override Persistence
+  const baseSubState = createInitialSampleSubdivisionState();
+  const sampleSub = computeLandSubdivision(
+    baseSubState.boundaryItems[baseSubState.selectedBoundaryIndex],
+    baseSubState.sampleCandidates[0],
+    baseSubState.params
+  );
+  assert(Boolean(sampleSub && sampleSub.plots.length >= 4), '21C.0: Sample CAD subdivision ready');
+  if (sampleSub) {
+    const pA = sampleSub.plots[0];
+    const pB = sampleSub.plots[1];
+    const pC = sampleSub.plots[2];
+    const heirsList = [
+      { heirKey: 'son_1', personName: 'Axmed Cali', roleTitleSomali: 'Wiil', colorHex: '#10B981' },
+      { heirKey: 'daughter_1', personName: 'Faadumo Xasan', roleTitleSomali: 'Gabadh', colorHex: '#3B82F6' },
+    ];
+
+    // Zero-padded vs unpadded plot ID fuzzy match
+    const strippedId = pA.id.replace(/([A-Z])0+(\d+)/g, '$1$2');
+    const matched = matchPlotTokenToCadPlotId(strippedId, sampleSub.plots);
+    const matchedSpecial = matchAssigneeNameToHeirOrSpecial('Danguud', heirsList);
+    assert(
+      matched.plotId === pA.id &&
+        matchedSpecial.assigneeType === 'excluded_custom' &&
+        matchedSpecial.assigneeName === 'Danguud',
+      '21C.1: matchPlotTokenToCadPlotId and matchAssigneeNameToHeirOrSpecial handle stripped IDs & Danguud'
+    );
+
+    const vectorText = `${pA.id} | Axmed\n${pB.id} | Faadumo Xasan\n${pC.id} | Danguud`;
+    const drafts = parseVectorPdfTokensToDrafts(vectorText, [], sampleSub.plots, heirsList);
+    assert(
+      drafts.length === 3 &&
+        drafts.some((d) => d.matchedPlotId === pA.id && d.matchedHeirKey === 'son_1') &&
+        drafts.some((d) => d.matchedPlotId === pB.id && d.matchedHeirKey === 'daughter_1') &&
+        drafts.some((d) => d.matchedPlotId === pC.id && d.assigneeType === 'excluded_custom'),
+      '21C.2: parseVectorPdfTokensToDrafts resolves table lines into verified CAD heirs + Danguud'
+    );
+
+    const applied = applyVerifiedPdfImportToSubdivisionState(
+      baseSubState,
+      drafts,
+      sampleSub,
+      heirsList,
+      'dhaxal_qaybsan_test.pdf',
+      { replaceExistingOverrides: true }
+    );
+    assert(
+      applied.appliedHeirPlotsCount === 2 &&
+        applied.appliedExcludedPlotsCount === 1 &&
+        applied.nextState.manualPlotHeirOverrides[pA.id] === 'son_1' &&
+        applied.nextState.manualPlotHeirOverrides[pB.id] === 'daughter_1' &&
+        applied.nextState.plotMetadata[pC.id]?.isExcludedFromDivision === true &&
+        applied.nextState.plotMetadata[pC.id]?.excludedSpecialName === 'Danguud',
+      '21C.3: applyVerifiedPdfImportToSubdivisionState commits 100% verified plot overrides & Danguud exclusions'
+    );
+    // 21C.4 Multi-column Y-bucket line must NEVER mash adjacent plots into a single combined name
+    const multiColLine = `${pA.id} Axmed Cali  |  ${pB.id} Faadumo Xasan  |  ${pC.id} Danguud`;
+    const multiColDrafts = parseVectorPdfTokensToDrafts(multiColLine, [], sampleSub.plots, heirsList);
+    assert(
+      multiColDrafts.length === 3 &&
+        multiColDrafts.some((d) => d.matchedPlotId === pA.id && d.matchedHeirKey === 'son_1' && !d.needsReview) &&
+        multiColDrafts.some((d) => d.matchedPlotId === pB.id && d.matchedHeirKey === 'daughter_1' && !d.needsReview) &&
+        multiColDrafts.some((d) => d.matchedPlotId === pC.id && d.assigneeType === 'excluded_custom'),
+      '21C.4: Multi-column horizontal line cleanly pairs each plot independently without clobbering'
+    );
+
+    // 21C.5 Per-Heir Section Heading Context (`Dhaxale: Faadumo Xasan` -> `Heer 1: <plot1>, <plot2>`)
+    const sectionHeadingDoc = `#2 Faadumo Xasan · Gabadh (25.00%)\nHeer 1: ${pA.id}, ${pB.id}\nHeer 2: ${pC.id}`;
+    const sectionDrafts = parseVectorPdfTokensToDrafts(sectionHeadingDoc, [], sampleSub.plots, heirsList);
+    assert(
+      sectionDrafts.length === 3 &&
+        sectionDrafts.every((d) => d.matchedHeirKey === 'daughter_1' && !d.needsReview),
+      '21C.5: Per-heir page/section heading context propagates cleanly to subsequent Plot ID lines'
+    );
+
+    // 21C.6 Block Heading Context + Short Plot Reference (`Block R1-C1` + `Plot 1` -> pA.id)
+    const blockCtxMatch = matchPlotTokenToCadPlotId(`Plot ${pA.no}`, sampleSub.plots, pA.block);
+    const blockHeadingDoc = `Block ${pA.block}\nPlot ${pA.no} | Axmed Cali`;
+    const blockDrafts = parseVectorPdfTokensToDrafts(blockHeadingDoc, [], sampleSub.plots, heirsList);
+    assert(
+      blockCtxMatch.plotId === pA.id &&
+        blockDrafts.length === 1 &&
+        blockDrafts[0].matchedPlotId === pA.id &&
+        blockDrafts[0].matchedHeirKey === 'son_1',
+      '21C.6: Block heading context resolves short "Plot N" labels cleanly to exact Block-Plot IDs'
+    );
+
+    // 21C.7 Spatial layout prompt summary & sparse Vector PDF AI fallback completeness detector
+    const spatialSummary = buildCadSpatialLayoutPromptSummary(sampleSub.plots);
+    const sparseComp = evaluateVectorExtractionCompleteness([], sampleSub.plots);
+    const populatedComp = evaluateVectorExtractionCompleteness(multiColDrafts, sampleSub.plots);
+    assert(
+      spatialSummary.includes(`Block ${pA.block}`) &&
+        sparseComp.shouldFallbackToAiVision === true &&
+        populatedComp.shouldFallbackToAiVision === false,
+      '21C.7: buildCadSpatialLayoutPromptSummary & evaluateVectorExtractionCompleteness operate cleanly'
+    );
+    // 21C.8 Offline RGBA Color-Plot Map Analyzer: Blocks, Plots, Per-Color Counts & Non-Heir Exclusion
+    {
+      const w = 240;
+      const h = 180;
+      const buf = new Uint8ClampedArray(w * h * 4);
+      // Fill paper white
+      buf.fill(255);
+      const fillRect = (x0: number, y0: number, rw: number, rh: number, rgb: [number, number, number]) => {
+        for (let y = y0; y < y0 + rh; y++) {
+          for (let x = x0; x < x0 + rw; x++) {
+            const idx = (y * w + x) * 4;
+            buf[idx] = rgb[0];
+            buf[idx + 1] = rgb[1];
+            buf[idx + 2] = rgb[2];
+            buf[idx + 3] = 255;
+          }
+        }
+      };
+      // Block 1 (top-left): 2 Maroon plots + 2 Yellow plots separated by 2px borders
+      fillRect(40, 25, 28, 22, [130, 20, 40]);
+      fillRect(70, 25, 28, 22, [130, 20, 40]);
+      fillRect(40, 49, 28, 22, [245, 205, 30]);
+      fillRect(70, 49, 28, 22, [245, 205, 30]);
+      // Block 2 (right across 24px road): 2 Green plots + 1 solid Black plot
+      fillRect(122, 25, 28, 22, [22, 163, 74]);
+      fillRect(152, 25, 28, 22, [22, 163, 74]);
+      fillRect(122, 49, 28, 22, [10, 10, 10]);
+
+      const colorRes = analyzeColorMapFromRgba(
+        { width: w, height: h, data: buf },
+        sampleSub.plots.slice(0, 7),
+        heirsList
+      );
+
+      const maroonGrp = colorRes.colorGroups.find((g) => g.rgb[0] > 100 && g.rgb[1] < 50);
+      const blackGrp = colorRes.colorGroups.find((g) => g.rgb[0] < 30 && g.rgb[1] < 30 && g.rgb[2] < 30);
+      const mergedGroups = mergeAiLegendLabelsIntoColorGroups(
+        colorRes.colorGroups,
+        [
+          { legendLabel: 'Axmed Cali', colorHex: maroonGrp?.hex, looksLikeNonHeir: false },
+          { legendLabel: 'Black', colorHex: blackGrp?.hex, looksLikeNonHeir: true },
+        ],
+        heirsList
+      );
+      const expandedDrafts = expandColorGroupsToAssignmentDrafts(mergedGroups, heirsList);
+
+      assert(
+        colorRes.detectedBlocksCount === 2 &&
+          colorRes.detectedPlotsCount === 7 &&
+          colorRes.colorGroups.length === 4 &&
+          maroonGrp?.detectedPlotCount === 2 &&
+          blackGrp?.detectedPlotCount === 1 &&
+          mergedGroups.some((g) => g.legendLabel === 'Axmed Cali' && g.matchedHeirKey === 'son_1') &&
+          mergedGroups.some((g) => g.legendLabel === 'Black' && g.role === 'excluded_non_heir') &&
+          expandedDrafts.length > 0,
+        `21C.8: analyzeColorMapFromRgba detects 2 Blocks, 7 Plots, 4 Colors (incl. Black), Legend merge & non-heir expansion`
+      );
+    }
+  }
+
+  // 21D. Static integration checks for Android GNSS bridge, Dashboard Ownership, PDF Import API contract & CAD Studio UI
+  const mainAct = fs.readFileSync(
+    path.resolve(process.cwd(), 'android/app/src/main/java/so/beerta/dhaxalka/gis/MainActivity.java'),
+    'utf8'
+  );
+  const dashText = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/InteractiveGisMapDashboard.tsx'),
+    'utf8'
+  );
+  const designerText = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/BlocksAndPlotsDesignerView.tsx'),
+    'utf8'
+  );
+  const pdfModalText = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/components/PdfScanInheritanceImportModal.tsx'),
+    'utf8'
+  );
+  const pdfExtractorText = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/utils/pdfBrowserExtractor.ts'),
+    'utf8'
+  );
+  const serverText = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
+  assert(
+    mainAct.includes('startNativePrecisionGps') &&
+      mainAct.includes('GPS_PROVIDER') &&
+      dashText.includes('Milkiyadda') &&
+      dashText.includes('fuseGpsSample') &&
+      designerText.includes('PdfScanInheritanceImportModal') &&
+      designerText.includes('setHighlightedHeirKey(null)') &&
+      pdfModalText.includes('vectorTextTokens') &&
+      pdfModalText.includes('validPlotIds') &&
+      pdfModalText.includes('activeHeirs') &&
+      pdfModalText.includes('cadSpatialSummary') &&
+      pdfModalText.includes('color_legend_summary') &&
+      pdfModalText.includes('Ma Aha Dhaxale') &&
+      pdfModalText.includes('accept=".pdf,application/pdf,application/x-pdf,application/octet-stream,*/*"') &&
+      pdfExtractorText.includes('isPdfMagicBytes') &&
+      pdfExtractorText.includes('enableMainThreadPdfWorkerFallback') &&
+      serverText.includes('cadSpatialSummary') &&
+      serverText.includes('color_legend_summary'),
+    '21D: Android GNSS bridge, Dashboard Milkiyadda/GPS fusion, Android-safe PDF picker, Color/Legend summary & worker fallback verified'
+  );
+}
+
 runSection16SahankaTests()
   .then(() => runSection17CanonicalBlockAndApkSafetyTests())
   .then(() => runSection18CadStudioAndSimplePdfTests())
   .then(() => runSection19SettingsAndExportHubTests())
   .then(() => runSection20ApkMobileLayoutTests())
+  .then(() => runSection21PdfImportOwnershipAndPrecisionGpsTests())
   .then(() => {
     console.log('\n-------------------------------------------------------------------');
     console.log(` REGRESSION SUMMARY: ${passedCount} passed, ${failedCount} failed`);

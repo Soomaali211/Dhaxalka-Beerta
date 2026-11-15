@@ -30,6 +30,7 @@
     "jszip": "^3.10.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
+    "pdfjs-dist": "^6.5.438",
     "proj4": "^2.22.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",

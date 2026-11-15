@@ -48,9 +48,9 @@ export default defineConfig(() => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          navigateFallbackDenylist: [/^\/api\//],
+          navigateFallbackDenylist: [/^\/api\//, /\/assets\/.*\.mjs$/i],
           maximumFileSizeToCacheInBytes: 15 * 1024 * 1024,
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json,geojson}'],
+          globPatterns: ['**/*.{js,mjs,css,html,ico,png,svg,woff,woff2,json,geojson}'],
           globIgnores: ['**/assets/aistudio/**'],
           runtimeCaching: [
             {
@@ -126,7 +126,7 @@ export default defineConfig(() => {
           ],
         },
         devOptions: {
-          enabled: true,
+          enabled: false,
           type: 'module',
           suppressWarnings: true,
         },

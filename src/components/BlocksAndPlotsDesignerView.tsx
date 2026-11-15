@@ -47,6 +47,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  FileUp,
   Grid,
   GripHorizontal,
   Layers,
@@ -73,6 +74,7 @@ import { alignAllBlocksToSampleBlock } from '../utils/nashqadWorkflowEngine';
 import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
 import { CadQuotaPermissionModal } from './CadQuotaPermissionModal';
 import { SimpleInheritancePdfModal } from './SimpleInheritancePdfModal';
+import { PdfScanInheritanceImportModal } from './PdfScanInheritanceImportModal';
 
 interface BlocksAndPlotsDesignerViewProps {
   subdivisionState: LandSubdivisionState;
@@ -146,6 +148,7 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
   const [multiSelectMode, setMultiSelectMode] = useState<boolean>(false);
   const [selectedBatchPlotIds, setSelectedBatchPlotIds] = useState<string[]>([]);
   const [showSimplePdfModal, setShowSimplePdfModal] = useState<boolean>(false);
+  const [showPdfImportModal, setShowPdfImportModal] = useState<boolean>(false);
 
   const [activeTierBrush, setActiveTierBrush] = useState<AssetQualityTier>('tier_1_prime');
   const [tierBrushScope, setTierBrushScope] = useState<'block' | 'plot' | 'freehand'>('plot');
@@ -1333,6 +1336,16 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                 <span>Ku Xidh &amp; Qaybi</span>
               </>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowPdfImportModal(true)}
+            className="min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-sky-500/45 bg-[#0F1B2D] hover:border-sky-400 px-3 py-1.5 text-xs font-extrabold text-sky-200 transition-colors whitespace-nowrap cursor-pointer"
+            title="Soo geli Vector PDF ama Scan dhaxal qaybsan oo waafaji CAD Studio"
+          >
+            <FileUp className="w-3.5 h-3.5 shrink-0 text-sky-400" />
+            <span>PDF / Scan</span>
           </button>
 
           {subdivisionResult && fairAllocation && (
@@ -3920,27 +3933,39 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                         </button>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !multiSelectMode;
-                          setMultiSelectMode(next);
-                          if (!next) setSelectedBatchPlotIds([]);
-                          if (interactionTool === 'inspect') {
-                            setInteractionTool(
-                              qaybiPaintMode === 'custom_name' ? 'mark_exclusion' : 'assign_heir'
-                            );
-                          }
-                        }}
-                        className={`min-h-[34px] px-3 py-1 rounded-xl border inline-flex items-center gap-1.5 font-extrabold cursor-pointer transition-colors ${
-                          multiSelectMode
-                            ? 'bg-sky-500 text-[#030712] border-sky-400'
-                            : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-sky-400'
-                        }`}
-                      >
-                        <CheckSquare className="w-3.5 h-3.5 shrink-0" />
-                        <span>Xulo Badan (Multi-Tap)</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowPdfImportModal(true)}
+                          className="min-h-[34px] px-2.5 py-1 rounded-xl border border-sky-500/45 bg-[#0F1B2D] hover:border-sky-400 text-sky-200 inline-flex items-center gap-1.5 font-extrabold cursor-pointer"
+                          title="Soo geli Vector PDF ama Scan"
+                        >
+                          <FileUp className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                          <span>Soo Geli PDF/Scan</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = !multiSelectMode;
+                            setMultiSelectMode(next);
+                            if (!next) setSelectedBatchPlotIds([]);
+                            if (interactionTool === 'inspect') {
+                              setInteractionTool(
+                                qaybiPaintMode === 'custom_name' ? 'mark_exclusion' : 'assign_heir'
+                              );
+                            }
+                          }}
+                          className={`min-h-[34px] px-3 py-1 rounded-xl border inline-flex items-center gap-1.5 font-extrabold cursor-pointer transition-colors ${
+                            multiSelectMode
+                              ? 'bg-sky-500 text-[#030712] border-sky-400'
+                              : 'bg-[#0F1B2D] text-[#CBD5E1] border-[#243449] hover:border-sky-400'
+                          }`}
+                        >
+                          <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                          <span>Xulo Badan (Multi-Tap)</span>
+                        </button>
+                      </div>
                     </div>
 
                     {qaybiPaintMode === 'heir' ? (
@@ -4236,7 +4261,15 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowPdfImportModal(true)}
+                        className="min-h-[44px] rounded-xl bg-[#0F1B2D] border border-sky-500/50 hover:border-sky-400 text-sky-200 font-extrabold inline-flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <FileUp className="w-4 h-4 text-sky-400" />
+                        <span>Soo Geli PDF / Scan</span>
+                      </button>
                       <button
                         type="button"
                         onClick={onSyncAndLinkToEstate}
@@ -4341,6 +4374,29 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
           subdivisionState={subdivisionState}
           fairAllocation={fairAllocation}
           activeCaseMeta={activeCaseMeta}
+        />
+      )}
+
+      {/* Vector PDF / Scan Inheritance Import & Manual Verification Modal */}
+      {showPdfImportModal && (
+        <PdfScanInheritanceImportModal
+          isOpen={showPdfImportModal}
+          onClose={() => setShowPdfImportModal(false)}
+          subdivisionResult={subdivisionResult}
+          subdivisionState={subdivisionState}
+          fairAllocation={fairAllocation}
+          isApkMobileMode={isApkMobileMode}
+          onApplyImportedState={(nextState, summary) => {
+            onUpdateSubdivisionState(() => nextState);
+            setMapColorMode('heirs');
+            setHighlightedHeirKey(null);
+            setCadHiddenHeirKeys({});
+            setShowHeirLabelsOnPlots(true);
+            onNotify(
+              'Waafajinta PDF / Scan Waa Guulaysatay',
+              `${summary.appliedHeirPlotsCount} plot dhaxale ah + ${summary.appliedExcludedPlotsCount} plot Danguud/Reeban ah ayaa 100% lagu xidhay CAD Studio (${summary.fileName}).`
+            );
+          }}
         />
       )}
     </div>

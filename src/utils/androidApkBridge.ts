@@ -1,3 +1,5 @@
+import type { GpsFixSample } from './precisionGpsEngine';
+
 interface BeertaAndroidBridgeInterface {
   printCurrentPage: (jobTitle: string, landscape: boolean, paperSize: string) => void;
   saveAndShareBase64File: (
@@ -6,6 +8,8 @@ interface BeertaAndroidBridgeInterface {
     base64Payload: string
   ) => void;
   requestLocationPermission?: () => boolean;
+  startNativePrecisionGps?: () => boolean;
+  stopNativePrecisionGps?: () => void;
 }
 
 interface CapacitorGlobalLike {
@@ -17,6 +21,32 @@ declare global {
   interface Window {
     BeertaAndroidBridge?: BeertaAndroidBridgeInterface;
     Capacitor?: CapacitorGlobalLike;
+    __onBeertaNativeGpsLocation?: (sample: GpsFixSample) => void;
+  }
+}
+
+export function startNativePrecisionGpsWatch(onFix: (sample: GpsFixSample) => void): boolean {
+  if (typeof window === 'undefined') return false;
+  window.__onBeertaNativeGpsLocation = onFix;
+  try {
+    if (typeof window.BeertaAndroidBridge?.startNativePrecisionGps === 'function') {
+      return Boolean(window.BeertaAndroidBridge.startNativePrecisionGps());
+    }
+  } catch {
+    // Fall back to standard browser Geolocation API
+  }
+  return false;
+}
+
+export function stopNativePrecisionGpsWatch(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.BeertaAndroidBridge?.stopNativePrecisionGps?.();
+  } catch {
+    // Ignore bridge stop errors
+  }
+  if (window.__onBeertaNativeGpsLocation) {
+    delete window.__onBeertaNativeGpsLocation;
   }
 }
 

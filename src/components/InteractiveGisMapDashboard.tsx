@@ -5,6 +5,7 @@ import {
   Check,
   CircleDot,
   Compass,
+  Crosshair,
   Eye,
   EyeOff,
   FileText,
@@ -23,6 +24,7 @@ import {
   Plus,
   Printer,
   PenTool,
+  RotateCcw,
   Route,
   Satellite,
   Search,
@@ -83,6 +85,21 @@ import {
 } from '../utils/nashqadWorkflowEngine';
 import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
 import { computeUnifiedFarmMetrics } from '../utils/unifiedMetrics';
+import {
+  FarmPlotLocateResult,
+  FusedGpsState,
+  GpsDatumOffsetMeters,
+  GpsFixSample,
+  LocatableFarmPlot,
+  applyDatumOffsetToLatLng,
+  computeDatumOffsetMetersBetweenPoints,
+  fuseGpsSample,
+  locatePointOnFarm,
+} from '../utils/precisionGpsEngine';
+import {
+  startNativePrecisionGpsWatch,
+  stopNativePrecisionGpsWatch,
+} from '../utils/androidApkBridge';
 
 export type BasemapMode =
   | 'google_satellite'
@@ -272,32 +289,6 @@ function makeSafeMultiLineTooltipEl(lines: string[]): HTMLElement {
   return wrap;
 }
 
-function isLatLngInsideRing(lat: number, lng: number, ringLatLng: [number, number][]): boolean {
-  if (ringLatLng.length < 3) return false;
-  let inside = false;
-  for (let i = 0, j = ringLatLng.length - 1; i < ringLatLng.length; j = i++) {
-    const yi = ringLatLng[i][0];
-    const xi = ringLatLng[i][1];
-    const yj = ringLatLng[j][0];
-    const xj = ringLatLng[j][1];
-    const intersect =
-      yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi + 1e-15) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
-}
-
-function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const R = 6371000;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 function makeSafeBlockBadgeEl(
   lines: string[],
   variant: 'heerarka' | 'dark' | 'purple'
@@ -322,12 +313,22 @@ function makeSafeBlockBadgeEl(
   return el;
 }
 
-function makeSafePlotBadgeEl(text: string, isPaper: boolean): HTMLElement {
+function makeSafePlotBadgeEl(text: string, isPaper: boolean, ownerShort?: string): HTMLElement {
   const el = document.createElement('div');
   el.className = isPaper
-    ? '-translate-x-1/2 -translate-y-1/2 text-[8.5px] font-bold text-slate-900 bg-white/80 px-1 rounded pointer-events-none whitespace-nowrap tabular-nums'
-    : '-translate-x-1/2 -translate-y-1/2 text-[8.5px] font-bold text-[#e8eef7] bg-[#060d18]/75 px-1 rounded pointer-events-none whitespace-nowrap tabular-nums';
-  el.textContent = text;
+    ? '-translate-x-1/2 -translate-y-1/2 text-[8.5px] leading-tight font-bold text-slate-900 bg-white/88 px-1 py-0.5 rounded pointer-events-none whitespace-nowrap tabular-nums text-center shadow-xs'
+    : '-translate-x-1/2 -translate-y-1/2 text-[8.5px] leading-tight font-bold text-[#f8fafc] bg-[#060d18]/82 border border-white/15 px-1 py-0.5 rounded pointer-events-none whitespace-nowrap tabular-nums text-center shadow-xs';
+  if (ownerShort) {
+    const idLine = document.createElement('div');
+    idLine.textContent = text;
+    const ownerLine = document.createElement('div');
+    ownerLine.className = isPaper ? 'text-[7.5px] font-extrabold text-emerald-800' : 'text-[7.5px] font-extrabold text-[#34d399]';
+    ownerLine.textContent = ownerShort;
+    el.appendChild(idLine);
+    el.appendChild(ownerLine);
+  } else {
+    el.textContent = text;
+  }
   return el;
 }
 
@@ -386,14 +387,19 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   }, []);
 
   const [cartoStyle, setCartoStyle] = useState<MapCartographicStyle>(() =>
-    subdivisionState.nashqadSummary
+    (fairAllocation?.heirAllocations.length || 0) > 0
+      ? 'inheritance'
+      : subdivisionState.nashqadSummary
       ? 'nashqad'
       : subdivisionResult?.isPrebuiltGeometry
       ? 'layout11'
-      : (fairAllocation?.heirAllocations.length || 0) > 0
-      ? 'inheritance'
       : 'heerarka'
   );
+  const userSelectedCartoStyleRef = useRef<boolean>(false);
+  const selectCartoStyleManually = useCallback((nextStyle: MapCartographicStyle) => {
+    userSelectedCartoStyleRef.current = true;
+    setCartoStyle(nextStyle);
+  }, []);
 
   const [showHybridLabels, setShowHybridLabelsState] = useState<boolean>(() => {
     try {
@@ -476,18 +482,48 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   const [hiddenExtraLayerIds, setHiddenExtraLayerIds] = useState<Record<string, boolean>>({});
   const [activeZoomLayer, setActiveZoomLayer] = useState<string>('all_visible');
 
-  // Real-time High-Accuracy GPS Current Location state & watch refs
+  // Real-time High-Accuracy GNSS Fusion state & watch refs
   const [isLocatingGps, setIsLocatingGps] = useState<boolean>(false);
+  const [showGpsCalibrationPanel, setShowGpsCalibrationPanel] = useState<boolean>(false);
+  const [gpsDatumOffset, setGpsDatumOffset] = useState<GpsDatumOffsetMeters>(() => {
+    try {
+      const saved = localStorage.getItem('beerta_gps_datum_offset_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved) as GpsDatumOffsetMeters;
+        if (Number.isFinite(parsed?.eastM) && Number.isFinite(parsed?.northM)) {
+          return parsed;
+        }
+      }
+    } catch {
+      // Ignore storage error
+    }
+    return { eastM: 0, northM: 0 };
+  });
   const [userGpsInfo, setUserGpsInfo] = useState<{
     lat: number;
     lng: number;
+    rawLat: number;
+    rawLng: number;
     accuracyM: number;
+    confidencePct: number;
+    qualityLabelSomali: string;
+    sampleCountUsed: number;
+    headingDeg: number | null;
+    provider: 'native_gnss' | 'browser_gps' | 'network_fallback';
     placeLabel: string;
     farmRelationLabel: string;
+    farmLocate: FarmPlotLocateResult | null;
   } | null>(null);
   const gpsWatchIdRef = useRef<number | null>(null);
   const gpsWatchTimerRef = useRef<number | null>(null);
   const gpsReverseAbortRef = useRef<AbortController | null>(null);
+  const gpsHistoryRef = useRef<GpsFixSample[]>([]);
+  const fusedGpsRef = useRef<FusedGpsState | null>(null);
+  const gpsDatumOffsetRef = useRef<GpsDatumOffsetMeters>(gpsDatumOffset);
+  gpsDatumOffsetRef.current = gpsDatumOffset;
+  const gpsReverseGeoDoneRef = useRef<boolean>(false);
+  const gpsHasFlownInitialRef = useRef<boolean>(false);
+  const gpsLastPlaceLabelRef = useRef<string>('Goobtaada Saxda ah (GPS)');
 
   // Unified Legends Checkboxes state (no duplicate legend boxes!)
   const [hiddenHeirKeys, setHiddenHeirKeys] = useState<Record<string, boolean>>({});
@@ -573,7 +609,13 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       lastAutoStyledSourceRef.current !== sig
     ) {
       lastAutoStyledSourceRef.current = sig;
-      if (subdivisionState.nashqadSummary) {
+      userSelectedCartoStyleRef.current = false;
+      if ((fairAllocation?.heirAllocations.length || 0) > 0) {
+        setCartoStyle('inheritance');
+        if (basemapMode === 'paper_pdf') {
+          setBasemapMode(isOnline ? 'google_satellite' : 'offline_vector');
+        }
+      } else if (subdivisionState.nashqadSummary) {
         setCartoStyle('nashqad');
         if (basemapMode === 'paper_pdf') {
           setBasemapMode(isOnline ? 'google_satellite' : 'offline_vector');
@@ -596,9 +638,21 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     subdivisionResult?.isPrebuiltGeometry,
     subdivisionState.prebuiltSubdivision?.sourceFileName,
     subdivisionState.nashqadSummary,
+    fairAllocation?.heirAllocations.length,
     basemapMode,
     isOnline,
   ]);
+
+  // Smart auto-switch to Ownership view (`inheritance`) when heirs become allocated, unless user chose another view manually
+  useEffect(() => {
+    if (
+      !userSelectedCartoStyleRef.current &&
+      (fairAllocation?.heirAllocations.length || 0) > 0 &&
+      cartoStyle !== 'inheritance'
+    ) {
+      setCartoStyle('inheritance');
+    }
+  }, [fairAllocation?.heirAllocations.length, cartoStyle]);
 
   useEffect(() => {
     if (!isOnline) {
@@ -1667,7 +1721,10 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             fillOpacity = isPaper ? 0.96 : 0.82;
           }
         } else {
-          fillOpacity = 0.58;
+          // Inheritance Ownership view (`Milkiyadda`) — rich high-contrast fill so heir ownership is unmistakable on Dashboard
+          fillOpacity = isPaper ? 0.88 : basemapMode === 'offline_vector' ? 0.82 : 0.76;
+          strokeColor = isPaper ? '#0F172A' : '#F8FAFC';
+          strokeWeight = item.isAssigned || item.isExcluded ? 1.15 : 0.8;
         }
 
         if (isMultiSelectedPlot) {
@@ -1736,16 +1793,30 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           }).addTo(overlayGroup);
         }
 
-        // E5: Zoom Level-of-Detail — show non-overlapping Plot numbers only at zoom >= 17.5
-        if (currentZoom >= 17.5 && item.centerLatLng) {
+        // E5: Zoom Level-of-Detail — show Plot ID (and Heir/Danguud owner short name in Milkiyadda view!)
+        const minLabelZoom = cartoStyle === 'inheritance' ? 16.8 : 17.5;
+        if (currentZoom >= minLabelZoom && item.centerLatLng) {
           const [pLat, pLon] = item.centerLatLng;
-          if (Number.isFinite(pLat) && Number.isFinite(pLon) && canPlaceBadgeAt(pLat, pLon, 28)) {
+          const showOwnerInBadge =
+            cartoStyle === 'inheritance' && (item.isAssigned || item.isExcluded) && currentZoom >= 17.2;
+          const badgeSpacingPx = showOwnerInBadge ? 44 : 28;
+          if (
+            Number.isFinite(pLat) &&
+            Number.isFinite(pLon) &&
+            canPlaceBadgeAt(pLat, pLon, badgeSpacingPx)
+          ) {
             const pTag = item.id.includes('-P')
               ? `P${item.id.split('-P')[1]}`
               : `P${String(item.plot.no || '').padStart(2, '0')}`;
+            const rawOwner = item.isExcluded
+              ? item.specialName || 'Reeban'
+              : item.ownerDisplay;
+            const ownerShort = showOwnerInBadge
+              ? rawOwner.split(' ').slice(0, 2).join(' ').slice(0, 14)
+              : undefined;
             const plotIcon = L.divIcon({
               className: 'gis-block-label-icon',
-              html: makeSafePlotBadgeEl(pTag, isPaper),
+              html: makeSafePlotBadgeEl(pTag, isPaper, ownerShort),
               iconSize: [0, 0],
             });
             L.marker([pLat, pLon], { icon: plotIcon, interactive: false }).addTo(overlayGroup);
@@ -2315,6 +2386,7 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
   ]);
 
   const clearGpsWatchers = useCallback(() => {
+    stopNativePrecisionGpsWatch();
     if (
       gpsWatchIdRef.current !== null &&
       typeof navigator !== 'undefined' &&
@@ -2589,43 +2661,175 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
     return computeLayerBoundsLatLngs(activeZoomLayer).labelSomali;
   }, [activeZoomLayer, computeLayerBoundsLatLngs, currentHasMap, subdivisionResult]);
 
-  const describeGpsRelationToFarm = useCallback(
-    (lat: number, lng: number): string => {
-      if (!currentHasMap || !subdivisionResult) return '';
-      for (const p of enrichedPlots) {
-        if (isLatLngInsideRing(lat, lng, p.latLngRing)) {
-          return `Gudaha Beerta · Plot ${p.id} (Block ${p.blockDisplayName})`;
-        }
+  const locatablePlotsForGps: LocatableFarmPlot[] = useMemo(() => {
+    return enrichedPlots.map((p) => ({
+      id: p.id,
+      blockId: p.blockDisplayName,
+      ownerDisplay: p.isExcluded ? p.specialName || 'Danguud / Reeban' : p.ownerDisplay,
+      isExcluded: p.isExcluded,
+      latLngRing: p.latLngRing,
+      centerLatLng: p.centerLatLng,
+    }));
+  }, [enrichedPlots]);
+
+  const farmBoundaryLatLngRing: [number, number][] = useMemo(() => {
+    if (!currentHasMap || !subdivisionResult) return [];
+    return toLatLngRing(subdivisionResult.bring, subdivisionResult.inv);
+  }, [currentHasMap, subdivisionResult]);
+
+  const locatableRef = useRef({
+    plots: locatablePlotsForGps,
+    boundary: farmBoundaryLatLngRing,
+  });
+  locatableRef.current = {
+    plots: locatablePlotsForGps,
+    boundary: farmBoundaryLatLngRing,
+  };
+
+  const renderPrecisionGpsLayer = useCallback(
+    (
+      fused: {
+        lat: number;
+        lng: number;
+        accuracyM: number;
+        confidencePct: number;
+        headingDeg: number | null;
+      },
+      placeText: string,
+      farmRelText: string,
+      shouldOpenTooltip: boolean
+    ) => {
+      const gpsGroup = userLocationMarkerRef.current;
+      if (!gpsGroup) return;
+      gpsGroup.clearLayers();
+
+      // 1. Metric GNSS Accuracy Ring
+      L.circle([fused.lat, fused.lng], {
+        radius: Math.max(3, fused.accuracyM),
+        color: '#38BDF8',
+        weight: 1.8,
+        opacity: 0.85,
+        fillColor: '#38BDF8',
+        fillOpacity: 0.14,
+        interactive: false,
+      }).addTo(gpsGroup);
+
+      // 2. Soft Pulsing Halo
+      L.circleMarker([fused.lat, fused.lng], {
+        radius: 13,
+        color: '#0EA5E9',
+        weight: 1.5,
+        fillColor: '#0EA5E9',
+        fillOpacity: 0.25,
+        interactive: false,
+      }).addTo(gpsGroup);
+
+      // 3. Heading Direction Vector Arrow when moving or bearing available
+      if (fused.headingDeg !== null && Number.isFinite(fused.headingDeg)) {
+        const rad = (fused.headingDeg * Math.PI) / 180;
+        const cosLat = Math.max(0.15, Math.cos((fused.lat * Math.PI) / 180));
+        const arrowM = Math.max(8, Math.min(22, fused.accuracyM * 1.4));
+        const tipLat = fused.lat + (Math.cos(rad) * arrowM) / 6378137 * (180 / Math.PI);
+        const tipLng = fused.lng + (Math.sin(rad) * arrowM) / (6378137 * cosLat) * (180 / Math.PI);
+        L.polyline(
+          [
+            [fused.lat, fused.lng],
+            [tipLat, tipLng],
+          ],
+          {
+            color: '#0284C7',
+            weight: 3,
+            opacity: 0.95,
+            interactive: false,
+          }
+        ).addTo(gpsGroup);
       }
-      const farmRing = toLatLngRing(subdivisionResult.bring, subdivisionResult.inv);
-      if (farmRing.length >= 3) {
-        if (isLatLngInsideRing(lat, lng, farmRing)) {
-          return 'Gudaha Xuduudka Beerta';
-        }
-        let sLat = 0;
-        let sLng = 0;
-        for (const [rLat, rLng] of farmRing) {
-          sLat += rLat;
-          sLng += rLng;
-        }
-        const distM = haversineMeters(
-          lat,
-          lng,
-          sLat / farmRing.length,
-          sLng / farmRing.length
-        );
-        return distM >= 1000
-          ? `${(distM / 1000).toFixed(2)} km u jirta beerta`
-          : `${Math.round(distM)} m u jirta beerta`;
+
+      // 4. Center Exact Pinpoint
+      const tooltipLines = [
+        `${placeText} · ${fused.confidencePct}% Hubaal (±${fused.accuracyM} m)`,
+        `Lat ${fused.lat.toFixed(6)}°, Lng ${fused.lng.toFixed(6)}°`,
+      ];
+      if (farmRelText) {
+        tooltipLines.push(farmRelText);
       }
-      return '';
+
+      const centerDot = L.circleMarker([fused.lat, fused.lng], {
+        radius: 7.5,
+        color: '#FFFFFF',
+        weight: 2.8,
+        fillColor: fused.confidencePct >= 90 ? '#10B981' : '#0284C7',
+        fillOpacity: 1,
+      })
+        .bindTooltip(makeSafeMultiLineTooltipEl(tooltipLines), {
+          direction: 'top',
+          offset: [0, -8],
+          className: 'gis-plot-tooltip',
+        })
+        .addTo(gpsGroup);
+
+      if (shouldOpenTooltip) {
+        centerDot.openTooltip();
+      }
     },
-    [currentHasMap, enrichedPlots, subdivisionResult]
+    []
+  );
+
+  const updateDatumOffsetAndRefreshGps = useCallback(
+    (nextOffset: GpsDatumOffsetMeters) => {
+      gpsDatumOffsetRef.current = nextOffset;
+      setGpsDatumOffset(nextOffset);
+      try {
+        localStorage.setItem('beerta_gps_datum_offset_v1', JSON.stringify(nextOffset));
+      } catch {
+        // Ignore storage error
+      }
+      const curFused = fusedGpsRef.current;
+      if (curFused) {
+        const shifted = applyDatumOffsetToLatLng(curFused.rawLat, curFused.rawLng, nextOffset);
+        const updatedFused: FusedGpsState = {
+          ...curFused,
+          lat: shifted.lat,
+          lng: shifted.lng,
+        };
+        fusedGpsRef.current = updatedFused;
+        const farmLocate = locatePointOnFarm(
+          shifted.lat,
+          shifted.lng,
+          locatableRef.current.plots,
+          locatableRef.current.boundary
+        );
+        const farmRel = farmLocate.summarySomali;
+        setUserGpsInfo((prev) =>
+          prev
+            ? {
+                ...prev,
+                lat: shifted.lat,
+                lng: shifted.lng,
+                farmRelationLabel: farmRel,
+                farmLocate,
+              }
+            : prev
+        );
+        renderPrecisionGpsLayer(
+          updatedFused,
+          gpsLastPlaceLabelRef.current,
+          farmRel,
+          false
+        );
+      }
+    },
+    [renderPrecisionGpsLayer]
   );
 
   const handleClearUserGps = useCallback(() => {
     clearGpsWatchers();
+    gpsHistoryRef.current = [];
+    fusedGpsRef.current = null;
+    gpsHasFlownInitialRef.current = false;
+    gpsReverseGeoDoneRef.current = false;
     setIsLocatingGps(false);
+    setShowGpsCalibrationPanel(false);
     setUserGpsInfo(null);
     userLocationMarkerRef.current?.clearLayers();
   }, [clearGpsWatchers]);
@@ -2640,7 +2844,18 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       return;
     }
 
+    // If precision GPS is already locked, tapping the button recenters right onto user location cleanly
+    if (userGpsInfo && gpsWatchIdRef.current !== null) {
+      map.flyTo([userGpsInfo.lat, userGpsInfo.lng], Math.max(currentZoom, 18), { duration: 0.65 });
+      return;
+    }
+
     clearGpsWatchers();
+    gpsHistoryRef.current = [];
+    fusedGpsRef.current = null;
+    gpsHasFlownInitialRef.current = false;
+    gpsReverseGeoDoneRef.current = false;
+    gpsLastPlaceLabelRef.current = 'Goobtaada Saxda ah (GPS)';
     setIsLocatingGps(true);
 
     // Switch out of blank white Paper PDF mode so real streets/satellite imagery of user's exact location appear
@@ -2649,77 +2864,15 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       setShowHybridLabels(true);
     }
 
-    let bestAccuracySeen = Infinity;
-    let lastPlaceLabel = 'Goobtaada Saxda ah (GPS)';
-    let hasFlownInitial = false;
-
-    const renderGpsMarkerAndTooltip = (
-      lat: number,
-      lng: number,
-      accuracyM: number,
-      placeText: string,
-      farmRelText: string,
-      shouldOpenTooltip: boolean
-    ): L.CircleMarker => {
-      gpsGroup.clearLayers();
-
-      // 1. Metric GPS accuracy circle
-      L.circle([lat, lng], {
-        radius: Math.max(4, accuracyM),
-        color: '#38BDF8',
-        weight: 1.5,
-        opacity: 0.75,
-        fillColor: '#38BDF8',
-        fillOpacity: 0.14,
-        interactive: false,
-      }).addTo(gpsGroup);
-
-      // 2. Soft outer halo
-      L.circleMarker([lat, lng], {
-        radius: 13,
-        color: '#0EA5E9',
-        weight: 1.5,
-        fillColor: '#0EA5E9',
-        fillOpacity: 0.25,
-        interactive: false,
-      }).addTo(gpsGroup);
-
-      // 3. Exact center GPS pinpoint
-      const tooltipLines = [
-        placeText,
-        `Lat ${lat.toFixed(6)}°, Lng ${lng.toFixed(6)}° (±${accuracyM} m)`,
-      ];
-      if (farmRelText) {
-        tooltipLines.push(farmRelText);
-      }
-
-      const centerDot = L.circleMarker([lat, lng], {
-        radius: 7,
-        color: '#FFFFFF',
-        weight: 2.6,
-        fillColor: '#0284C7',
-        fillOpacity: 1,
-      })
-        .bindTooltip(makeSafeMultiLineTooltipEl(tooltipLines), {
-          direction: 'top',
-          offset: [0, -8],
-          className: 'gis-plot-tooltip',
-        })
-        .addTo(gpsGroup);
-
-      if (shouldOpenTooltip) {
-        centerDot.openTooltip();
-      }
-      return centerDot;
-    };
-
     const reverseGeocodeExactPlace = async (
       lat: number,
       lng: number,
       accuracyM: number,
+      confidencePct: number,
       farmRelText: string
     ) => {
-      if (!isOnline) return;
+      if (!isOnline || gpsReverseGeoDoneRef.current) return;
+      gpsReverseGeoDoneRef.current = true;
       const controller = new AbortController();
       gpsReverseAbortRef.current = controller;
       const timer = window.setTimeout(() => controller.abort(), 6500);
@@ -2777,96 +2930,119 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             : '';
 
         if (resolvedLabel) {
-          lastPlaceLabel = resolvedLabel;
+          gpsLastPlaceLabelRef.current = resolvedLabel;
           setUserGpsInfo((prev) =>
             prev ? { ...prev, placeLabel: resolvedLabel } : prev
           );
-          renderGpsMarkerAndTooltip(
-            lat,
-            lng,
-            accuracyM,
+          renderPrecisionGpsLayer(
+            {
+              lat,
+              lng,
+              accuracyM,
+              confidencePct,
+              headingDeg: fusedGpsRef.current?.headingDeg ?? null,
+            },
             resolvedLabel,
             farmRelText,
-            true
-          );
-          onNotify(
-            'Goobtaada Saxda ah (GPS)',
-            `${resolvedLabel} — Lat ${lat.toFixed(5)}°, Lng ${lng.toFixed(5)}° (±${accuracyM} m)${
-              farmRelText ? ` · ${farmRelText}` : ''
-            }`
+            false
           );
         }
       } catch {
-        // Ignore network/abort errors; coordinates & map marker remain visible
+        // Ignore network/abort errors; GNSS coordinates & farm containment remain live
       } finally {
         window.clearTimeout(timer);
       }
     };
 
-    const applyGpsPosition = (pos: GeolocationPosition, isInitialFix: boolean) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const accuracyM = Math.max(3, Math.round(pos.coords.accuracy || 15));
-
-      if (!isInitialFix && accuracyM >= bestAccuracySeen) {
+    const ingestRawGpsSample = (sample: GpsFixSample) => {
+      const { nextHistory, fused } = fuseGpsSample(
+        gpsHistoryRef.current,
+        sample,
+        fusedGpsRef.current,
+        gpsDatumOffsetRef.current
+      );
+      if (fused.isRejectedOutlier) {
         return;
       }
-      bestAccuracySeen = accuracyM;
 
-      const farmRel = describeGpsRelationToFarm(lat, lng);
+      gpsHistoryRef.current = nextHistory;
+      fusedGpsRef.current = fused;
+
+      const farmLocate = locatePointOnFarm(
+        fused.lat,
+        fused.lng,
+        locatableRef.current.plots,
+        locatableRef.current.boundary
+      );
+      const farmRel = farmLocate.summarySomali;
+
       setIsLocatingGps(false);
       setUserGpsInfo({
-        lat,
-        lng,
-        accuracyM,
-        placeLabel: lastPlaceLabel,
+        lat: fused.lat,
+        lng: fused.lng,
+        rawLat: fused.rawLat,
+        rawLng: fused.rawLng,
+        accuracyM: fused.accuracyM,
+        confidencePct: fused.confidencePct,
+        qualityLabelSomali: fused.qualityLabelSomali,
+        sampleCountUsed: fused.sampleCountUsed,
+        headingDeg: fused.headingDeg,
+        provider: fused.provider,
+        placeLabel: gpsLastPlaceLabelRef.current,
         farmRelationLabel: farmRel,
+        farmLocate,
       });
 
-      renderGpsMarkerAndTooltip(
-        lat,
-        lng,
-        accuracyM,
-        lastPlaceLabel,
+      const isInitial = !gpsHasFlownInitialRef.current;
+      renderPrecisionGpsLayer(
+        fused,
+        gpsLastPlaceLabelRef.current,
         farmRel,
-        isInitialFix
+        isInitial
       );
 
-      if (!hasFlownInitial) {
-        hasFlownInitial = true;
-        const targetZoom = accuracyM <= 45 ? 18 : accuracyM <= 180 ? 17 : 16;
-        map.flyTo([lat, lng], targetZoom, { duration: 0.85 });
+      if (isInitial) {
+        gpsHasFlownInitialRef.current = true;
+        const targetZoom = fused.accuracyM <= 35 ? 18 : fused.accuracyM <= 160 ? 17 : 16;
+        map.flyTo([fused.lat, fused.lng], targetZoom, { duration: 0.85 });
 
         onNotify(
-          'Goobtaada GPS Waa La Helay',
-          `Lat ${lat.toFixed(6)}°, Lng ${lng.toFixed(6)}° (±${accuracyM} m)${
-            farmRel ? ` · ${farmRel}` : ''
-          }`
+          `GPS Sax ah (${fused.confidencePct}% · ±${fused.accuracyM} m)`,
+          `${farmRel || gpsLastPlaceLabelRef.current} — Lat ${fused.lat.toFixed(6)}°, Lng ${fused.lng.toFixed(6)}°`
         );
-        void reverseGeocodeExactPlace(lat, lng, accuracyM, farmRel);
-      } else {
-        map.panTo([lat, lng], { animate: true });
+        void reverseGeocodeExactPlace(
+          fused.lat,
+          fused.lng,
+          fused.accuracyM,
+          fused.confidencePct,
+          farmRel
+        );
       }
     };
 
     const handleGpsError = (err: GeolocationPositionError, usedHighAccuracy: boolean) => {
-      // If high-accuracy GPS timed out or was temporarily unavailable indoors, fallback to standard network/Wi-Fi location
       if (usedHighAccuracy && (err.code === 2 || err.code === 3)) {
         navigator.geolocation.getCurrentPosition(
           (posFallback) => {
-            applyGpsPosition(posFallback, true);
+            ingestRawGpsSample({
+              lat: posFallback.coords.latitude,
+              lng: posFallback.coords.longitude,
+              accuracyM: posFallback.coords.accuracy || 45,
+              altitudeM: posFallback.coords.altitude,
+              speedMps: posFallback.coords.speed,
+              headingDeg: posFallback.coords.heading,
+              timestampMs: posFallback.timestamp || Date.now(),
+              provider: 'network_fallback',
+            });
           },
           (err2) => {
-            setIsLocatingGps(false);
-            if (err2.code === 1) {
+            if (!fusedGpsRef.current) {
+              setIsLocatingGps(false);
               onNotify(
-                'GPS Lama Ogolaan',
-                'Fadlan browser-ka u oggolow Location/GPS si uu u muujiyo goobta saxda ah ee aad joogto.'
-              );
-            } else {
-              onNotify(
-                'Calaamadda GPS Waa Daciif',
-                'Goobta GPS hadda lama xaqiijin karin. Hubi in Location-ka qalabkaagu shidan yahay.'
+                err2.code === 1 ? 'GPS Lama Ogolaan' : 'Calaamadda GPS Waa Daciif',
+                err2.code === 1
+                  ? 'Fadlan browser-ka u oggolow Location/GPS si uu u muujiyo goobta saxda ah ee aad joogto.'
+                  : 'Goobta GPS hadda lama xaqiijin karin. Hubi in Location-ka qalabkaagu shidan yahay.'
               );
             }
           },
@@ -2875,47 +3051,56 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
         return;
       }
 
-      setIsLocatingGps(false);
-      if (err.code === 1) {
+      if (!fusedGpsRef.current) {
+        setIsLocatingGps(false);
         onNotify(
-          'GPS Lama Ogolaan',
-          'Fadlan browser-ka u oggolow Location/GPS si uu u muujiyo goobta saxda ah ee aad joogto.'
-        );
-      } else {
-        onNotify(
-          'Calaamadda GPS Waa Daciif',
-          'Goobta GPS hadda lama xaqiijin karin. Hubi in Location-ka qalabkaagu shidan yahay.'
+          err.code === 1 ? 'GPS Lama Ogolaan' : 'Calaamadda GPS Waa Daciif',
+          err.code === 1
+            ? 'Fadlan browser-ka u oggolow Location/GPS si uu u muujiyo goobta saxda ah ee aad joogto.'
+            : 'Goobta GPS hadda lama xaqiijin karin. Hubi in Location-ka qalabkaagu shidan yahay.'
         );
       }
     };
 
+    // 1. Start Native Android GNSS Hardware LocationManager Stream (when running inside APK)
+    startNativePrecisionGpsWatch((nativeSample) => {
+      ingestRawGpsSample(nativeSample);
+    });
+
+    // 2. Start Continuous Web High-Accuracy GPS Watch + Immediate Single Kick-Off
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        applyGpsPosition(pos, true);
-
-        // Refine GPS accuracy for up to 10s if initial fix was coarser than 18m
-        if ((pos.coords.accuracy || 999) > 18) {
-          gpsWatchIdRef.current = navigator.geolocation.watchPosition(
-            (refinedPos) => {
-              applyGpsPosition(refinedPos, false);
-              if ((refinedPos.coords.accuracy || 999) <= 12) {
-                clearGpsWatchers();
-              }
-            },
-            () => {
-              // Keep initial fix if refinement watch errors
-            },
-            { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-          );
-          gpsWatchTimerRef.current = window.setTimeout(() => {
-            if (gpsWatchIdRef.current !== null && 'geolocation' in navigator) {
-              navigator.geolocation.clearWatch(gpsWatchIdRef.current);
-              gpsWatchIdRef.current = null;
-            }
-          }, 10000);
-        }
+        ingestRawGpsSample({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracyM: pos.coords.accuracy || 15,
+          altitudeM: pos.coords.altitude,
+          speedMps: pos.coords.speed,
+          headingDeg: pos.coords.heading,
+          timestampMs: pos.timestamp || Date.now(),
+          provider: 'browser_gps',
+        });
       },
       (err) => handleGpsError(err, true),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 }
+    );
+
+    gpsWatchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        ingestRawGpsSample({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracyM: pos.coords.accuracy || 15,
+          altitudeM: pos.coords.altitude,
+          speedMps: pos.coords.speed,
+          headingDeg: pos.coords.heading,
+          timestampMs: pos.timestamp || Date.now(),
+          provider: 'browser_gps',
+        });
+      },
+      () => {
+        // Keep streaming silently if a single watch tick drops indoors
+      },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
   };
@@ -3467,20 +3652,55 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             </button>
           )}
 
-          {userGpsInfo && (
-            <div className="inline-flex items-center gap-1.5 rounded-xl bg-[#0a1220]/90 backdrop-blur-md border border-sky-400/50 px-2.5 py-1 text-sky-200 font-semibold shadow-lg text-[11px]">
-              <LocateFixed className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="block min-w-0 max-w-[min(160px,36vw)] truncate">
-                <strong className="text-[#e8eef7]">{userGpsInfo.placeLabel}</strong>
-              </span>
+          {/* 1-Tap Dashboard Ownership / Tiers / Plan Switcher */}
+          {currentHasMap && (
+            <div className="inline-flex items-center rounded-xl bg-[#0a1220]/92 backdrop-blur-md border border-[#223250] p-0.5 shadow-lg text-[11px] font-extrabold shrink-0">
               <button
                 type="button"
-                onClick={handleClearUserGps}
-                aria-label="Xidh calaamadda GPS"
-                className="ml-0.5 rounded hover:bg-sky-400/20 p-0.5 text-sky-300 hover:text-white cursor-pointer"
+                onClick={() => selectCartoStyleManually('inheritance')}
+                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                  cartoStyle === 'inheritance'
+                    ? 'bg-[#22c55e] text-[#060d18]'
+                    : 'text-[#cbd5e1] hover:text-white'
+                }`}
               >
-                <X className="w-3 h-3" />
+                Milkiyadda
               </button>
+              <button
+                type="button"
+                onClick={() => selectCartoStyleManually('heerarka')}
+                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                  cartoStyle === 'heerarka'
+                    ? 'bg-[#22c55e] text-[#060d18]'
+                    : 'text-[#cbd5e1] hover:text-white'
+                }`}
+              >
+                Heerarka
+              </button>
+              <button
+                type="button"
+                onClick={() => selectCartoStyleManually('nashqad')}
+                className={`px-2 py-1 rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                  cartoStyle === 'nashqad'
+                    ? 'bg-[#22c55e] text-[#060d18]'
+                    : 'text-[#cbd5e1] hover:text-white'
+                }`}
+              >
+                Nashqad
+              </button>
+              {subdivisionResult?.isPrebuiltGeometry && (
+                <button
+                  type="button"
+                  onClick={() => selectCartoStyleManually('layout11')}
+                  className={`hidden sm:inline-block px-2 py-1 rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
+                    cartoStyle === 'layout11'
+                      ? 'bg-[#22c55e] text-[#060d18]'
+                      : 'text-[#cbd5e1] hover:text-white'
+                  }`}
+                >
+                  PDF
+                </button>
+              )}
             </div>
           )}
 
@@ -3823,26 +4043,6 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           </button>
 
           {/* 2. FURAHA (Icon-Only Legends) */}
-          <button
-            type="button"
-            onClick={() =>
-              setOpenRightPanel((prev) => (prev === 'legends' ? null : 'legends'))
-            }
-            aria-expanded={openRightPanel === 'legends'}
-            aria-label="Furaha Sumadaha Khariidadda"
-            title="Furaha Sumadaha Khariidadda"
-            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl border shadow-md flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
-              openRightPanel === 'legends'
-                ? 'bg-[#22c55e] border-[#22c55e] text-[#060d18]'
-                : isPaperMode
-                ? 'bg-white/95 border-slate-300 text-slate-900 hover:border-emerald-600'
-                : 'bg-[#0a1220]/92 hover:bg-[#111b2e] border-[#223250] text-[#e8eef7] hover:border-[#22c55e]'
-            }`}
-          >
-            <Users className="w-4 h-4 shrink-0" />
-          </button>
-
-          {/* 3. FURAHA (Icon-Only Legends) */}
           <button
             type="button"
             onClick={() =>
@@ -4963,12 +5163,13 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                       <div className="max-h-[210px] overflow-y-auto pr-0.5 space-y-1">
                         {activeLegendConfig.items.map((it) => {
                           const isChecked = !activeLegendConfig.hiddenMap[it.key];
+                          const isHeirKey = cartoStyle === 'inheritance' && !it.key.startsWith('__');
                           return (
-                            <label
+                            <div
                               key={it.key}
-                              className="w-full flex items-center justify-between gap-2 font-semibold rounded-md px-1 py-0.5 cursor-pointer select-none hover:bg-current/5"
+                              className="w-full flex items-center justify-between gap-1.5 font-semibold rounded-md px-1 py-0.5 select-none hover:bg-current/5"
                             >
-                              <span className="inline-flex items-center gap-2 min-w-0">
+                              <label className="inline-flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
@@ -5003,11 +5204,38 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                                 >
                                   {it.label}
                                 </span>
-                              </span>
-                              <span className="text-[10.5px] opacity-75 tabular-nums shrink-0">
-                                {it.count}
-                              </span>
-                            </label>
+                              </label>
+                              <div className="inline-flex items-center gap-1 shrink-0">
+                                {isHeirKey && it.count > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const matchingPts: [number, number][] = [];
+                                      enrichedPlots
+                                        .filter((p) => p.heirLegendKeys.includes(it.key))
+                                        .forEach((p) => p.latLngRing.forEach((pt) => matchingPts.push(pt)));
+                                      if (matchingPts.length >= 2 && leafletMapRef.current) {
+                                        const b = L.latLngBounds(matchingPts);
+                                        if (b.isValid()) {
+                                          leafletMapRef.current.flyToBounds(b, {
+                                            padding: [42, 42],
+                                            maxZoom: 18,
+                                            duration: 0.6,
+                                          });
+                                        }
+                                      }
+                                    }}
+                                    title={`U duul plots-ka ${it.label}`}
+                                    className="p-0.5 rounded opacity-75 hover:opacity-100 hover:text-[#22C55E] cursor-pointer"
+                                  >
+                                    <Crosshair className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <span className="text-[10.5px] opacity-75 tabular-nums">
+                                  {it.count}
+                                </span>
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
@@ -5021,8 +5249,167 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
           )}
         </div>
 
-        {/* BOTTOM-LEFT: NORTH ARROW + DYNAMIC METRIC SCALE BAR + COMPACT SELECTED PLOT PREVIEW */}
+        {/* BOTTOM-LEFT: LIVE PRECISION GPS HUD + NORTH ARROW + METRIC SCALE BAR + COMPACT SELECTED PLOT PREVIEW */}
         <div className="absolute bottom-3 left-3 z-20 flex flex-col items-start gap-2 pointer-events-none">
+          {userGpsInfo && (
+            <div className="pointer-events-auto w-[min(290px,calc(100vw-4.5rem))] rounded-xl border border-sky-400/55 bg-[#0B1220]/95 backdrop-blur-md p-2.5 text-[#F8FAFC] shadow-2xl space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      userGpsInfo.confidencePct >= 90
+                        ? 'bg-[#10B981] animate-pulse'
+                        : 'bg-sky-400 animate-pulse'
+                    }`}
+                  />
+                  <span
+                    className={`font-extrabold truncate ${
+                      userGpsInfo.confidencePct >= 90 ? 'text-[#10B981]' : 'text-sky-300'
+                    }`}
+                  >
+                    {userGpsInfo.confidencePct}% Hubaal · ±{userGpsInfo.accuracyM}m
+                  </span>
+                  <span className="text-[10px] text-[#94A3B8] shrink-0">
+                    ({userGpsInfo.provider === 'native_gnss' ? 'GNSS' : 'GPS'} · {userGpsInfo.sampleCountUsed}×)
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowGpsCalibrationPanel((v) => !v)}
+                    title="Fadhiisi / Hagaaji Datum-ka GPS"
+                    className={`p-1 rounded-lg border text-[10px] font-bold cursor-pointer ${
+                      showGpsCalibrationPanel ||
+                      Math.abs(gpsDatumOffset.eastM) >= 0.2 ||
+                      Math.abs(gpsDatumOffset.northM) >= 0.2
+                        ? 'border-amber-400/60 bg-amber-500/15 text-amber-200'
+                        : 'border-[#243449] bg-[#0F1B2D] text-[#94A3B8] hover:text-white'
+                    }`}
+                  >
+                    <Crosshair className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearUserGps}
+                    aria-label="Xidh GPS HUD"
+                    className="p-1 rounded-lg border border-[#243449] bg-[#0F1B2D] text-[#94A3B8] hover:text-white cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-[#0F1B2D] border border-[#243449] px-2 py-1.5 space-y-0.5">
+                <div className="font-extrabold text-[#F8FAFC] truncate">
+                  {userGpsInfo.farmLocate?.matchedPlotId
+                    ? `Plot ${userGpsInfo.farmLocate.matchedPlotId} (${userGpsInfo.farmLocate.matchedBlockId})`
+                    : userGpsInfo.farmRelationLabel || userGpsInfo.placeLabel}
+                </div>
+                {userGpsInfo.farmLocate?.matchedPlotId && (
+                  <div className="text-[10.5px] font-bold text-[#10B981] truncate">
+                    Mulkiilaha: {userGpsInfo.farmLocate.matchedOwnerLabel}
+                  </div>
+                )}
+                <div className="text-[10px] font-mono text-[#94A3B8] tabular-nums truncate">
+                  {userGpsInfo.lat.toFixed(6)}°, {userGpsInfo.lng.toFixed(6)}° · {userGpsInfo.placeLabel}
+                </div>
+              </div>
+
+              {showGpsCalibrationPanel && (
+                <div className="rounded-lg bg-[#07101E] border border-amber-500/40 p-2 space-y-1.5 text-[10.5px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-amber-200">
+                      Fadhiisi Meesha (Datum Offset)
+                    </span>
+                    <span className="font-mono text-[#94A3B8] tabular-nums">
+                      E:{gpsDatumOffset.eastM > 0 ? `+${gpsDatumOffset.eastM}` : gpsDatumOffset.eastM}m · N:{gpsDatumOffset.northM > 0 ? `+${gpsDatumOffset.northM}` : gpsDatumOffset.northM}m
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateDatumOffsetAndRefreshGps({
+                          ...gpsDatumOffset,
+                          northM: +(gpsDatumOffset.northM + 1).toFixed(1),
+                        })
+                      }
+                      className="min-h-[28px] rounded bg-[#0F1B2D] border border-[#243449] font-bold hover:border-amber-400 cursor-pointer"
+                    >
+                      +1m N
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateDatumOffsetAndRefreshGps({
+                          ...gpsDatumOffset,
+                          northM: +(gpsDatumOffset.northM - 1).toFixed(1),
+                        })
+                      }
+                      className="min-h-[28px] rounded bg-[#0F1B2D] border border-[#243449] font-bold hover:border-amber-400 cursor-pointer"
+                    >
+                      -1m S
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateDatumOffsetAndRefreshGps({
+                          ...gpsDatumOffset,
+                          eastM: +(gpsDatumOffset.eastM + 1).toFixed(1),
+                        })
+                      }
+                      className="min-h-[28px] rounded bg-[#0F1B2D] border border-[#243449] font-bold hover:border-amber-400 cursor-pointer"
+                    >
+                      +1m E
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateDatumOffsetAndRefreshGps({
+                          ...gpsDatumOffset,
+                          eastM: +(gpsDatumOffset.eastM - 1).toFixed(1),
+                        })
+                      }
+                      className="min-h-[28px] rounded bg-[#0F1B2D] border border-[#243449] font-bold hover:border-amber-400 cursor-pointer"
+                    >
+                      -1m W
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateDatumOffsetAndRefreshGps({ eastM: 0, northM: 0 })}
+                      className="min-h-[28px] rounded bg-rose-950/40 border border-rose-500/40 font-bold text-rose-200 flex items-center justify-center cursor-pointer"
+                      title="Eber ka dhig Datum Offset"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {activeSelectedPlot && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextOff = computeDatumOffsetMetersBetweenPoints(
+                          userGpsInfo.rawLat,
+                          userGpsInfo.rawLng,
+                          activeSelectedPlot.centerLatLng[0],
+                          activeSelectedPlot.centerLatLng[1]
+                        );
+                        updateDatumOffsetAndRefreshGps(nextOff);
+                        onNotify(
+                          'GPS Waa La Fadhiisiyey',
+                          `Goobtaada waxaa lagu cabbiray bartamaha ${activeSelectedPlot.id} (E:${nextOff.eastM}m, N:${nextOff.northM}m).`
+                        );
+                      }}
+                      className="w-full min-h-[30px] rounded bg-amber-500 text-[#030712] font-extrabold cursor-pointer"
+                    >
+                      Ku Fadhiisi {activeSelectedPlot.id}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {currentHasMap && activeSelectedPlot && !isPlotSheetOpen && (
             <button
               type="button"
