@@ -4,6 +4,8 @@ import {
   Check,
   Compass,
   Lock,
+  Maximize2,
+  Navigation,
   SlidersHorizontal,
   X,
 } from 'lucide-react';
@@ -16,6 +18,8 @@ interface SampleBlockAxisControlCardProps {
   onDismiss?: () => void;
   isPaperMode?: boolean;
   compactBanner?: boolean;
+  onOpenManualDraw?: () => void;
+  onOpenGpsTracking?: () => void;
 }
 
 function wrapDeg180(val: number): number {
@@ -29,6 +33,8 @@ export const SampleBlockAxisControlCard: React.FC<SampleBlockAxisControlCardProp
   onDismiss,
   isPaperMode = false,
   compactBanner = false,
+  onOpenManualDraw,
+  onOpenGpsTracking,
 }) => {
   // Default manual bearing target to Ballaca ('width') whenever Dherer is already aligned or Ballac has mismatch
   const defaultTargetAxis: 'width' | 'length' =
@@ -408,6 +414,40 @@ export const SampleBlockAxisControlCard: React.FC<SampleBlockAxisControlCardProp
               className="w-3.5 h-3.5 rounded accent-[#22C55E] cursor-pointer shrink-0"
             />
           </label>
+        </div>
+      )}
+
+      {/* Manual Draw & GPS Tracking Options for Block Tusaale */}
+      {(onOpenManualDraw || onOpenGpsTracking) && (
+        <div className="grid grid-cols-2 gap-1.5">
+          {onOpenManualDraw && (
+            <button
+              type="button"
+              onClick={onOpenManualDraw}
+              className={`min-h-[28px] rounded-lg border px-2 py-1 text-[10px] font-extrabold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer ${
+                isPaperMode
+                  ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                  : 'bg-[#0F1B2D] border-[#243449] text-[#E2E8F0] hover:border-emerald-500'
+              }`}
+            >
+              <Maximize2 className="w-3 h-3 shrink-0 text-[#22C55E]" />
+              <span>Sawir Gacanta</span>
+            </button>
+          )}
+          {onOpenGpsTracking && (
+            <button
+              type="button"
+              onClick={onOpenGpsTracking}
+              className={`min-h-[28px] rounded-lg border px-2 py-1 text-[10px] font-extrabold inline-flex items-center justify-center gap-1 transition-colors cursor-pointer ${
+                isPaperMode
+                  ? 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200'
+                  : 'bg-[#0F1B2D] border-[#243449] text-[#E2E8F0] hover:border-sky-400'
+              }`}
+            >
+              <Navigation className="w-3 h-3 shrink-0 text-sky-400" />
+              <span>GPS Tracking</span>
+            </button>
+          )}
         </div>
       )}
 

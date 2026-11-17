@@ -79,6 +79,7 @@ import {
 } from '../utils/pdfCartographyEngine';
 import { CartographicPdfDocMode } from './FarmCartographicPdfModal';
 import { NashqadFabAndModals, NashqadSummaryCard } from './NashqadFabAndModals';
+import { MapMeasurementManager, SavedMeasurement } from './MapMeasurementManager';
 import {
   SampleBlockAxisAlignOptions,
   alignAllBlocksToSampleBlock,
@@ -395,6 +396,25 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
       ? 'layout11'
       : 'heerarka'
   );
+
+  const [savedMeasurements, setSavedMeasurements] = useState<SavedMeasurement[]>(() => {
+    try {
+      const stored = localStorage.getItem('beeraha_saved_measurements');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return [];
+  });
+
+  const handleSaveMeasurement = useCallback((m: SavedMeasurement) => {
+    setSavedMeasurements((prev) => {
+      const next = [m, ...prev];
+      try {
+        localStorage.setItem('beeraha_saved_measurements', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    onNotify('Cabbirka Waa La Keydiyey', `Waxaa la keydiyey ${m.title} (${m.areaSqM ? `${m.areaSqM} m²` : m.distanceM ? `${m.distanceM} m` : 'Point'})`);
+  }, [onNotify]);
   const userSelectedCartoStyleRef = useRef<boolean>(false);
   const selectCartoStyleManually = useCallback((nextStyle: MapCartographicStyle) => {
     userSelectedCartoStyleRef.current = true;
@@ -3941,6 +3961,8 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                 }}
                 isPaperMode={isPaperMode}
                 compactBanner
+                onOpenManualDraw={() => onNotify('Sawir Gacanta (Manual Draw)', 'Riix badhanka cabbirka ee geeska hoose si aad gacanta ugu sawirto xuduudaha block-ka.')}
+                onOpenGpsTracking={() => onNotify('GPS Tracking', 'Riix badhanka cabbirka ee geeska hoose si aad u bilowdo GPS tracking bannaanka.')}
               />
             </div>
           )}
@@ -4421,6 +4443,8 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
                         alignment={activeSampleAlignment}
                         onAlign={handleAlignToSampleBlock}
                         isPaperMode={isPaperMode}
+                        onOpenManualDraw={() => onNotify('Sawir Gacanta (Manual Draw)', 'Riix badhanka cabbirka ee geeska hoose si aad gacanta ugu sawirto xuduudaha block-ka.')}
+                        onOpenGpsTracking={() => onNotify('GPS Tracking', 'Riix badhanka cabbirka ee geeska hoose si aad u bilowdo GPS tracking bannaanka.')}
                       />
                     </div>
                   )}
@@ -5617,6 +5641,13 @@ export const InteractiveGisMapDashboard: React.FC<InteractiveGisMapDashboardProp
             isNashqadReportOpen ||
             hasExternalOverlayOpen
         )}
+      />
+
+      <MapMeasurementManager
+        mapInstance={leafletMapRef.current}
+        isPaperMode={isPaperMode}
+        onNotify={onNotify}
+        onSaveMeasurement={handleSaveMeasurement}
       />
     </div>
   );
