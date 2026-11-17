@@ -107,9 +107,12 @@ import {
   saveApkMobileModePreference,
   shouldForceApkMobileLayout,
 } from '../src/utils/androidApkBridge';
+import * as pdfjsLegacy from 'pdfjs-dist/legacy/build/pdf.mjs';
 import {
   analyzeColorMapFromRgba,
+  analyzeColorMapFromVectorGeometry,
   expandColorGroupsToAssignmentDrafts,
+  extractVectorMapGeometryFromOperatorList,
   mergeAiLegendLabelsIntoColorGroups,
 } from '../src/utils/pdfColorMapAnalyzer';
 import {
@@ -4024,6 +4027,64 @@ async function runSection21PdfImportOwnershipAndPrecisionGpsTests() {
           expandedDrafts.length > 0,
         `21C.8: analyzeColorMapFromRgba detects 2 Blocks, 7 Plots, 4 Colors (incl. Black), Legend merge & non-heir expansion`
       );
+    }
+
+    // 21C.9 Real-World Vector GIS PDF Test (`Automatic_Layoutdhaxal11_4e554d66.pdf`)
+    {
+      const realPdfPath = path.resolve(
+        process.cwd(),
+        'public/assets/aistudio/Automatic_Layoutdhaxal11_4e554d66.pdf'
+      );
+      assert(fs.existsSync(realPdfPath), '21C.9.0: Real vector QGIS PDF fixture exists on disk');
+      if (fs.existsSync(realPdfPath)) {
+        const pdfBytes = new Uint8Array(fs.readFileSync(realPdfPath));
+        const pdfDoc = await pdfjsLegacy.getDocument({ data: pdfBytes }).promise;
+        const page = await pdfDoc.getPage(1);
+        const vp = page.getViewport({ scale: 1 });
+        const opList = await page.getOperatorList();
+        const vecGeom = extractVectorMapGeometryFromOperatorList(opList, vp, pdfjsLegacy.OPS);
+
+        const nineHeirs = Array.from({ length: 9 }, (_, i) => ({
+          heirKey: `heir_${i + 1}`,
+          personName:
+            [
+              'Shamis',
+              'Xassan Cige',
+              'Cabdi Cige',
+              'Wiil 1',
+              'Wiil 2',
+              'Gabadh 1',
+              'Gabadh 2',
+              'Gabadh 3',
+              'Gabadh 4',
+            ][i] || `Dhaxale ${i + 1}`,
+          roleTitleSomali: 'Dhaxale',
+          colorHex: '#10B981',
+        }));
+
+        const vecRes = analyzeColorMapFromVectorGeometry(vecGeom, sampleSub.plots, nineHeirs);
+        const countByHex = (hex: string) =>
+          vecRes.colorGroups.find((g) => g.hex.toUpperCase() === hex.toUpperCase())?.detectedPlotCount || 0;
+        const activeNonWhiteColors = vecRes.colorGroups.filter((g) => g.role !== 'ignore');
+
+        assert(
+          vecRes.detectedBlocksCount >= 55 &&
+            vecRes.detectedPlotsCount >= 550 &&
+            countByHex('#95243F') === 49 &&
+            countByHex('#FFE800') === 46 &&
+            countByHex('#A6CEE3') === 46 &&
+            countByHex('#004FFF') === 46 &&
+            countByHex('#13BA36') === 46 &&
+            countByHex('#FF9B2D') === 46 &&
+            countByHex('#9100F2') === 46 &&
+            countByHex('#FFA8CF') === 46 &&
+            countByHex('#000000') === 23 &&
+            countByHex('#B9B9B9') >= 148 &&
+            countByHex('#969696') === 10 &&
+            activeNonWhiteColors.length > nineHeirs.length,
+          `21C.9: Real QGIS PDF extracts ${vecRes.detectedBlocksCount} Blocks, ${vecRes.detectedPlotsCount} Plots, exact 9-color shares (49/46x7/23) + gray extra colors (${activeNonWhiteColors.length} > ${nineHeirs.length} heirs)`
+        );
+      }
     }
   }
 

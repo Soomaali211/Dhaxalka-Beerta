@@ -120,63 +120,88 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-5 text-[#F8FAFC]">
-      {/* 1. HERO EXECUTIVE ACTION BANNER */}
-      <section className="rounded-2xl bg-[#0F1B2D] border border-[#243449] p-5 sm:p-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+      {/* 1. HERO EXECUTIVE ACTION BANNER & 4 PROMINENT QUICK ACTIONS (MD3 & Soft UI) */}
+      <section className="rounded-3xl bg-gradient-to-br from-[#0F1B2D] via-[#0B1220] to-[#07101E] border border-[#243449] p-5 sm:p-7 shadow-xl space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-2xl">
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-[#94A3B8] font-mono tabular-nums">
-              <span className="font-semibold text-[#10B981]">
-                {activeCase ? activeCase.referenceNumber : 'GIS DHAXALKA'}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span>
-                {activeCase
-                  ? activeCase.hasMapGeometry
-                    ? 'Khariidad GIS ku xidhan'
-                    : 'Bilaa khariidad'
-                  : 'Xisaabinta Faraa’idka & GIS'}
-              </span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#10B981]/15 border border-[#10B981]/30 text-xs font-mono tabular-nums text-[#10B981]">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{activeCase ? activeCase.referenceNumber : 'Android Professional Land Management'}</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[#F8FAFC]">
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#F8FAFC]">
               {activeCase
                 ? activeCase.caseName
                 : heirsInput.deceasedName
                 ? `Kiiska Hadda Furan: ${heirsInput.deceasedName}`
-                : 'Dulmarka Xisaabinta & Qaybinta Dhaxalka'}
+                : 'Dashboard-ka Maamulka Beeraleyda & Faraa’idka'}
             </h2>
             <p className="text-xs sm:text-sm text-[#94A3B8] leading-relaxed">
-              Si sugan u hubi saamiyada Faraa&apos;idka, Half Plots-ka xuduuddu goysay (12×18 m
-              iyo 9×24 m), iyo qoondaynta dhulka ee kiis kasta.
+              Maamul hantida beerta, cabirrada gis-ka, half plots-ka xuduuddu goysay, iyo saamiyada sharciga ah hal meel oo sugan.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => onNavigateTab('land_designer')}
-              className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#030712] px-4 py-2.5 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer"
-            >
-              <Map className="w-4 h-4 shrink-0" />
-              <span>Fur Khariidadda GIS</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('calculator')}
-              className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#0B1220] hover:bg-[#16263f] border border-[#243449] hover:border-[#10B981]/60 text-[#F8FAFC] px-4 py-2.5 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer"
-            >
-              <Calculator className="w-4 h-4 text-[#10B981] shrink-0" />
-              <span>Xisaabi Dhaxalka</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onNavigateTab('cases')}
-              className="min-h-[44px] inline-flex items-center gap-2 rounded-xl bg-[#0B1220] hover:bg-[#16263f] border border-[#243449] text-[#F8FAFC] px-4 py-2.5 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-[#10B981] shrink-0" />
-              <span>Liiska Xogta</span>
-            </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <PWAInstallButton variant="header" />
           </div>
+        </div>
+
+        {/* 4 PROMINENT QUICK ACTIONS: GIS Map, CAD Designer, Faraa'id Calculator, Export Center */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => onNavigateTab('land_designer')}
+            className="group rounded-2xl bg-[#0F1B2D] hover:bg-[#16263f] border border-[#243449] hover:border-[#10B981] p-4 text-left transition-all shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between"
+          >
+            <div className="w-10 h-10 rounded-xl bg-[#10B981]/15 border border-[#10B981]/30 text-[#10B981] flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Map className="w-5 h-5" />
+            </div>
+            <div className="mt-3">
+              <div className="text-xs font-extrabold text-[#F8FAFC]">GIS Map</div>
+              <div className="text-[10px] text-[#94A3B8] mt-0.5">Khariidadda & GPS</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('land_designer')}
+            className="group rounded-2xl bg-[#0F1B2D] hover:bg-[#16263f] border border-[#243449] hover:border-amber-400 p-4 text-left transition-all shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between"
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-400/15 border border-amber-400/30 text-amber-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Scale className="w-5 h-5" />
+            </div>
+            <div className="mt-3">
+              <div className="text-xs font-extrabold text-[#F8FAFC]">CAD Designer</div>
+              <div className="text-[10px] text-[#94A3B8] mt-0.5">Naqshadda & PDF/Scan</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('calculator')}
+            className="group rounded-2xl bg-[#0F1B2D] hover:bg-[#16263f] border border-[#243449] hover:border-sky-400 p-4 text-left transition-all shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between"
+          >
+            <div className="w-10 h-10 rounded-xl bg-sky-400/15 border border-sky-400/30 text-sky-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Calculator className="w-5 h-5" />
+            </div>
+            <div className="mt-3">
+              <div className="text-xs font-extrabold text-[#F8FAFC]">Faraa&apos;id Calculator</div>
+              <div className="text-[10px] text-[#94A3B8] mt-0.5">Xisaabinta Dhaxalka</div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('records')}
+            className="group rounded-2xl bg-[#0F1B2D] hover:bg-[#16263f] border border-[#243449] hover:border-indigo-400 p-4 text-left transition-all shadow-sm hover:shadow-md cursor-pointer flex flex-col justify-between"
+          >
+            <div className="w-10 h-10 rounded-xl bg-indigo-400/15 border border-indigo-400/30 text-indigo-400 flex items-center justify-center group-hover:scale-105 transition-transform">
+              <Download className="w-5 h-5" />
+            </div>
+            <div className="mt-3">
+              <div className="text-xs font-extrabold text-[#F8FAFC]">Export Center</div>
+              <div className="text-[10px] text-[#94A3B8] mt-0.5">PDF, Excel &amp; GeoJSON</div>
+            </div>
+          </button>
         </div>
       </section>
 

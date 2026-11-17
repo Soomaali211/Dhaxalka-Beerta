@@ -36,6 +36,7 @@ import {
 import {
   ColorMapAnalysisResult,
   DetectedColorPlotGroup,
+  analyzeColorMapFromVectorGeometry,
   analyzeColoredMapDataUrl,
   expandColorGroupsToAssignmentDrafts,
   mergeAiLegendLabelsIntoColorGroups,
@@ -283,12 +284,11 @@ export const PdfScanInheritanceImportModal: React.FC<PdfScanInheritanceImportMod
     const page = targetBundle?.pages[pageIndex];
     if (!page) return null;
 
-    // 1. Instant offline Canvas analysis: detects Blocks, Plots, and per-color Plot Counts
-    const localColorRes = await analyzeColoredMapDataUrl(
-      page.previewDataUrl,
-      cadPlots,
-      heirOptions
-    );
+    // 1. Exact Vector PDF Polygon analysis (when GIS PDF layers exist) or instant offline Canvas fallback
+    const localColorRes =
+      page.vectorMapGeometry && page.vectorMapGeometry.plots.length >= 4
+        ? analyzeColorMapFromVectorGeometry(page.vectorMapGeometry, cadPlots, heirOptions)
+        : await analyzeColoredMapDataUrl(page.previewDataUrl, cadPlots, heirOptions);
     setColorAnalysis(localColorRes);
     setColorGroups(localColorRes.colorGroups);
     if (localColorRes.colorGroups.length > 0) {
@@ -745,7 +745,9 @@ export const PdfScanInheritanceImportModal: React.FC<PdfScanInheritanceImportMod
                     : 'text-[#94A3B8]'
                 }`}
               >
-                1. Miiska Sixidda ({drafts.length})
+                {colorGroups.length > 0
+                  ? `1. Midabada (${colorGroups.length}) & Miiska`
+                  : `1. Miiska Sixidda (${drafts.length})`}
               </button>
               <button
                 type="button"

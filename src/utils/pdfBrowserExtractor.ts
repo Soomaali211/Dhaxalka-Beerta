@@ -2,6 +2,16 @@ import './pdfPolyfills';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { PdfPositionedTextToken } from './pdfInheritanceImportEngine';
+import {
+  extractVectorMapGeometryFromOperatorList,
+  type PdfOperatorListLike,
+  type PdfOpsLike,
+  type PdfViewportLike,
+  type VectorMapPageGeometry,
+} from './pdfColorMapAnalyzer';
+
+export { extractVectorMapGeometryFromOperatorList };
+export type { PdfOperatorListLike, PdfOpsLike, PdfViewportLike };
 
 let workerConfigured = false;
 function ensurePdfWorkerConfigured() {
@@ -96,6 +106,7 @@ export interface ExtractedPdfPageData {
   plainText: string;
   positionedTokens: PdfPositionedTextToken[];
   hasSelectableVectorText: boolean;
+  vectorMapGeometry?: VectorMapPageGeometry;
 }
 
 export interface ExtractedDocumentBundle {
@@ -254,6 +265,22 @@ export async function extractPdfOrImageForInheritanceImport(
       vectorPagesCount++;
     }
 
+    // Extract exact vector Block & Plot colored polygons from PDF operator stream (QGIS/CAD PDFs)
+    let vectorMapGeometry: VectorMapPageGeometry | undefined;
+    try {
+      const opList = await page.getOperatorList();
+      const geom = extractVectorMapGeometryFromOperatorList(
+        opList as PdfOperatorListLike,
+        viewport as PdfViewportLike,
+        pdfjsLib.OPS as PdfOpsLike
+      );
+      if (geom.plots.length >= 4) {
+        vectorMapGeometry = geom;
+      }
+    } catch {
+      // Fall back cleanly to raster RGBA canvas color-plot analysis
+    }
+
     // Render crisp JPEG preview for UI + AI Vision backup
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.round(viewport.width));
@@ -294,6 +321,7 @@ export async function extractPdfOrImageForInheritanceImport(
       plainText,
       positionedTokens,
       hasSelectableVectorText,
+      vectorMapGeometry,
     });
   }
 
