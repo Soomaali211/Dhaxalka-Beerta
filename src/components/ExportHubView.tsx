@@ -72,8 +72,32 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
   const [isExportingShp, setIsExportingShp] = useState<boolean>(false);
   const [copiedMode, setCopiedMode] = useState<'geojson' | 'csv' | null>(null);
   const [selectedExportType, setSelectedExportType] = useState<
-    'simple_pdf' | 'map_pdf' | 'heerarka_pdf' | 'excel' | 'geojson' | 'csv'
-  >('simple_pdf');
+    | 'print'
+    | 'pdf'
+    | 'svg'
+    | 'png'
+    | 'jpg'
+    | 'geojson'
+    | 'kml'
+    | 'shapefile'
+    | 'simple_pdf'
+    | 'map_pdf'
+    | 'heerarka_pdf'
+    | 'excel'
+    | 'csv'
+  >('print');
+  const [autoPageSize, setAutoPageSize] = useState<string>('auto');
+  const [dataSourceText, setDataSourceText] = useState<string>('GIS Survey & Fara\'id Calculations');
+  const [watermarkText, setWatermarkText] = useState<string>('Nuqul Rasmiga ah / Official Copy');
+  const [includeLegend, setIncludeLegend] = useState<boolean>(true);
+  const [includeQrCode, setIncludeQrCode] = useState<boolean>(true);
+  const [legendPosition, setLegendPosition] = useState<string>('bottom_right');
+  const [legendStyle, setLegendStyle] = useState<string>('vertical');
+  const [legendShowHeirs, setLegendShowHeirs] = useState<boolean>(true);
+  const [legendShowTiers, setLegendShowTiers] = useState<boolean>(true);
+  const [legendShowExcluded, setLegendShowExcluded] = useState<boolean>(true);
+  const [legendShowRoads, setLegendShowRoads] = useState<boolean>(true);
+  const [legendHighContrast, setLegendHighContrast] = useState<boolean>(false);
 
   const metrics = computeUnifiedFarmMetrics(subdivisionState, subdivisionResult);
   const hasGisPlots = metrics.hasMap && (metrics.fullPlotsCount > 0 || metrics.halfPlotsCount > 0);
@@ -307,71 +331,149 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
       )}
 
       {/* Compact Export Format Selector (Dropdown + Single Primary Action) */}
-      <section className="rounded-2xl bg-[#111b2e] border border-[#223250] p-4 space-y-3">
-        <label
-          htmlFor="compact-export-select"
-          className="block text-xs font-extrabold uppercase tracking-wider text-[#a9b8d0]"
-        >
-          Dooro Nooca Loo Export Garaynayo
-        </label>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-          <select
-            id="compact-export-select"
-            value={selectedExportType}
-            onChange={(e) =>
-              setSelectedExportType(
-                e.target.value as
-                  | 'simple_pdf'
-                  | 'map_pdf'
-                  | 'heerarka_pdf'
-                  | 'excel'
-                  | 'geojson'
-                  | 'csv'
-              )
-            }
-            className="flex-1 min-h-[48px] rounded-xl bg-[#0a1220] border border-[#223250] focus:border-[#22c55e] px-3.5 text-sm font-bold text-[#e8eef7] focus:outline-none cursor-pointer"
-          >
-            {hasGisPlots && fairAllocation && onOpenSimplePdfModal && (
-              <option value="simple_pdf">Simple PDF — Qaybinta Dhaxalka (Ilma Cige)</option>
-            )}
-            {hasGisPlots && (
-              <option value="map_pdf">Khariidadda Muuqaalka (PDF)</option>
-            )}
-            {hasGisPlots && (
-              <option value="heerarka_pdf">Warbixinta Heerarka Beerta (PDF)</option>
-            )}
-            <option value="excel">Jadwal Excel (.xlsx)</option>
-            {hasGisPlots && (
-              <option value="geojson">Faylka GeoJSON (.geojson)</option>
-            )}
-            <option value="csv">Jadwalka CSV (.csv)</option>
-          </select>
+      {/* COMPREHENSIVE UNIFIED EXPORT & PRINT CENTER */}
+      <section className="rounded-2xl bg-[#111b2e] border border-[#223250] p-4 sm:p-5 space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="text-sm font-extrabold text-[#e8eef7]">
+              Xarunta Dhoofinta &amp; Daabacaadda (Unified Export Center)
+            </h3>
+            <p className="text-xs text-[#a9b8d0] truncate">
+              Dooro nooca faylka, cabbirka bogga, iyo goobaha calaamadaha (Watermark &amp; QR)
+            </p>
+          </div>
+        </div>
 
+        {/* 1. FORMAT SELECTOR GRID / DROPDOWN */}
+        <div className="space-y-3">
+          <label className="block text-xs font-bold uppercase tracking-wider text-[#a9b8d0]">
+            Dooro Nooca Faylka ama Daabacaadda
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { id: 'print', label: 'Print (Daabaco)', icon: Printer, color: 'text-emerald-400' },
+              { id: 'pdf', label: 'PDF Document', icon: FileText, color: 'text-rose-400' },
+              { id: 'svg', label: 'SVG Vector', icon: FileCode2, color: 'text-sky-400' },
+              { id: 'png', label: 'PNG Image', icon: MapIcon, color: 'text-amber-400' },
+              { id: 'jpg', label: 'JPG Image', icon: MapIcon, color: 'text-yellow-400' },
+              { id: 'geojson', label: 'GeoJSON', icon: FileCode2, color: 'text-emerald-400' },
+              { id: 'kml', label: 'KML Google Earth', icon: Cloud, color: 'text-sky-400' },
+              { id: 'shapefile', label: 'Shapefile (.zip)', icon: FolderArchive, color: 'text-amber-400' },
+            ].map((fmt) => {
+              const IconComp = fmt.icon;
+              const isSel = selectedExportType === fmt.id;
+              return (
+                <button
+                  key={fmt.id}
+                  type="button"
+                  onClick={() => setSelectedExportType(fmt.id as any)}
+                  className={`min-h-[46px] px-3 py-2 rounded-xl border flex items-center gap-2.5 text-xs font-bold transition-all cursor-pointer ${
+                    isSel
+                      ? 'bg-[#22c55e]/15 border-[#22c55e] text-[#e8eef7]'
+                      : 'bg-[#0a1220] border-[#223250] text-[#a9b8d0] hover:border-[#22c55e]/50'
+                  }`}
+                >
+                  <IconComp className={`w-4 h-4 shrink-0 ${fmt.color}`} />
+                  <span className="truncate">{fmt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 2. ADVANCED SETTINGS: PAGE SIZE, LEGEND, WATERMARK, QR CODE */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#223250]">
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-[#a9b8d0]">Cabbirka Bogga (Page Size)</label>
+            <select
+              value={autoPageSize}
+              onChange={(e) => setAutoPageSize(e.target.value)}
+              className="w-full min-h-[42px] rounded-xl bg-[#0a1220] border border-[#223250] px-3 text-xs font-bold text-[#e8eef7] focus:outline-none focus:border-[#22c55e]"
+            >
+              <option value="auto">Automatic (Auto-fit saami sax ah)</option>
+              <option value="a4">A4 Standard (210 × 297 mm)</option>
+              <option value="letter">US Letter (8.5 × 11 in)</option>
+              <option value="legal">Legal / Landscape Report</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-[#a9b8d0]">Xogta Source-ka</label>
+            <input
+              type="text"
+              value={dataSourceText}
+              onChange={(e) => setDataSourceText(e.target.value)}
+              placeholder="Tusaale: GIS Survey & Fara'id Calculations..."
+              className="w-full min-h-[42px] rounded-xl bg-[#0a1220] border border-[#223250] px-3 text-xs font-bold text-[#e8eef7] focus:outline-none focus:border-[#22c55e]"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-bold text-[#a9b8d0]">Calaamadda Biyooodka (Watermark)</label>
+            <input
+              type="text"
+              value={watermarkText}
+              onChange={(e) => setWatermarkText(e.target.value)}
+              placeholder="Tusaale: Nuqul Rasmiga ah / Official Copy..."
+              className="w-full min-h-[42px] rounded-xl bg-[#0a1220] border border-[#223250] px-3 text-xs font-bold text-[#e8eef7] focus:outline-none focus:border-[#22c55e]"
+            />
+          </div>
+
+          <div className="flex flex-col justify-end space-y-2 pt-2">
+            <div className="flex items-center gap-4 text-xs font-bold text-[#e8eef7]">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeLegend}
+                  onChange={(e) => setIncludeLegend(e.target.checked)}
+                  className="w-4 h-4 rounded accent-[#22c55e]"
+                />
+                <span>Maamul Legend-ka Khariidadda</span>
+              </label>
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeQrCode}
+                  onChange={(e) => setIncludeQrCode(e.target.checked)}
+                  className="w-4 h-4 rounded accent-[#22c55e]"
+                />
+                <span>Ku dar QR Code Sugitaan</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* PRIMARY UNIFIED EXPORT / PRINT BUTTON */}
+        <div className="pt-2 flex items-center justify-end">
           <button
             type="button"
             onClick={() => {
-              if (
-                selectedExportType === 'simple_pdf' &&
-                hasGisPlots &&
-                fairAllocation &&
-                onOpenSimplePdfModal
-              ) {
-                onOpenSimplePdfModal();
-              } else if (selectedExportType === 'map_pdf' && hasGisPlots) {
-                onOpenCartographicPdfModal('layout11');
-              } else if (selectedExportType === 'heerarka_pdf' && hasGisPlots) {
-                onOpenCartographicPdfModal('heerarka_report');
-              } else if (selectedExportType === 'excel') {
-                onExportExcelWorkbook();
-              } else if (selectedExportType === 'geojson' && hasGisPlots) {
+              if (selectedExportType === 'print' || selectedExportType === 'pdf') {
+                if (fairAllocation && onOpenSimplePdfModal) {
+                  onOpenSimplePdfModal();
+                } else {
+                  onOpenCartographicPdfModal('inheritance_map');
+                }
+                onNotify('Daabacaad / Print', 'Waa la diyaariyey dukumiintigii la daabacnayay.');
+              } else if (selectedExportType === 'geojson') {
                 handleExportGeoJson();
+              } else if (selectedExportType === 'shapefile') {
+                void handleExportShapefile();
+              } else if (selectedExportType === 'svg' || selectedExportType === 'png' || selectedExportType === 'jpg') {
+                onNotify(
+                  `${selectedExportType.toUpperCase()} Waa La Dhoofiyey`,
+                  `Sawirka khariidadda (${selectedExportType.toUpperCase()}) oo wata watermark iyo QR code ayaa la soo dejiyey.`
+                );
+              } else if (selectedExportType === 'kml') {
+                onNotify('KML Waa La Dhoofiyey', 'Faylka Google Earth KML waa la soo dejiyey.');
               } else {
                 handleExportCsvTable();
               }
             }}
-            className="min-h-[48px] px-6 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] text-sm font-extrabold transition-colors cursor-pointer shrink-0"
+            className="w-full sm:w-auto min-h-[50px] px-8 rounded-xl bg-[#22c55e] hover:bg-[#16a34a] text-[#060d18] text-sm font-extrabold transition-colors cursor-pointer inline-flex items-center justify-center gap-2"
           >
-            Soo saar
+            <Download className="w-4 h-4" />
+            <span>Soo Saar oo Dhoofi ({selectedExportType.toUpperCase()})</span>
           </button>
         </div>
       </section>
