@@ -63,6 +63,7 @@ import {
   X,
   ZoomIn,
   ZoomOut,
+  Route,
 } from 'lucide-react';
 import {
   applyManualTierByFreehandLasso,
@@ -75,6 +76,7 @@ import { SampleBlockAxisControlCard } from './SampleBlockAxisControlCard';
 import { CadQuotaPermissionModal } from './CadQuotaPermissionModal';
 import { SimpleInheritancePdfModal } from './SimpleInheritancePdfModal';
 import { PdfScanInheritanceImportModal } from './PdfScanInheritanceImportModal';
+import { SpecialRoadsManagerModal } from './SpecialRoadsManagerModal';
 
 interface BlocksAndPlotsDesignerViewProps {
   subdivisionState: LandSubdivisionState;
@@ -149,6 +151,7 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
   const [selectedBatchPlotIds, setSelectedBatchPlotIds] = useState<string[]>([]);
   const [showSimplePdfModal, setShowSimplePdfModal] = useState<boolean>(false);
   const [showPdfImportModal, setShowPdfImportModal] = useState<boolean>(false);
+  const [showSpecialRoadsModal, setShowSpecialRoadsModal] = useState<boolean>(false);
 
   const [activeTierBrush, setActiveTierBrush] = useState<AssetQualityTier>('tier_1_prime');
   const [tierBrushScope, setTierBrushScope] = useState<'block' | 'plot' | 'freehand'>('plot');
@@ -1346,6 +1349,16 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
           >
             <FileUp className="w-3.5 h-3.5 shrink-0 text-sky-400" />
             <span>PDF / Scan</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowSpecialRoadsModal(true)}
+            className="min-h-[38px] inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/45 bg-[#0F1B2D] hover:border-emerald-400 px-3 py-1.5 text-xs font-extrabold text-emerald-300 transition-colors whitespace-nowrap cursor-pointer"
+            title="Samee ama beddel waddooyin gaar ah oo leh ballac kala duwan"
+          >
+            <Route className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+            <span>Waddooyin Gaar ah ({subdivisionState.specialRoads?.length || 0})</span>
           </button>
 
           {subdivisionResult && fairAllocation && (
@@ -4397,6 +4410,17 @@ export const BlocksAndPlotsDesignerView: React.FC<BlocksAndPlotsDesignerViewProp
               `${summary.appliedHeirPlotsCount} plot dhaxale ah + ${summary.appliedExcludedPlotsCount} plot Danguud/Reeban ah ayaa 100% lagu xidhay CAD Studio (${summary.fileName}).`
             );
           }}
+        />
+      )}
+
+      {/* Special Roads Manager Modal */}
+      {showSpecialRoadsModal && (
+        <SpecialRoadsManagerModal
+          isOpen={showSpecialRoadsModal}
+          onClose={() => setShowSpecialRoadsModal(false)}
+          subdivisionState={subdivisionState}
+          onUpdateSubdivisionState={onUpdateSubdivisionState}
+          onNotify={onNotify}
         />
       )}
     </div>

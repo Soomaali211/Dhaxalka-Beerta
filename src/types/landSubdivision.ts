@@ -61,6 +61,14 @@ export interface SampleBlockAlignmentInfo {
   axesSwapped: boolean;
 }
 
+export interface SpecialRoadDefinition {
+  id: string;
+  axis: 'column' | 'row';
+  index: number;
+  name: string;
+  widthM: number;
+}
+
 export interface SubdivisionParams {
   L: number;      // Block length (m)
   W: number;      // Block width (m)
@@ -78,6 +86,8 @@ export interface SubdivisionParams {
   customLengthBearingDeg?: number | null;
   /** Optional independent compass bearing (0°–180°) for Block Width (Ballaca) */
   customWidthBearingDeg?: number | null;
+  /** Optional custom special road definitions */
+  specialRoads?: SpecialRoadDefinition[];
 }
 
 export type HalfPlotValidationStatus =
@@ -556,6 +566,8 @@ export interface LandSubdivisionState {
   /** Optional Special Area polygons (Aag gaar ah — Slot A in Naqshadeeyaha_Blocks_Plots_v2) */
   specialAreaItems?: ParsedGeoItem[];
   specialAreaFileName?: string;
+  /** Optional custom Special Roads definitions */
+  specialRoads?: SpecialRoadDefinition[];
   params: SubdivisionParams;
   /** Optional pre-designed Blocks & Plots imported directly from rich GeoJSON or CSV */
   prebuiltSubdivision?: PrebuiltGeoJsonSubdivision | null;

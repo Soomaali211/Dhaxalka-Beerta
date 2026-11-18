@@ -32,6 +32,11 @@ import {
   copyTextSafelyToClipboard,
 } from '../utils/nashqadWorkflowEngine';
 import { computeUnifiedFarmMetrics } from '../utils/unifiedMetrics';
+import {
+  PdfPrintExportSettingsModal,
+  PdfPrintExportSettingsState,
+  DEFAULT_PDF_PRINT_SETTINGS,
+} from './PdfPrintExportSettingsModal';
 
 interface ExportHubViewProps {
   visibleCount: number;
@@ -98,6 +103,8 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
   const [legendShowExcluded, setLegendShowExcluded] = useState<boolean>(true);
   const [legendShowRoads, setLegendShowRoads] = useState<boolean>(true);
   const [legendHighContrast, setLegendHighContrast] = useState<boolean>(false);
+  const [showPrintSettingsModal, setShowPrintSettingsModal] = useState<boolean>(false);
+  const [printExportSettings, setPrintExportSettings] = useState<PdfPrintExportSettingsState>(DEFAULT_PDF_PRINT_SETTINGS);
 
   const metrics = computeUnifiedFarmMetrics(subdivisionState, subdivisionResult);
   const hasGisPlots = metrics.hasMap && (metrics.fullPlotsCount > 0 || metrics.halfPlotsCount > 0);
@@ -444,7 +451,16 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
         </div>
 
         {/* PRIMARY UNIFIED EXPORT / PRINT BUTTON */}
-        <div className="pt-2 flex items-center justify-end">
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setShowPrintSettingsModal(true)}
+            className="w-full sm:w-auto min-h-[46px] px-4 rounded-xl border border-emerald-500/50 bg-[#0F1B2D] hover:border-emerald-400 text-emerald-300 text-xs font-extrabold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+          >
+            <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+            <span>Hagaaji Print &amp; PDF Settings (Advanced Popup)</span>
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -728,6 +744,26 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
           </button>
         </div>
       </section>
+
+      {/* Advanced Print & PDF Settings Popup Modal */}
+      {showPrintSettingsModal && (
+        <PdfPrintExportSettingsModal
+          isOpen={showPrintSettingsModal}
+          onClose={() => setShowPrintSettingsModal(false)}
+          initialSettings={printExportSettings}
+          onApplyPrintSettings={(st) => {
+            setPrintExportSettings(st);
+            setDataSourceText(st.dataSourceText);
+            setWatermarkText(st.watermarkText);
+            setIncludeLegend(st.showLegend);
+            setIncludeQrCode(st.includeQrCode);
+            setLegendPosition(st.legendPosition);
+            setLegendStyle(st.legendLayout);
+            onNotify('Print Settings Updated', 'Dejinta Print & PDF-ka waxaa lagu dabaqay si guul leh.');
+          }}
+          onNotify={onNotify}
+        />
+      )}
     </div>
   );
 };

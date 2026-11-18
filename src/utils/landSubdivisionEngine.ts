@@ -943,6 +943,7 @@ export function hydrateLandSubdivisionState(raw: any): LandSubdivisionState {
         ? rawParams.linkRoads
         : DEFAULT_SUBDIVISION_PARAMS.linkRoads,
     swap: typeof rawParams.swap === 'boolean' ? rawParams.swap : false,
+    specialRoads: Array.isArray(rawParams.specialRoads) ? rawParams.specialRoads : (fallback.params.specialRoads || []),
   };
 
   return {
@@ -2010,6 +2011,52 @@ export function computeLandSubdivision(
     vs = [Math.min(vs[0], pv), Math.max(vs[1], pv)];
   });
 
+  const getRoadUForCol = (colIdx: number): number => {
+    const absIdx = Math.abs(colIdx);
+    const special = (p.specialRoads || []).find((sr) => sr.axis === 'column' && sr.index === absIdx);
+    return special ? special.widthM : p.rU;
+  };
+
+  const getRoadVForRow = (rowIdx: number): number => {
+    const absIdx = Math.abs(rowIdx);
+    const special = (p.specialRoads || []).find((sr) => sr.axis === 'row' && sr.index === absIdx);
+    return special ? special.widthM : p.rV;
+  };
+
+  const getColCenter = (ci: number): number => {
+    if (ci === 0) return 0;
+    if (ci > 0) {
+      let accum = 0;
+      for (let c = 0; c < ci; c++) {
+        accum += p.L + getRoadUForCol(c);
+      }
+      return accum;
+    } else {
+      let accum = 0;
+      for (let c = 0; c > ci; c--) {
+        accum += p.L + getRoadUForCol(c - 1);
+      }
+      return -accum;
+    }
+  };
+
+  const getRowCenter = (rj: number): number => {
+    if (rj === 0) return 0;
+    if (rj > 0) {
+      let accum = 0;
+      for (let r = 0; r < rj; r++) {
+        accum += p.W + getRoadVForRow(r);
+      }
+      return accum;
+    } else {
+      let accum = 0;
+      for (let r = 0; r > rj; r--) {
+        accum += p.W + getRoadVForRow(r - 1);
+      }
+      return -accum;
+    }
+  };
+
   const ci0 = Math.floor(us[0] / SU) - 1;
   const ci1 = Math.ceil(us[1] / SU) + 1;
   const rj0 = Math.floor(vs[0] / SV) - 1;
@@ -2128,8 +2175,8 @@ export function computeLandSubdivision(
   const rawBlocks: Omit<GeneratedBlock, 'id' | 'R' | 'C'>[] = [];
   for (let ci = ci0; ci <= ci1; ci++) {
     for (let rj = rj0; rj <= rj1; rj++) {
-      const cu = ci * SU;
-      const cv = rj * SV;
+      const cu = getColCenter(ci);
+      const cv = getRowCenter(rj);
       const blk = makeRect(cu, cv, p.L, p.W);
       const bx = blk.map((q) => q[0]);
       const by = blk.map((q) => q[1]);
