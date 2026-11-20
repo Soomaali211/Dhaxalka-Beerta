@@ -465,12 +465,11 @@ export const ExportHubView: React.FC<ExportHubViewProps> = ({
             type="button"
             onClick={() => {
               if (selectedExportType === 'print' || selectedExportType === 'pdf') {
-                if (fairAllocation && onOpenSimplePdfModal) {
-                  onOpenSimplePdfModal();
-                } else {
-                  onOpenCartographicPdfModal('inheritance_map');
-                }
-                onNotify('Daabacaad / Print', 'Waa la diyaariyey dukumiintigii la daabacnayay.');
+                onOpenCartographicPdfModal('layout11');
+                onNotify(
+                  'Daabacaad / Print',
+                  `Waxaa la diyaariyey Khariidadda Beerta PDF (Automatic Layout) iyadoo la isticmaalayo dejinta ${printExportSettings.paperSize.toUpperCase()} (${printExportSettings.orientation}).`
+                );
               } else if (selectedExportType === 'geojson') {
                 handleExportGeoJson();
               } else if (selectedExportType === 'shapefile') {
